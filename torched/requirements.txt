@@ -1,0 +1,38 @@
+# Django Framework
+Django>=4.1,<5.0
+
+# Django REST Framework for building APIs
+djangorestframework>=3.14,<4.0
+
+# PostgreSQL adapter for Python
+psycopg2-binary>=2.9,<3.0
+
+# Django Elasticsearch DSL for integrating Elasticsearch with Django
+django-elasticsearch-dsl>=7.2,<8.0
+
+# Elasticsearch client for Python
+elasticsearch>=7.0,<8.0
+
+# Django Filter for advanced filtering in Django REST Framework
+django-filter>=23.1,<24.0
+
+# Simple JWT for JWT authentication
+djangorestframework-simplejwt>=5.2,<6.0
+
+# Transformers library by Hugging Face for NLP tasks
+transformers>=4.31,<5.0
+
+# OpenAI library for interacting with OpenAI's API
+openai>=0.27,<1.0
+
+# Gunicorn WSGI HTTP Server for UNIX (do deployment)
+gunicorn>=20.1,<21.0
+
+# Optional: Django CORS Headers for handling Cross-Origin Resource Sharing (CORS)
+django-cors-headers>=3.13,<4.0
+
+# Optional: Python Dotenv for managing environment variables
+python-dotenv>=1.0,<2.0
+
+# Optional: Django Webpack Loader for integrating Webpack with Django (jeśli używasz React.js)
+django-webpack-loader>=1.7,<2.0
