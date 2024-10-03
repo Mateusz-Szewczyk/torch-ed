@@ -5,7 +5,7 @@ from vector_store import create_vector_store, load_vector_store, similarity_sear
 from langchain_community.embeddings import GPT4AllEmbeddings
 import subprocess
 
-embedding = GPT4AllEmbeddings()
+embedding = GPT4AllEmbeddings(model_kwargs={"n_threads": 4})
 
 
 def run_ollama(model_name, prompt):
@@ -87,28 +87,8 @@ def main():
     """
 
     # Run the LLaMA 3.2 3B model via Ollama
-    # response = run_ollama(model_name, combined_prompt)
-    prompt = """
-    Proszę popraw ten tekst zwrócony przez OCR tak aby niepoprawne słowa były poprawione:
-    
-    Rosdsial 1\nPOJECIA WSTEPNE, NIEROWNOSCI, ROWNANIA MODULOWE\n\n
-    § 1.1, POJRCIA WSTEPNE\n\n‘Dutymi literami A, B, C, ... bedziemy oznaczali zbiory, matymi a, b, c, ... elementy\n
-    sbioréw. Zapis\naed,\n‘omnacza, 2e element a nalezy do zbioru A, a zapis\naga\n
-    te element a nie nalezy do zbioru A. Zapis\nAcB lub B>A\n\n‘
-    omnacza, 2e zbidr A jest zawarty w zbiorze B, tzn. kabdy element zbioru A jest elementem\n
-    abioru B; méwimy takte wtedy, 2e A jest podzbiorem B lub 2e B jest nadzbiorem A (rys. 1.1).\n
-    W szezegélnosci warunek A.< B jest spetniony, gdy zbiory A i B pokrywaia sie (sq identyczne).\n
-    Gdy AGB oraz A¥B, to méwimy, te A jest podzbiorem wlasciwym zbioru B.\n\n2\n\nS\n\nAB\nys. Ld\n\n
-    Zapis (warunek), w ktérym wystepuia litery (np. x, ys Z5 --), oznaczajace dowolne\n
-    liczby nalezace do pewnego zbioru X, a Kt6ry po podstawieniu za te litery jakichkolwick\n
-    ticzb naledacych do zbioru X staje sig przy kazdym podstawieniu albo zdaniem prawdziwym\n
-    albo zdaniem falszywym (przy rOinych podstawieniach mote byé ré2nie), nazywa si¢\n
-    ‘funkejq zdaniowa. Na prayklad zapis x*—4<0 oraz x°+y*=4, gdzie x i y omnaczaja\n
-    dowolne liezby rzeczywiste, sa funkejami zdaniowymi\n‘Niech teraz S(x) oznacza pewna funkeje zdaniowa. Woweras zapis\n
-    fxexX: SCO}\n\n‘oznacza zbir tych wszystkich liczb x nalezacych do zbioru X, dla ktSrych funkeja zdaniowa\n
-    ‘S(x) jest prawdziwa.\n\n'
-    """
-    response = run_ollama(model_name, prompt)
+    response = run_ollama(model_name, combined_prompt)
+
     # Step 6: Output the final response
     print(f"Generated Response:\n{response}")
 
