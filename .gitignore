@@ -1,0 +1,42 @@
+# Python files
+*.pyc
+__pycache__/
+env/
+venv/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Database files
+*.sqlite3
+*.db
+
+# Model files
+*.gguf
+
+# Secrets
+secrets/
+
+# Data directories in 'rag'
+rag/chroma_langchain_db/
+rag/chroma_langchain_db_new/
+
+# Node.js dependencies
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+
+# Editor settings
+.vscode/
+.idea/
+
+# Docker files
+*.pid
+*.sock
