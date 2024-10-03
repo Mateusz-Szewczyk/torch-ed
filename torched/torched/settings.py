@@ -14,6 +14,8 @@ from pathlib import Path
 import os
 
 AUTH_USER_MODEL = 'core.User'
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'fallback_secret_key')
+DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,11 +24,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET')
-print(SECRET_KEY)
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
 ALLOWED_HOSTS = []
 
@@ -90,10 +87,10 @@ WSGI_APPLICATION = "torched.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'torched_db',
-        'USER': 'admin',
-        'PASSWORD': 'admin1234',
-        'HOST': 'localhost',
+        'NAME': os.getenv('POSTGRES_DB', 'postgres'),
+        'USER': os.getenv('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+        'HOST': 'db',
         'PORT': '5432',
     }
 }

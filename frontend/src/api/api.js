@@ -1,10 +1,12 @@
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api/'; // Django backend URL
+
+export const DJANGO_API_URL = process.env.REACT_APP_DJANGO_API_URL || 'http://torched:8000';
+export const RAG_API_URL = process.env.REACT_APP_RAG_API_URL || 'http://rag:8001';
 
 export const getNotes = async () => {
     try {
-        const response = await axios.get(`${API_URL}notes/`);
+        const response = await axios.get(`${DJANGO_API_URL}notes/`);
         return response.data;
     } catch (error) {
         console.error('Error fetching notes:', error);

@@ -8,13 +8,19 @@ def read_text_file(filename):
     with open(filename, "r", encoding="utf-8") as file:
         return file.read()
 
-def split_text_into_documents(text, chunk_size=500):
+def split_text_into_documents(text, chunk_size=400, chunk_overlap=20):
     chunks = []
-    for i in range(0, len(text), chunk_size):
-        chunk = text[i:i + chunk_size]
+    start = 0
+
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end]
         document = Document(page_content=chunk)
         chunks.append(document)
+        start += chunk_size - chunk_overlap
+
     return chunks
+
 
 # Add documents to the vector store
 def add_documents_to_vector_store(vector_store, documents):
