@@ -1,0 +1,53 @@
+version: '3.9'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - '80:80'
+    depends_on:
+      - torched
+      - rag
+    environment:
+      - REACT_APP_DJANGO_API_URL=http://localhost
+      - REACT_APP_RAG_API_URL=http://localhost/rag
+
+  torched:
+    build: ./torched
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./torched:/app
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DJANGO_DEBUG=${DJANGO_DEBUG}
+    env_file:
+      - .env
+
+  rag:
+    build: ./rag
+    ports:
+      - '8001:8001'
+    volumes:
+      - ./rag:/app
+
+  db:
+    image: postgres:15
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    env_file:
+      - .env
+
+volumes:
+  db_data:
+
+
