@@ -1,5 +1,5 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim-buster
+# Use a base image with CUDA support
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 
 # Set the working directory in the container
 WORKDIR /app
@@ -9,26 +9,39 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
+    sqlite3 \
+    libsqlite3-dev \
+    ca-certificates \
+    # Dependencies for Ollama
+    libunwind-dev \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama (Update this based on Ollama's installation instructions)
-# Assuming there is a Linux binary or installation script
-RUN curl -O https://ollama.ai/install.sh && \
-    bash install.sh && \
-    rm install.sh
+# Verify sqlite3 version (should be >= 3.35.0)
+RUN sqlite3 --version
 
-# Install additional dependencies required by Ollama
-# e.g., if it requires libcudart or other libraries
+# Install Python
+RUN apt-get update && apt-get install -y python3.10 python3-pip
+
+# Install Ollama
+RUN curl -sSfL https://ollama.ai/install.sh | bash
+
+# Upgrade pip
+RUN pip3 install --no-cache-dir --upgrade pip
 
 # Copy the requirements file and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy your application code
 COPY . .
 
-# Make sure main.py is executable
+# Copy and set permissions for entrypoint script
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# Ensure your Python scripts are executable
 RUN chmod +x main.py
 
 # Set the entry point
-CMD ["python", "main.py"]
+ENTRYPOINT ["./entrypoint.sh"]
