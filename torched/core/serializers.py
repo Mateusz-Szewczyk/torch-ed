@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Class, Subject, Note, Flashcard, Exam
+from .models import User, Subject, Note, Flashcard, Exam
 from django_elasticsearch_dsl_drf.serializers import DocumentSerializer
 from .documents import NoteDocument
 
@@ -14,13 +14,13 @@ class SubjectSerializer(serializers.ModelSerializer):
         model = Subject
         fields = '__all__'
 
-class ClassSerializer(serializers.ModelSerializer):
-    owner = UserSerializer(read_only=True)
-    students = UserSerializer(many=True, read_only=True)
+# class ClassSerializer(serializers.ModelSerializer):
+#     owner = UserSerializer(read_only=True)
+#     students = UserSerializer(many=True, read_only=True)
 
-    class Meta:
-        model = Class
-        fields = '__all__'
+#     class Meta:
+#         model = Class
+#         fields = '__all__'
 
 class NoteSerializer(serializers.ModelSerializer):
     class Meta:

@@ -1,9 +1,8 @@
 from rest_framework import generics, permissions, viewsets
 from django.contrib.auth import get_user_model
-from .models import Class, Note, Flashcard, Exam, Subject
+from .models import Note, Flashcard, Exam, Subject
 from .serializers import (
     UserSerializer,
-    ClassSerializer,
     NoteSerializer,
     FlashcardSerializer,
     ExamSerializer,
@@ -30,13 +29,13 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = UserSerializer
 
-class ClassViewSet(viewsets.ModelViewSet):
-    queryset = Class.objects.all()
-    serializer_class = ClassSerializer
-    permission_classes = [IsAuthenticated, IsOwner]
+# class ClassViewSet(viewsets.ModelViewSet):
+#     queryset = Class.objects.all()
+#     serializer_class = ClassSerializer
+#     permission_classes = [IsAuthenticated, IsOwner]
 
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+#     def perform_create(self, serializer):
+#         serializer.save(owner=self.request.user)
 
 class NoteViewSet(viewsets.ModelViewSet):
     queryset = Note.objects.all()

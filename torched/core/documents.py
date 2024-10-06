@@ -1,7 +1,7 @@
 # core/documents.py
 
 from django_elasticsearch_dsl import Document, Index, fields
-from .models import Note, Subject, Class
+from .models import Note, Subject
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
