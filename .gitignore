@@ -6,7 +6,7 @@ venv/
 .venv/
 
 # Environment variables
-.env
+backend/.env
 
 # Logs
 *.log

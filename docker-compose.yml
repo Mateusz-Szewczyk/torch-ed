@@ -11,11 +11,11 @@ services:
       - REACT_APP_RAG_API_URL=http://localhost/rag
 
   torched:
-    build: ./torched
+    build: backend
     ports:
       - '8000:8000'
     volumes:
-      - ./torched:/app
+      - ./backend:/app
     depends_on:
       - db
     environment:
@@ -25,7 +25,7 @@ services:
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG}
     env_file:
-      - .env
+      - backend/.env
 
   rag:
     build: ./rag
@@ -43,7 +43,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     env_file:
-      - .env
+      - backend/.env
 
 volumes:
   db_data:
