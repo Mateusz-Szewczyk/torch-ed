@@ -41,25 +41,32 @@ def get_page_content(page_img, page_num):
         # Extract titles from the OCR result
         for element in doc.elements:
             if element.type == ElementType.TITLE:
-                print(f"Page {page_num} - Title: {element.text}")
+                print(f"Page {page_num + 1} - Title: {element.text}")
                 titles.append(element.text)
 
     except Exception as e:
-        print(f"Error processing page {page_num}: {e}")
+        print(f"Error processing page {page_num + 1}: {e}")
 
     return md_file_path, titles
 
 # Function to process the entire PDF and extract the content
-def get_pdf_content(pdf_file):
+def get_pdf_content(pdf_file, start_page=0, end_page=None):
     all_titles = []
 
     try:
         # Open the PDF file
         doc = fitz.open(pdf_file)
         num_pages = doc.page_count
-        print(f"Total pages to process: {num_pages}")
+        print(f"Total pages in PDF: {num_pages}")
 
-        for i in range(num_pages):  # Iterate through all pages
+        # Determine the range of pages to process
+        start = start_page
+        end = end_page if end_page is not None else num_pages
+        end = min(end, num_pages)  # Ensure end does not exceed total pages
+
+        print(f"Processing pages from {start + 1} to {end}")
+
+        for i in range(start, end):  # Iterate through the specified range
             try:
                 page = doc.load_page(i)  # Load page by index
                 pix = page.get_pixmap(dpi=300)  # Render page to an image with 300 DPI
@@ -76,7 +83,7 @@ def get_pdf_content(pdf_file):
                 os.remove(img_path)
 
             except Exception as e:
-                print(f"Error handling page {i} of {pdf_file}: {e}")
+                print(f"Error handling page {i + 1} of {pdf_file}: {e}")
                 # Continue processing other pages even if one fails
 
         return all_titles
@@ -91,9 +98,9 @@ def read_text_file(filename):
         return file.read()
 
 # Main function to preprocess the PDF into Markdown files
-def process_pdf(pdf_file):
+def process_pdf(pdf_file, start_page=0, end_page=None):
     # Step 1: Perform OCR and extract titles
-    titles = get_pdf_content(pdf_file)
+    titles = get_pdf_content(pdf_file, start_page, end_page)
     if titles is None:
         print("Failed to process PDF content.")
         return None
@@ -114,16 +121,21 @@ def process_pdf(pdf_file):
 
 # Example usage
 if __name__ == "__main__":
-    # Define the path to your PDF file
-    pdf_path = 'matematyks.pdf'  # Replace with your actual PDF path
+    pdf_path = 'matematyks.pdf'
 
     # Ensure the PDF file exists
     if not os.path.isfile(pdf_path):
         print(f"PDF file not found at {pdf_path}")
         sys.exit(1)
 
+    # Define the desired page range
+    # Example: Process pages 11 to 21 (1-based indexing)
+    # Convert to 0-based indexing for internal processing
+    desired_start_page = 74  # 11th page (0-based index)
+    desired_end_page = 115   # Up to but not including the 21st page
+
     # Process the PDF and generate the Markdown files
-    documents = process_pdf(pdf_path)
+    documents = process_pdf(pdf_path, start_page=desired_start_page, end_page=desired_end_page)
 
     if documents:
         print("PDF preprocessing and Markdown file creation completed successfully.")

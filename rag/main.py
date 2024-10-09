@@ -1,6 +1,6 @@
 # main.py
 import os
-from document_processor import read_text_file, split_text_into_documents, add_documents_to_vector_store
+from document_processor import read_text_file
 from vector_store import create_vector_store, load_vector_store, similarity_search
 from langchain_community.embeddings import GPT4AllEmbeddings
 import subprocess
@@ -22,28 +22,15 @@ def run_ollama(model_name, prompt):
         return ""
 
 def main():
-    filename = "python_docs_index.txt"
+    persist_directory = "./chroma_langchain_db"
 
-    if not os.path.exists(filename):
-        print(f"File {filename} not found!")
-        return
-
-    text = read_text_file(filename)
-    documents = split_text_into_documents(text)
-
-    persist_directory = "./chroma_langchain_db_new"
-
-    if not os.path.exists(persist_directory):
-        vector_store = create_vector_store(persist_directory=persist_directory)
-        add_documents_to_vector_store(vector_store, documents)
-    else:
-        vector_store = load_vector_store(persist_directory=persist_directory)
+    vector_store = load_vector_store(persist_directory=persist_directory)
 
     model_name = "llama3.2:3b-instruct-fp16"
 
-    query = "Jak tworzyć oprogramowanie wysokiej jakości?"
+    query = "Czym jest pochodna funkcji? Podaj mi 10 przykładowych zadań"
 
-    similar_docs = similarity_search(vector_store, query, k=4)
+    similar_docs = similarity_search(vector_store, query, k=5)
     retrieved_text = "\n\n".join([doc.page_content for doc in similar_docs])
     combined_prompt = f"""
     You are an AI assistant with advanced analytical and communication skills. Your task is to provide accurate, insightful, and tailored responses based on the given information and query.
