@@ -1,3 +1,36 @@
+"""
+====================
+PDF Processor Module
+====================
+
+This module provides the `PDFProcessor` class, which facilitates the extraction of text content
+from PDF files. It supports both text-based and image-based PDFs, handling each appropriately
+to produce a consolidated text output.
+
+Dependencies:
+- PyPDF2
+- PyMuPDF (fitz)
+- pix2text
+- layout_parser from pix2text
+
+Example Usage:
+--------------
+if __name__ == "__main__":
+    pdf_path = 'example.pdf'
+    output_text = 'extracted_content.txt' # the file will be created here
+    processor = PDFProcessor()
+
+    desired_start_page = 0    # Start from the first page (0-based index)
+    desired_end_page = 10     # Process up to the 10th page (exclusive)
+
+    result = processor.process_pdf(pdf_path, output_text, start_page=desired_start_page, end_page=desired_end_page)
+
+    if result:
+        print("PDF preprocessing and text extraction completed successfully.")
+    else:
+        print("An error occurred during PDF preprocessing.")
+"""
+
 # pdf_processor.py
 import os
 import fitz  # PyMuPDF
@@ -10,6 +43,19 @@ import PyPDF2
 
 class PDFProcessor:
     def __init__(self, output_dir='../output_pdf2txt', log_dir='log', language='pol', device='cuda'):
+        """
+        Initializes the PDFProcessor with specified configurations.
+
+        Args:
+            output_dir (str, optional): Directory to store temporary and output files.
+                Defaults to '../output_pdf2txt'.
+            log_dir (str, optional): Directory to store logs and debug results.
+                Defaults to 'log'.
+            language (str, optional): Language code for OCR. Defaults to 'pol' (Polish).
+            device (str, optional): Device to run OCR on (e.g., 'cuda' for GPU, 'cpu').
+                Defaults to 'cuda'.
+        """
+
         self.output_dir = output_dir
         self.log_dir = log_dir
         self.language = language
@@ -23,14 +69,25 @@ class PDFProcessor:
 
     def process_pdf(self, pdf_file, output_text_file, start_page=0, end_page=None):
         """
-        Process the PDF file and extract content into a single text file.
+           Processes a PDF file and extracts its content into a single text file.
 
-        :param pdf_file: Path to the PDF file
-        :param output_text_file: Path to the output text file
-        :param start_page: Starting page number (0-based index)
-        :param end_page: Ending page number (exclusive)
-        :return: Path to the output text file or None if failed
+           The method determines the type of PDF (text-based, image-based, or mixed) and
+           applies the appropriate extraction strategy. The extracted text is written to
+           the specified output text file.
+
+           Args:
+               pdf_file (str): Path to the PDF file to be processed.
+               output_text_file (str): Path where the extracted text will be saved.
+               start_page (int, optional): Starting page number (0-based index) for extraction.
+                   Defaults to 0.
+               end_page (int, optional): Ending page number (exclusive) for extraction.
+                   Defaults to None, which processes up to the last page.
+
+           Returns:
+               str or None: Path to the output text file upon successful extraction,
+                   or None if extraction fails.
         """
+
         pdf_type = self._determine_pdf_type(pdf_file)
         if pdf_type == "text_based":
             print("Detected a text-based PDF.")
