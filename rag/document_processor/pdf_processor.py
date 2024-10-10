@@ -1,10 +1,12 @@
 # pdf_processor.py
-
 import os
 import fitz  # PyMuPDF
 import pix2text
 from pix2text.layout_parser import ElementType
+import PyPDF2
 
+#TODO Muszę dodać processing dokumentu txt po przetworzeniu pdf image-based, za pomocą LLM, najlepiej Bielik dla
+# języka polskiego, llama dla angielskiego.
 
 class PDFProcessor:
     def __init__(self, output_dir='../output_pdf2txt', log_dir='log', language='pol', device='cuda'):
@@ -19,117 +21,283 @@ class PDFProcessor:
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
 
-    def process_pdf(self, pdf_file, start_page=0, end_page=None):
+    def process_pdf(self, pdf_file, output_text_file, start_page=0, end_page=None):
         """
-        Process the PDF file and extract content.
+        Process the PDF file and extract content into a single text file.
+
+        :param pdf_file: Path to the PDF file
+        :param output_text_file: Path to the output text file
+        :param start_page: Starting page number (0-based index)
+        :param end_page: Ending page number (exclusive)
+        :return: Path to the output text file or None if failed
+        """
+        pdf_type = self._determine_pdf_type(pdf_file)
+        if pdf_type == "text_based":
+            print("Detected a text-based PDF.")
+            text = self._pdf_to_text(pdf_file, start_page, end_page)
+        elif pdf_type == "image_based":
+            print("Detected an image-based PDF.")
+            text = self._extract_text_from_images(pdf_file, start_page, end_page)
+        elif pdf_type == "mixed_content":
+            print("Detected a mixed-content PDF.")
+            text = self._extract_text_mixed(pdf_file, start_page, end_page)
+        else:
+            print("Cannot process PDF content. Unsupported or empty PDF.")
+            return None
+
+        if text:
+            try:
+                with open(output_text_file, 'w', encoding='utf-8') as f:
+                    f.write(text)
+                print(f"Extracted text written to {output_text_file}")
+                return output_text_file
+            except Exception as e:
+                print(f"Failed to write to {output_text_file}: {e}")
+                return None
+        else:
+            print("No text extracted from the PDF.")
+            return None
+
+    def _pdf_to_text(self, pdf_path, start_page=0, end_page=None):
+        """
+        Extract text directly from a text-based PDF.
+
+        :param pdf_path: Path to the PDF file
+        :param start_page: Starting page number (0-based index)
+        :param end_page: Ending page number (exclusive)
+        :return: Extracted text as a string
+        """
+        try:
+            with open(pdf_path, 'rb') as pdf_file:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                total_pages = len(pdf_reader.pages)
+
+                # Set default values for start_page and end_page if not provided
+                start_page = max(0, min(start_page, total_pages - 1))
+                end_page = min(end_page if end_page is not None else total_pages, total_pages)
+
+                print(f"Extracting text from pages {start_page + 1} to {end_page} out of {total_pages}")
+
+                text = ''
+                for page_num in range(start_page, end_page):
+                    page = pdf_reader.pages[page_num]
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += f"Page {page_num + 1}:\n{page_text}\n\n"
+                    else:
+                        print(f"No text found on page {page_num + 1}")
+                return text
+        except Exception as e:
+            print(f"Error extracting text from PDF: {e}")
+            return None
+
+    def _extract_text_from_images(self, pdf_file, start_page=0, end_page=None):
+        """
+        Extract text from an image-based PDF using OCR.
 
         :param pdf_file: Path to the PDF file
         :param start_page: Starting page number (0-based index)
         :param end_page: Ending page number (exclusive)
-        :return: List of extracted documents
+        :return: Extracted text as a string
         """
-        all_titles = self._get_pdf_content(pdf_file, start_page, end_page)
-        if all_titles is None:
-            print("Failed to process PDF content.")
-            return None
-
-        print(f"Extracted Titles: {all_titles}")
-
-        # Convert all Markdown files to text and store them
-        documents = self._collect_markdown_documents()
-        print(f"Total documents created: {len(documents)}")
-
-        return documents
-
-    def _get_pdf_content(self, pdf_file, start_page=0, end_page=None):
-        all_titles = []
-
+        all_text = []
         try:
-            doc = fitz.open(pdf_file)
-            num_pages = doc.page_count
-            print(f"Total pages in PDF: {num_pages}")
+            with fitz.open(pdf_file) as doc:
+                num_pages = doc.page_count
+                start = start_page
+                end = min(end_page if end_page is not None else num_pages, num_pages)
 
-            start = start_page
-            end = min(end_page if end_page is not None else num_pages, num_pages)
+                print(f"Processing pages from {start + 1} to {end} out of {num_pages}")
 
-            print(f"Processing pages from {start + 1} to {end}")
+                for i in range(start, end):
+                    try:
+                        page = doc.load_page(i)
+                        pix = page.get_pixmap(dpi=300)
+                        img_path = os.path.join(self.output_dir, f'temp_page_{i}.png')
+                        pix.save(img_path)
 
-            for i in range(start, end):
-                try:
-                    page = doc.load_page(i)
-                    pix = page.get_pixmap(dpi=300)
-                    img_path = os.path.join(self.output_dir, f'page_{i}.png')
-                    pix.save(img_path)
+                        page_text = self._get_page_text(img_path, i)
+                        if page_text:
+                            all_text.append(f"Page {i + 1}:\n{page_text}\n\n")
 
-                    md_path, titles = self._get_page_content(img_path, i)
-                    if titles:
-                        all_titles.extend(titles)
+                        os.remove(img_path)
+                    except Exception as e:
+                        print(f"Error processing page {i + 1}: {e}")
 
-                    os.remove(img_path)
-
-                except Exception as e:
-                    print(f"Error handling page {i + 1} of {pdf_file}: {e}")
-
-            return all_titles
-
+            return ''.join(all_text)
         except Exception as e:
             print(f"Error opening PDF file {pdf_file}: {e}")
             return None
 
-    def _get_page_content(self, page_img, page_num):
-        titles = []
-        page_output_path = os.path.join(self.output_dir, f'page_{page_num}', 'output-md')
-        os.makedirs(page_output_path, exist_ok=True)
+    def _extract_text_mixed(self, pdf_file, start_page=0, end_page=None):
+        """
+        Extract text from a mixed-content PDF.
 
+        :param pdf_file: Path to the PDF file
+        :param start_page: Starting page number (0-based index)
+        :param end_page: Ending page number (exclusive)
+        :return: Extracted text as a string
+        """
+        all_text = []
         try:
-            doc = self.p2t.recognize_page(
-                page_img,
+            with fitz.open(pdf_file) as doc:
+                num_pages = doc.page_count
+                start = start_page
+                end = min(end_page if end_page is not None else num_pages, num_pages)
+
+                print(f"Processing pages from {start + 1} to {end} out of {num_pages}")
+
+                for i in range(start, end):
+                    try:
+                        page = doc.load_page(i)
+                        pix = page.get_pixmap(dpi=300)
+                        img_path = os.path.join(self.output_dir, f'temp_page_{i}.png')
+                        pix.save(img_path)
+
+                        # Attempt to extract text directly
+                        text = self._extract_text_directly(doc, i)
+                        if text:
+                            all_text.append(f"Page {i + 1}:\n{text}\n\n")
+                        else:
+                            # Fallback to OCR if direct extraction fails
+                            ocr_text = self._get_page_text(img_path, i)
+                            if ocr_text:
+                                all_text.append(f"Page {i + 1} (OCR):\n{ocr_text}\n\n")
+
+                        os.remove(img_path)
+                    except Exception as e:
+                        print(f"Error processing page {i + 1}: {e}")
+
+            return ''.join(all_text)
+        except Exception as e:
+            print(f"Error opening PDF file {pdf_file}: {e}")
+            return None
+
+    def _extract_text_directly(self, doc, page_num):
+        """
+        Attempt to extract text directly from a page without OCR.
+
+        :param doc: Opened PyMuPDF document
+        :param page_num: Page number (0-based index)
+        :return: Extracted text or None
+        """
+        try:
+            page = doc.load_page(page_num)
+            text = page.get_text()
+            if text.strip():
+                return text
+            else:
+                return None
+        except Exception as e:
+            print(f"Error extracting direct text from page {page_num + 1}: {e}")
+            return None
+
+    def _get_page_text(self, image_path, page_num):
+        """
+        Perform OCR on a page image to extract text.
+
+        :param image_path: Path to the page image
+        :param page_num: Page number (0-based index)
+        :return: Extracted text as a string
+        """
+        try:
+            recognized_doc = self.p2t.recognize_page(
+                image_path,
                 table_as_image=True,
                 text_contain_formula=False,
                 save_debug_res=self.log_dir,
                 page_numbers=[page_num]
             )
 
-            md_file_path = os.path.join(page_output_path, f'page_{page_num}.md')
-            doc.to_markdown(md_file_path)
+            page_text = []
+            for element in recognized_doc.elements:
+                if element.type in [ElementType.TITLE, ElementType.TEXT]:
+                    page_text.append(element.text)
 
-            for element in doc.elements:
-                if element.type == ElementType.TITLE:
-                    print(f"Page {page_num + 1} - Title: {element.text}")
-                    titles.append(element.text)
+            extracted_text = '\n'.join(page_text)
+            print(f"Page {page_num + 1} - Extracted Text: {extracted_text[:100]}...")  # Preview first 100 chars
+            return extracted_text
+        except Exception as e:
+            print(f"Error performing OCR on page {page_num + 1}: {e}")
+            return None
+
+    def _analyze_pdf_content(self, pdf_path, sample_size=5):
+        """
+        Analyzes a PDF to determine if it contains extractable text or if it's primarily image-based.
+
+        :param pdf_path: Path to the PDF file
+        :param sample_size: Number of pages to sample (default is 5)
+        :return: A tuple (has_text, has_images, total_pages)
+        """
+        has_text = False
+        has_images = False
+
+        try:
+            with open(pdf_path, 'rb') as pdf_file:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                total_pages = len(pdf_reader.pages)
+
+                # Determine how many pages to check
+                pages_to_check = min(sample_size, total_pages)
+
+                for i in range(pages_to_check):
+                    page = pdf_reader.pages[i]
+
+                    # Check for text
+                    if not has_text:
+                        text = page.extract_text()
+                        if text and text.strip():
+                            has_text = True
+
+                    # Check for images
+                    if not has_images and '/XObject' in page['/Resources']:
+                        x_object = page['/Resources']['/XObject'].get_object()
+                        if x_object:
+                            for obj in x_object:
+                                if x_object[obj]['/Subtype'] == '/Image':
+                                    has_images = True
+                                    break
+
+                    # If we've found both text and images, we can stop checking
+                    if has_text and has_images:
+                        break
 
         except Exception as e:
-            print(f"Error processing page {page_num + 1}: {e}")
+            print(f"Error analyzing PDF content: {e}")
+            return False, False, 0
 
-        return md_file_path, titles
+        return has_text, has_images, total_pages
 
-    def _collect_markdown_documents(self):
-        documents = []
-        for root, dirs, files in os.walk(self.output_dir):
-            for file in files:
-                if file.endswith('.md'):
-                    md_path = os.path.join(root, file)
-                    text = self._read_text_file(md_path)
-                    documents.append(text)
-        return documents
+    def _determine_pdf_type(self, pdf_path):
+        """
+        Determines the type of PDF based on its content.
 
-    @staticmethod
-    def _read_text_file(filename):
-        with open(filename, "r", encoding="utf-8") as file:
-            return file.read()
+        :param pdf_path: Path to the PDF file
+        :return: A string describing the PDF type
+        """
+        has_text, has_images, total_pages = self._analyze_pdf_content(pdf_path)
 
+        if has_text and not has_images:
+            return "text_based"
+        elif has_images and not has_text:
+            return "image_based"
+        elif has_text and has_images:
+            return "mixed_content"
+        else:
+            return False
 
 # Example usage
 if __name__ == "__main__":
     pdf_path = 'matematyks.pdf'
+    output_text = 'extracted_content_matematyka.txt'
     processor = PDFProcessor()
 
-    desired_start_page = 74
-    desired_end_page = 115
+    desired_start_page = 74  # 0-based index (i.e., page 75)
+    desired_end_page = 79   # Exclusive (i.e., up to page 115)
 
-    documents = processor.process_pdf(pdf_path, start_page=desired_start_page, end_page=desired_end_page)
+    result = processor.process_pdf(pdf_path, output_text, start_page=desired_start_page, end_page=desired_end_page)
 
-    if documents:
-        print("PDF preprocessing and Markdown file creation completed successfully.")
+    if result:
+        print("PDF preprocessing and text extraction completed successfully.")
     else:
         print("An error occurred during PDF preprocessing.")
