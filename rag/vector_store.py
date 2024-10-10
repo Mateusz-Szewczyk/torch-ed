@@ -135,34 +135,3 @@ def add_text_files_to_vector_store(vector_store, text_dir='text_files'):
     else:
         print("No text documents were added to the vector store.")
 
-
-# Example usage
-if __name__ == "__main__":
-    # Define parameters
-    persist_dir = "./chroma_langchain_db"
-    collection = "text_collection"
-    markdown_directory = "ocr_output_pix2text"  # Directory containing Markdown files
-    text_directory = "text_files"  # Directory containing text files
-
-    # Create or load the vector store
-    if os.path.exists(persist_dir):
-        vector_store = load_vector_store(persist_directory=persist_dir, collection_name=collection)
-        print("Loaded existing vector store.")
-    else:
-        vector_store = create_vector_store(persist_directory=persist_dir, collection_name=collection)
-        print("Created new vector store.")
-
-    # Add Markdown files to the vector store
-    add_markdown_files_to_vector_store(vector_store, markdown_dir=markdown_directory)
-
-    # Add text files to the vector store
-    add_text_files_to_vector_store(vector_store, text_dir=text_directory)
-
-    # Example similarity search
-    query = "Your search query here"
-    results = similarity_search(vector_store, query, k=5)
-    for idx, doc in enumerate(results):
-        print(f"Result {idx + 1}:")
-        print(f"Content: {doc.page_content}")
-        print(f"Metadata: {doc.metadata}")
-        print("-" * 40)
