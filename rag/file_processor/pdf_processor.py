@@ -42,22 +42,19 @@ import PyPDF2
 # języka polskiego, llama dla angielskiego.
 
 class PDFProcessor:
-    def __init__(self, output_dir='../output_pdf2txt', log_dir='log', language='pol', device='cuda'):
+    def __init__(self, output_dir='../output_pdf2txt', language='pol', device='cuda'):
         """
         Initializes the PDFProcessor with specified configurations.
 
         Args:
             output_dir (str, optional): Directory to store temporary and output files.
                 Defaults to '../output_pdf2txt'.
-            log_dir (str, optional): Directory to store logs and debug results.
-                Defaults to 'log'.
             language (str, optional): Language code for OCR. Defaults to 'pol' (Polish).
             device (str, optional): Device to run OCR on (e.g., 'cuda' for GPU, 'cpu').
                 Defaults to 'cuda'.
         """
 
         self.output_dir = output_dir
-        self.log_dir = log_dir
         self.language = language
 
         # Initialize Pix2Text
@@ -65,7 +62,6 @@ class PDFProcessor:
 
         # Create necessary directories
         os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(self.log_dir, exist_ok=True)
 
     def process_pdf(self, pdf_file, output_text_file, start_page=0, end_page=None):
         """
@@ -262,7 +258,6 @@ class PDFProcessor:
                 image_path,
                 table_as_image=True,
                 text_contain_formula=False,
-                save_debug_res=self.log_dir,
                 page_numbers=[page_num]
             )
 
