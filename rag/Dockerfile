@@ -1,10 +1,10 @@
-# Use a base image with CUDA support
+# Użyj bazowego obrazu z obsługą CUDA
 FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 
-# Set the working directory in the container
+# Ustaw katalog roboczy w kontenerze
 WORKDIR /app
 
-# Install system dependencies
+# Zainstaluj zależności systemowe
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -12,36 +12,44 @@ RUN apt-get update && apt-get install -y \
     sqlite3 \
     libsqlite3-dev \
     ca-certificates \
-    # Dependencies for Ollama
+    # Zależności dla Ollama
     libunwind-dev \
     libssl-dev \
+    # Dodatkowe zależności dla bibliotek używanych w projekcie
+    libgl1-mesa-glx \
+    pandoc \
+    poppler-utils \
+    libpoppler-cpp-dev \
+    tesseract-ocr \
+    libtesseract-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify sqlite3 version (should be >= 3.35.0)
+# Zweryfikuj wersję sqlite3 (powinna być >= 3.35.0)
 RUN sqlite3 --version
 
-# Install Python
+# Zainstaluj Python
 RUN apt-get update && apt-get install -y python3.10 python3-pip
 
-# Install Ollama
+# Zainstaluj Ollama (jeśli jest potrzebne)
 RUN curl -sSfL https://ollama.ai/install.sh | bash
 
-# Upgrade pip
+# Uaktualnij pip
 RUN pip3 install --no-cache-dir --upgrade pip
 
-# Copy the requirements file and install Python dependencies
+# Skopiuj plik requirements.txt i zainstaluj zależności Pythona
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy your application code
+# Skopiuj kod aplikacji
 COPY . .
 
-# Copy and set permissions for entrypoint script
+# Skopiuj i ustaw uprawnienia dla skryptu entrypoint
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
-# Ensure your Python scripts are executable
+# Upewnij się, że skrypty Pythona są wykonywalne
 RUN chmod +x main.py
 
-# Set the entry point
+# Ustaw punkt wejścia
 ENTRYPOINT ["./entrypoint.sh"]

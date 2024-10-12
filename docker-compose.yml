@@ -4,14 +4,15 @@ services:
     ports:
       - '80:80'
     depends_on:
-      - torched
+      - backend
       - rag
     environment:
-      - REACT_APP_DJANGO_API_URL=http://localhost
-      - REACT_APP_RAG_API_URL=http://localhost/rag
+      - REACT_APP_DJANGO_API_URL=http://backend:8000  # Use service name for backend
+      - REACT_APP_RAG_API_URL=http://rag:8042  # Use service name for RAG
 
-  torched:
-    build: backend
+
+  backend:
+    build: ./backend
     ports:
       - '8000:8000'
     volumes:
@@ -30,9 +31,20 @@ services:
   rag:
     build: ./rag
     ports:
-      - '8001:8001'
+      - '8042:8042'
     volumes:
       - ./rag:/app
+
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"  # HTTP Neo4j Browser (Web Interface)
+      - "7687:7687"  # Bolt protocol for interacting with Neo4j from application
+    environment:
+      NEO4J_AUTH: "neo4j/password"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
 
   db:
     image: postgres:15
@@ -45,7 +57,9 @@ services:
     env_file:
       - backend/.env
 
+
 volumes:
   db_data:
-
+  neo4j_data:
+  neo4j_logs:
 

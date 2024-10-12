@@ -16,4 +16,5 @@ if ! ollama list | grep -q 'llama3.2:3b-instruct-fp16'; then
 fi
 
 # Run your application
-python main.py
+uvicorn main:app --host 0.0.0.0 --port 8042
+
