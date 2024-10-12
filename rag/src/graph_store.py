@@ -3,27 +3,29 @@ from .config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
-
-def create_graph_entries(chunks, extracted_metadatas):
+def create_graph_entries(chunks, extracted_metadatas, user_id):
     """
-    Creates nodes and relationships in the graph database based on the chunks and extracted metadata.
+    Tworzy węzły i relacje w bazie grafowej na podstawie fragmentów tekstu i wyekstrahowanych metadanych.
 
     Args:
-        chunks (List[str]): The list of text chunks.
-        extracted_metadatas (List[dict]): The list of metadata dictionaries extracted from each chunk.
+        chunks (List[str]): Lista fragmentów tekstu.
+        extracted_metadatas (List[dict]): Lista słowników z wyekstrahowanymi metadanymi dla każdego fragmentu.
+        user_id (str): Identyfikator użytkownika, do którego przypisane są dane.
 
     Returns:
         None
     """
     with driver.session() as session:
         for i, (chunk, metadata) in enumerate(zip(chunks, extracted_metadatas)):
+            # Tworzenie węzła Chunk z właściwością user_id
             session.run(
                 """
-                MERGE (c:Chunk {id: $chunk_id})
+                MERGE (c:Chunk {id: $chunk_id, user_id: $user_id})
                 SET c.text = $text
                 """,
                 chunk_id=str(i),
-                text=chunk
+                text=chunk,
+                user_id=user_id
             )
 
             for entity_type in ['names', 'locations', 'dates', 'key_terms']:
@@ -33,32 +35,36 @@ def create_graph_entries(chunks, extracted_metadatas):
 
                 for entity in entities:
                     if entity:
+                        # Tworzenie węzła Entity z właściwością user_id
                         session.run(
                             """
-                            MERGE (e:Entity {name: $entity})
+                            MERGE (e:Entity {name: $entity, user_id: $user_id})
                             SET e.type = $type
                             """,
                             entity=entity.strip(),
-                            type=entity_type
+                            type=entity_type,
+                            user_id=user_id
                         )
 
+                        # Tworzenie relacji między Chunk a Entity
                         session.run(
                             """
-                            MATCH (c:Chunk {id: $chunk_id})
-                            MATCH (e:Entity {name: $entity})
+                            MATCH (c:Chunk {id: $chunk_id, user_id: $user_id})
+                            MATCH (e:Entity {name: $entity, user_id: $user_id})
                             MERGE (c)-[:CONTAINS_ENTITY]->(e)
                             """,
                             chunk_id=str(i),
-                            entity=entity.strip()
+                            entity=entity.strip(),
+                            user_id=user_id
                         )
 
-
-def create_entity_relationships(extracted_metadatas):
+def create_entity_relationships(extracted_metadatas, user_id):
     """
-    Creates relationships between entities based on their co-occurrence in chunks.
+    Tworzy relacje między encjami na podstawie ich współwystępowania w fragmentach.
 
     Args:
-        extracted_metadatas (List[dict]): The list of metadata dictionaries extracted from each chunk.
+        extracted_metadatas (List[dict]): Lista słowników z wyekstrahowanymi metadanymi dla każdego fragmentu.
+        user_id (str): Identyfikator użytkownika, do którego przypisane są dane.
 
     Returns:
         None
@@ -76,60 +82,66 @@ def create_entity_relationships(extracted_metadatas):
                 for j in range(i + 1, len(entities)):
                     entity_a = entities[i]
                     entity_b = entities[j]
+                    # Tworzenie relacji między encjami z uwzględnieniem user_id
                     session.run(
                         """
-                        MATCH (a:Entity {name: $entity_a})
-                        MATCH (b:Entity {name: $entity_b})
+                        MATCH (a:Entity {name: $entity_a, user_id: $user_id})
+                        MATCH (b:Entity {name: $entity_b, user_id: $user_id})
                         MERGE (a)-[:RELATED_TO]->(b)
                         """,
                         entity_a=entity_a,
-                        entity_b=entity_b
+                        entity_b=entity_b,
+                        user_id=user_id
                     )
 
 def search_graph_store(query, user_id=None):
     """
-    Searches the Neo4j graph database for entities and relationships matching the query,
-    using full-text search, and calculates relevance scores.
+    Przeszukuje bazę grafową Neo4j w poszukiwaniu encji i relacji pasujących do zapytania,
+    wykorzystując wyszukiwanie pełnotekstowe, i oblicza ich relewancję.
 
     Args:
-        query (str): User's query.
-        user_id (str, optional): User ID for filtering results.
+        query (str): Zapytanie użytkownika.
+        user_id (str, opcjonalnie): Identyfikator użytkownika do filtrowania wyników.
 
     Returns:
-        List[dict]: List of entities and relationships with relevance scores.
+        List[dict]: Lista encji i relacji z oceną relewancji.
     """
     with driver.session() as session:
-        # Parameters for query
+        # Parametry zapytania
         params = {'query': query}
         if user_id:
             params['user_id'] = user_id
 
-        # Build query with optional user_id filtering
+        # Zapytanie dla encji z fragmentem tekstu
         entity_query = """
-        CALL db.index.fulltext.queryNodes('entityNameIndex', $query) YIELD node, score
+        CALL db.index.fulltext.queryNodes('entityNameIndex', $query) YIELD node AS e, score
         """
 
         if user_id:
-            entity_query += "WHERE node.user_id = $user_id\n"
+            entity_query += "WHERE e.user_id = $user_id\n"
 
-        entity_query += "RETURN node.name AS entity, node.type AS type, score ORDER BY score DESC"
+        entity_query += """
+        MATCH (c:Chunk {user_id: $user_id})-[:CONTAINS_ENTITY]->(e)
+        RETURN e.name AS entity, e.type AS type, c.text AS chunk_text, score ORDER BY score DESC
+        """
 
-        # Execute entity query
+        # Wykonanie zapytania dla encji
         result = session.run(entity_query, params)
 
         entities = []
         for record in result:
             entity_name = record["entity"]
             entity_type = record["type"]
+            chunk_text = record["chunk_text"]
             score = record["score"]
             entities.append({
-                'content': f"Entity: {entity_name} (Type: {entity_type})",
+                'content': f"Entity: {entity_name} (Type: {entity_type})\nFragment tekstu: {chunk_text}",
                 'metadata': {'type': entity_type},
                 'similarity_score': score,
                 'source': 'graph_entity'
             })
 
-        # Build relationship query
+        # Zapytanie dla relacji z fragmentem tekstu
         relation_query = """
         CALL db.index.fulltext.queryNodes('entityNameIndex', $query) YIELD node AS e1, score AS score1
         MATCH (e1)-[r]-(e2)
@@ -138,9 +150,13 @@ def search_graph_store(query, user_id=None):
         if user_id:
             relation_query += "WHERE e1.user_id = $user_id AND e2.user_id = $user_id\n"
 
-        relation_query += "RETURN e1.name AS entity1, e2.name AS entity2, type(r) AS relation, score1 ORDER BY score1 DESC"
+        relation_query += """
+        MATCH (c:Chunk {user_id: $user_id})-[:CONTAINS_ENTITY]->(e1)
+        WHERE (c)-[:CONTAINS_ENTITY]->(e2)
+        RETURN e1.name AS entity1, e2.name AS entity2, type(r) AS relation, c.text AS chunk_text, score1 ORDER BY score1 DESC
+        """
 
-        # Execute relationship query
+        # Wykonanie zapytania dla relacji
         result = session.run(relation_query, params)
 
         relations = []
@@ -148,14 +164,15 @@ def search_graph_store(query, user_id=None):
             entity1 = record["entity1"]
             entity2 = record["entity2"]
             relation = record["relation"]
+            chunk_text = record["chunk_text"]
             score = record["score1"]
             relations.append({
-                'content': f"Relation: {entity1} -[{relation}]-> {entity2}",
+                'content': f"Relation: {entity1} -[{relation}]-> {entity2}\nFragment tekstu: {chunk_text}",
                 'metadata': {'relation': relation},
                 'similarity_score': score,
                 'source': 'graph_relation'
             })
 
-    # Combine entities and relations
+    # Połączenie wyników encji i relacji
     graph_results = entities + relations
     return graph_results

@@ -39,31 +39,26 @@ from pix2text.layout_parser import ElementType
 import PyPDF2
 
 #TODO Muszę dodać processing dokumentu txt po przetworzeniu pdf image-based, za pomocą LLM, najlepiej Bielik dla
-# języka polskiego, llama dla angielskiego.
+# języka polskiego, llama dla angielskiego. (Będę w stanie to dodać dopiero za kilka miesięcy wraz z rozwojem projektu)
 
 class PDFProcessor:
-    def __init__(self, output_dir='../output_pdf2txt', language='pol', device='cuda'):
+    def __init__(self, language='pol', device='cuda'):
         """
         Initializes the PDFProcessor with specified configurations.
 
         Args:
-            output_dir (str, optional): Directory to store temporary and output files.
-                Defaults to '../output_pdf2txt'.
             language (str, optional): Language code for OCR. Defaults to 'pol' (Polish).
             device (str, optional): Device to run OCR on (e.g., 'cuda' for GPU, 'cpu').
                 Defaults to 'cuda'.
         """
 
-        self.output_dir = output_dir
         self.language = language
 
         # Initialize Pix2Text
         self.p2t = pix2text.Pix2Text.from_config(device=device)
 
-        # Create necessary directories
-        os.makedirs(self.output_dir, exist_ok=True)
 
-    def process_pdf(self, pdf_file, output_text_file, start_page=0, end_page=None):
+    def process_pdf(self, pdf_file, start_page=0, end_page=None):
         """
            Processes a PDF file and extracts its content into a single text file.
 
@@ -73,7 +68,6 @@ class PDFProcessor:
 
            Args:
                pdf_file (str): Path to the PDF file to be processed.
-               output_text_file (str): Path where the extracted text will be saved.
                start_page (int, optional): Starting page number (0-based index) for extraction.
                    Defaults to 0.
                end_page (int, optional): Ending page number (exclusive) for extraction.
@@ -99,14 +93,7 @@ class PDFProcessor:
             return None
 
         if text:
-            try:
-                with open(output_text_file, 'w', encoding='utf-8') as f:
-                    f.write(text)
-                print(f"Extracted text written to {output_text_file}")
-                return output_text_file
-            except Exception as e:
-                print(f"Failed to write to {output_text_file}: {e}")
-                return None
+            return text
         else:
             print("No text extracted from the PDF.")
             return None
@@ -166,7 +153,7 @@ class PDFProcessor:
                     try:
                         page = doc.load_page(i)
                         pix = page.get_pixmap(dpi=300)
-                        img_path = os.path.join(self.output_dir, f'temp_page_{i}.png')
+                        img_path = os.path.join(f'temp_page_{i}.png')
                         pix.save(img_path)
 
                         page_text = self._get_page_text(img_path, i)
@@ -204,7 +191,7 @@ class PDFProcessor:
                     try:
                         page = doc.load_page(i)
                         pix = page.get_pixmap(dpi=300)
-                        img_path = os.path.join(self.output_dir, f'temp_page_{i}.png')
+                        img_path = os.path.join(f'temp_page_{i}.png')
                         pix.save(img_path)
 
                         # Attempt to extract text directly
@@ -347,7 +334,7 @@ if __name__ == "__main__":
     desired_start_page = 74  # 0-based index (i.e., page 75)
     desired_end_page = 79   # Exclusive (i.e., up to page 115)
 
-    result = processor.process_pdf(pdf_path, output_text, start_page=desired_start_page, end_page=desired_end_page)
+    result = processor.process_pdf(pdf_path, start_page=desired_start_page, end_page=desired_end_page)
 
     if result:
         print("PDF preprocessing and text extraction completed successfully.")

@@ -5,7 +5,7 @@ Document Processor Module
 =========================
 
 This module provides the `DocumentProcessor` class, which facilitates the extraction of text content
-from various document file formats, including `.doc`, `.docx`, `.odt`, and `.rtf`. The extracted
+from various document file formats, including `.docx`, `.odt`, and `.rtf`. The extracted
 content is consolidated into a single `.txt` file.
 
 Dependencies:
@@ -44,40 +44,34 @@ from odf.opendocument import load
 from odf.text import P
 from odf import teletype
 
-# TODO Jak z doc zrobic txt???
 
 class DocumentProcessor:
-    '''
+    """
     A class to process various document file formats and extract their textual content.
 
     The `DocumentProcessor` supports the following formats:
-        - Microsoft Word Documents (.doc, .docx)
+        - Microsoft Word Documents (.docx)
         - OpenDocument Text (.odt)
         - Rich Text Format (.rtf)
 
     The extracted text from these documents can be consolidated into a single `.txt` file.
-    '''
+    """
 
-    def __init__(self, output_dir: str = '../output_doc2txt'):
-        '''
+    def __init__(self):
+        """
         Initializes the DocumentProcessor with specified configurations.
 
         Args:
             output_dir (str, optional): Directory to store temporary and output files.
                 Defaults to '../output_doc2txt'.
-        '''
-        self.output_dir = output_dir
-
-        # Create necessary directories
-        os.makedirs(self.output_dir, exist_ok=True)
-
+        """
         # Ensure Pandoc is installed
         self._ensure_pandoc_installed()
 
     def _ensure_pandoc_installed(self):
-        '''
+        """
         Ensures that Pandoc is installed. If not, downloads and installs it.
-        '''
+        """
         try:
             version = pypandoc.get_pandoc_version()
             print(f"Pandoc is already installed. Version: {version}")
@@ -86,20 +80,19 @@ class DocumentProcessor:
             pypandoc.download_pandoc()
             print("Pandoc downloaded and installed successfully.")
 
-    def process_document(self, doc_file: str, output_text_file: str) -> Optional[str]:
-        '''
+    def process_document(self, doc_file: str) -> Optional[str]:
+        """
         Processes a document file and extracts its content into a single text file.
 
-        Supports `.doc`, `.docx`, `.odt`, and `.rtf` formats.
+        Supports `.docx`, `.odt`, and `.rtf` formats.
 
         Args:
             doc_file (str): Path to the document file to be processed.
-            output_text_file (str): Path where the extracted text will be saved.
 
         Returns:
             str or None: Path to the output text file upon successful extraction,
                 or None if extraction fails.
-        '''
+        """
         if not os.path.isfile(doc_file):
             print(f"File not found: {doc_file}")
             return None
@@ -108,8 +101,8 @@ class DocumentProcessor:
         print(f"Processing file: {doc_file} with extension {file_extension}")
 
         try:
-            if file_extension in ['.docx', '.doc']:
-                text_content = self._extract_doc_pandoc(doc_file, file_extension)
+            if file_extension == '.docx':
+                text_content = self._extract_docx_pandoc(doc_file)
             elif file_extension == '.odt':
                 text_content = self._extract_odt(doc_file)
             elif file_extension == '.rtf':
@@ -119,10 +112,7 @@ class DocumentProcessor:
                 return None
 
             if text_content:
-                with open(output_text_file, 'w', encoding='utf-8') as f:
-                    f.write(text_content)
-                print(f"Extracted text written to {output_text_file}")
-                return output_text_file
+                return text_content
             else:
                 print("No text extracted from the document.")
                 return None
@@ -131,33 +121,23 @@ class DocumentProcessor:
             print(f"Error processing document {doc_file}: {e}")
             return None
 
-    def _extract_doc_pandoc(self, doc_path: str, file_extension: str) -> Optional[str]:
-        '''
-        Extracts text from a `.doc` or `.docx` file using PyPandoc.
+    def _extract_docx_pandoc(self, doc_path: str) -> Optional[str]:
+        """
+        Extracts text from a `.docx` file using PyPandoc.
 
         Args:
-            doc_path (str): Path to the `.doc` or `.docx` file.
-            file_extension (str): File extension to specify the input format.
+            doc_path (str): Path to the `.docx` file.
 
         Returns:
             str or None: Extracted text as a single string, or None if extraction fails.
-        '''
+        """
         try:
-            # Determine input format based on file extension
-            if file_extension == '.docx':
-                input_format = 'docx'
-            elif file_extension == '.doc':
-                input_format = 'doc'
-            else:
-                print(f"Unsupported file extension for PyPandoc: {file_extension}")
-                return None
-
             # Convert to plain text using PyPandoc
-            output = pypandoc.convert_file(doc_path, 'plain', format=input_format)
+            output = pypandoc.convert_file(doc_path, 'plain', format='docx')
             print(f"Successfully extracted text from {doc_path} using PyPandoc.")
             return output
         except Exception as e:
-            print(f"Error extracting {file_extension} file {doc_path} with PyPandoc: {e}")
+            print(f"Error extracting .docx file {doc_path} with PyPandoc: {e}")
             return None
 
     def _extract_odt(self, odt_path: str) -> Optional[str]:
@@ -184,7 +164,7 @@ class DocumentProcessor:
             return None
 
     def _extract_rtf(self, rtf_path: str) -> Optional[str]:
-        '''
+        """
         Extracts text from an `.rtf` file.
 
         Args:
@@ -192,7 +172,7 @@ class DocumentProcessor:
 
         Returns:
             str or None: Extracted text as a single string, or None if extraction fails.
-        '''
+        """
         try:
             with open(rtf_path, 'r', encoding='utf-8') as file:
                 rtf_content = file.read()
@@ -214,15 +194,15 @@ if __name__ == "__main__":
     and invoke the `process_document` method.
     '''
     # Specify the path to the input document
-    doc_path = 'lorem_ipsum.doc'  # Replace with your document file
+    doc_path = 'sample_document.docx'  # Replace with your document file
     # Specify the path for the output text file
-    output_text = 'extracted_document_li.txt'
+    output_text = 'extracted_document.txt'
 
     # Initialize the processor
     processor = DocumentProcessor()
 
     # Process the document and extract text
-    result = processor.process_document(doc_path, output_text)
+    result = processor.process_document(doc_path)
 
     if result:
         print(f"Text successfully extracted to {result}")
