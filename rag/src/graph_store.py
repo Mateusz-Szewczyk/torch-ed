@@ -96,23 +96,23 @@ def create_entity_relationships(extracted_metadatas, user_id):
 
 def search_graph_store(query, user_id=None):
     """
-    Przeszukuje bazę grafową Neo4j w poszukiwaniu encji i relacji pasujących do zapytania,
-    wykorzystując wyszukiwanie pełnotekstowe, i oblicza ich relewancję.
+    Searches the Neo4j graph database for entities and relations matching the query,
+    aggregates them by chunk to avoid duplicate texts, and calculates relevance scores.
 
     Args:
-        query (str): Zapytanie użytkownika.
-        user_id (str, opcjonalnie): Identyfikator użytkownika do filtrowania wyników.
+        query (str): The user's query.
+        user_id (str, optional): User ID for filtering results.
 
     Returns:
-        List[dict]: Lista encji i relacji z oceną relewancji.
+        List[dict]: List of aggregated entities and relations with relevance scores.
     """
     with driver.session() as session:
-        # Parametry zapytania
+        # Parameters for the query
         params = {'query': query}
         if user_id:
             params['user_id'] = user_id
 
-        # Zapytanie dla encji z fragmentem tekstu
+        # Entity query with aggregation
         entity_query = """
         CALL db.index.fulltext.queryNodes('entityNameIndex', $query) YIELD node AS e, score
         """
@@ -122,29 +122,34 @@ def search_graph_store(query, user_id=None):
 
         entity_query += """
         MATCH (c:Chunk {user_id: $user_id})-[:CONTAINS_ENTITY]->(e)
-        RETURN e.name AS entity, e.type AS type, c.text AS chunk_text, score ORDER BY score DESC
+        WITH c, COLLECT(DISTINCT e.name) AS entities, COLLECT(DISTINCT e.type) AS types, AVG(score) AS avg_score
+        RETURN c.text AS chunk_text, entities, types, avg_score ORDER BY avg_score DESC
         """
 
-        # Wykonanie zapytania dla encji
+        # Execute the entity query
         result = session.run(entity_query, params)
 
         entities = []
         for record in result:
-            entity_name = record["entity"]
-            entity_type = record["type"]
             chunk_text = record["chunk_text"]
-            score = record["score"]
+            entity_names = record["entities"]
+            entity_types = record["types"]
+            score = record["avg_score"]
+
+            # Combine entities and types into a list of tuples
+            entity_info = list(zip(entity_names, entity_types))
+
             entities.append({
-                'content': f"Entity: {entity_name} (Type: {entity_type})\nFragment tekstu: {chunk_text}",
-                'metadata': {'type': entity_type},
+                'content': f"Entities: {entity_info}\nFragment tekstu: {chunk_text}",
+                'metadata': {'entities': entity_info},
                 'similarity_score': score,
                 'source': 'graph_entity'
             })
 
-        # Zapytanie dla relacji z fragmentem tekstu
+        # Relation query with aggregation
         relation_query = """
         CALL db.index.fulltext.queryNodes('entityNameIndex', $query) YIELD node AS e1, score AS score1
-        MATCH (e1)-[r]-(e2)
+        MATCH (e1)-[r]->(e2)
         """
 
         if user_id:
@@ -153,26 +158,29 @@ def search_graph_store(query, user_id=None):
         relation_query += """
         MATCH (c:Chunk {user_id: $user_id})-[:CONTAINS_ENTITY]->(e1)
         WHERE (c)-[:CONTAINS_ENTITY]->(e2)
-        RETURN e1.name AS entity1, e2.name AS entity2, type(r) AS relation, c.text AS chunk_text, score1 ORDER BY score1 DESC
+        WITH c, COLLECT(DISTINCT [e1.name, type(r), e2.name]) AS relations, AVG(score1) AS avg_score1
+        RETURN c.text AS chunk_text, relations, avg_score1 ORDER BY avg_score1 DESC
         """
 
-        # Wykonanie zapytania dla relacji
+        # Execute the relation query
         result = session.run(relation_query, params)
 
         relations = []
         for record in result:
-            entity1 = record["entity1"]
-            entity2 = record["entity2"]
-            relation = record["relation"]
             chunk_text = record["chunk_text"]
-            score = record["score1"]
+            relations_list = record["relations"]
+            score = record["avg_score1"]
+
+            # Format the relations
+            relations_info = [f"{e1} -[{rel}]-> {e2}" for e1, rel, e2 in relations_list]
+
             relations.append({
-                'content': f"Relation: {entity1} -[{relation}]-> {entity2}\nFragment tekstu: {chunk_text}",
-                'metadata': {'relation': relation},
+                'content': f"Relations: {relations_info}\nFragment tekstu: {chunk_text}",
+                'metadata': {'relations': relations_info},
                 'similarity_score': score,
                 'source': 'graph_relation'
             })
 
-    # Połączenie wyników encji i relacji
+    # Combine entity and relation results
     graph_results = entities + relations
     return graph_results

@@ -78,7 +78,9 @@ def search_vector_store(query, model, user_id, n_results=5):
     results = collection.query(
         query_embeddings=[query_embedding],
         n_results=n_results,
-        where={'user_id': user_id}
+        where={'user_id': user_id},
+        include=['embeddings', 'documents', 'metadatas', 'distances']
+
     )
 
     return results

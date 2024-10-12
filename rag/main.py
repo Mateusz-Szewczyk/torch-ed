@@ -63,24 +63,12 @@ def main():
         normalized_score = result.get('normalized_score', 0)
         metadata = result.get('metadata', {})
 
-        if source == 'vector':
-            print("Z bazy wektorowej:")
-            print(f"Treść dokumentu:\n{content}\n")
-            print("Metadane:")
-            print(f" - Kategoria: {metadata.get('category', 'N/A')}")
-            print(f" - Opis: {metadata.get('description', 'N/A')}")
-        elif source == 'graph_entity':
-            print("Z grafu (Encja):")
-            print(f"Encja: {metadata.get('type', 'N/A')}")
-            print(f"Treść: {content}")
-        elif source == 'graph_relation':
-            print("Z grafu (Relacja):")
-            print(f"Relacja: {metadata.get('relation', 'N/A')}")
-            print(f"Treść: {content}")
-        else:
-            print("Nieznane źródło:")
-            print(f"Treść: {content}")
-
+        print(f"Źródło: {source}")
+        print(f"Treść:\n{content}\n")
+        if 'entities' in metadata:
+            print(f"Encje: {metadata['entities']}")
+        if 'relations' in metadata:
+            print(f"Relacje: {metadata['relations']}")
         print(f"Wynik podobieństwa: {similarity_score:.4f}")
         print(f"Wynik znormalizowany: {normalized_score:.4f}")
         print("-" * 40)
