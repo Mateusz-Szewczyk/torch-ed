@@ -1,7 +1,7 @@
 # torch-ed ![Torch Animation](./torch.svg)
 
+Spark Your Mind, Illuminate Your Path, and Fuel Your Journey for Endless Learning—at Your Own Pace.
 
-An intelligent learning platform that revolutionizes your study experience.
 
 ## 🚀 Features
 
