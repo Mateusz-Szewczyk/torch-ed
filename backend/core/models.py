@@ -55,6 +55,7 @@ class Flashcard(models.Model):
     # note = models.ForeignKey(Note, related_name='flashcards', on_delete=models.CASCADE, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    is_correct = models.BooleanField(default=True)
 
     def __str__(self) -> str:
         return self.question
