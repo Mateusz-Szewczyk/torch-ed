@@ -133,7 +133,6 @@ async def upload_file(
         # Create graph entries (nodes and relationships)
         create_graph_entries(chunks, extracted_metadatas, user_id)
         create_entity_relationships(extracted_metadatas, user_id)
-        print("everything is ok")
         # Return a success message
         return JSONResponse(
             status_code=200,
@@ -164,9 +163,7 @@ async def query_knowledge(
 ):
     try:
         # Generate the answer
-        print("tutaj dziala api 1")
         answer = generate_answer(user_id, query)
-        print("tutaj dziala api 2")
         return JSONResponse(
             status_code=200,
             content={

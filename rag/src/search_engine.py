@@ -21,13 +21,12 @@ def search_and_rerank(query: str, model: Any, user_id: str, n_results: int = 5) 
     query_embedding = model.encode(query)
 
     vector_results = search_vector_store(query, model, user_id, n_results * 2)
-    print(vector_results)
+
     vector_reranked_results = process_vector_results(vector_results, query_embedding)
-    print("2")
+
     graph_results = search_graph_store(query, user_id)
-    print(graph_results)
     graph_reranked_results = process_graph_results(graph_results)
-    print("3")
+
     combined_results = vector_reranked_results + graph_reranked_results
     return rerank_results(combined_results, n_results)
 
