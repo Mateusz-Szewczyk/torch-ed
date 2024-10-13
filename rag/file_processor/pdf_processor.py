@@ -275,7 +275,6 @@ class PDFProcessor:
             with open(pdf_path, 'rb') as pdf_file:
                 pdf_reader = PyPDF2.PdfReader(pdf_file)
                 total_pages = len(pdf_reader.pages)
-
                 # Determine how many pages to check
                 pages_to_check = min(sample_size, total_pages)
 
@@ -300,7 +299,6 @@ class PDFProcessor:
                     # If we've found both text and images, we can stop checking
                     if has_text and has_images:
                         break
-
         except Exception as e:
             print(f"Error analyzing PDF content: {e}")
             return False, False, 0
@@ -314,6 +312,7 @@ class PDFProcessor:
         :param pdf_path: Path to the PDF file
         :return: A string describing the PDF type
         """
+        print(pdf_path)
         has_text, has_images, total_pages = self._analyze_pdf_content(pdf_path)
 
         if has_text and not has_images:
