@@ -9,3 +9,16 @@ langchain-community
 langchain-chroma
 gpt4all
 beautifulsoup4
+fastapi
+uvicorn[standard]
+pypandoc
+striprtf
+odfpy
+PyMuPDF
+pix2text
+PyPDF2
+pytest
+sentence-transformers
+tqdm
+python-multipart
+

@@ -1,99 +1,82 @@
-# main.py
-import os
-from document_processor import read_text_file, split_text_into_documents, add_documents_to_vector_store
-from vector_store import create_vector_store, load_vector_store, similarity_search
-from langchain_community.embeddings import GPT4AllEmbeddings
-import subprocess
+from sentence_transformers import SentenceTransformer
+from src.search_engine import search_and_rerank
+from file_processor.pdf_processor import PDFProcessor
+from src.chunking import create_chunks
 
-embedding = GPT4AllEmbeddings(model_kwargs={"n_threads": 4})
+def display_results(results):
+    print("\nWyniki wyszukiwania i rerankingu:")
+    for result in results:
+        source = result.get('source', 'unknown')
+        content = result.get('content', '')
+        similarity_score = result.get('similarity_score', 0)
+        normalized_score = result.get('normalized_score', 0)
+        metadata = result.get('metadata', {})
 
+        print(f"Źródło: {source}")
+        print(f"Treść:\n{content}\n")
 
-def run_ollama(model_name, prompt):
-    command = ['ollama', 'run', model_name]
-    print(f"Running Ollama with model: {model_name} and prompt: {prompt}")
+        if metadata:
+            if 'entities' in metadata and metadata['entities']:
+                print(f"Encje: {metadata['entities']}")
+            if 'relations' in metadata and metadata['relations']:
+                print(f"Relacje: {metadata['relations']}")
+        print(f"Wynik podobieństwa: {similarity_score:.4f}")
+        print(f"Wynik znormalizowany: {normalized_score:.4f}")
+        print("-" * 40)
 
-    try:
-        result = subprocess.run(command, input=prompt, capture_output=True, text=True, check=True, encoding='utf-8')
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        print(f"Error running Ollama: {e}")
-        print(f"Standard Output: {e.stdout}")
-        print(f"Standard Error: {e.stderr}")
-        return ""
 
 def main():
-    filename = "python_docs_index.txt"
-
-    if not os.path.exists(filename):
-        print(f"File {filename} not found!")
+    # # Sample data setup (replace with actual data)
+    pdfprocessor = PDFProcessor()
+    text = pdfprocessor.process_pdf('./tests/test_files/test.pdf', start_page=7, end_page=90)
+    #
+    if text is None:
+        print("Error: Failed to process PDF.")
         return
 
-    text = read_text_file(filename)
-    documents = split_text_into_documents(text)
+    user_id = 'user123'
+    file_description = 'To jest książka o psychologii'
+    category = 'psychologia'
 
-    persist_directory = "./chroma_langchain_db_new"
+    # # Chunking the text
+    chunks = create_chunks(text)
+    embeddings = []
+    extracted_metadatas = []
 
-    if not os.path.exists(persist_directory):
-        vector_store = create_vector_store(persist_directory=persist_directory)
-        add_documents_to_vector_store(vector_store, documents)
-    else:
-        vector_store = load_vector_store(persist_directory=persist_directory)
+    # Initialize the embedding model
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    #
+    # # Use tqdm to track progress through the chunks
+    # for chunk in tqdm(chunks, desc="Processing chunks", unit="chunk"):
+    #     # Generate embeddings
+    #     embedding = embedding_model.encode(chunk)
+    #     embeddings.append(embedding)
+    #
+    #     # Extract metadata using LLM
+    #     metadata = extract_metadata_using_llm(chunk, category)
+    #     extracted_metadatas.append(metadata)
+    #
+    # # Create vector store (after metadata extraction)
+    # create_vector_store(chunks, embeddings, user_id, file_description, category, extracted_metadatas)
+    #
+    # # Create graph entries (nodes and relationships)
+    # create_graph_entries(chunks, extracted_metadatas, user_id)
+    # create_entity_relationships(extracted_metadatas, user_id)
+    #
+    # # Optional: print or log final metadata for debugging purposes
+    # for chunk, metadata in zip(chunks, extracted_metadatas):
+    #     print("Chunk: ", chunk)
+    #     print("Metadata: ", metadata)
 
-    model_name = "llama3.2:3b-instruct-fp16"
+    # Now, use the search engine to query the data
+    query = "Wytłumacz mi czym jest System 1 i System 2"
+    results = search_and_rerank(query, embedding_model, user_id, n_results=5)
 
-    query = "Jak tworzyć oprogramowanie wysokiej jakości?"
+    # Print the results
+    display_results(results)
 
-    similar_docs = similarity_search(vector_store, query, k=4)
-    retrieved_text = "\n\n".join([doc.page_content for doc in similar_docs])
-    combined_prompt = f"""
-    You are an AI assistant with advanced analytical and communication skills. Your task is to provide accurate, insightful, and tailored responses based on the given information and query.
 
-    Context:
-    {retrieved_text}
 
-    Query: {query}
 
-    Response Guidelines:
-    1. Analyze: Thoroughly examine the provided context, identifying key concepts, relationships, and relevant details.
-
-    2. Synthesize: Combine insights from multiple sources to form a comprehensive understanding.
-
-    3. Answer: 
-       - Begin with a direct, concise answer to the query.
-       - Elaborate with supporting details, examples, or explanations as needed.
-       - If applicable, present multiple perspectives or interpretations.
-
-    4. Clarity:
-       - Use clear, jargon-free language unless technical terms are necessary.
-       - Employ bullet points, numbered lists, or short paragraphs for easy readability.
-
-    5. Credibility:
-       - Seamlessly incorporate references to the provided context when relevant.
-       - Clearly distinguish between information from the context and any inferences or general knowledge you're using.
-
-    6. Completeness:
-       - Address all aspects of the query.
-       - If the context lacks sufficient information, clearly state this and provide the best possible answer with available data.
-
-    7. Objectivity:
-       - Present information impartially, especially for controversial topics.
-       - Acknowledge limitations or uncertainties in the data or conclusions.
-
-    8. Engagement:
-       - Tailor your tone to suit the nature of the query (e.g., formal for academic questions, conversational for general inquiries).
-       - When appropriate, pose thought-provoking questions or suggest areas for further exploration.
-
-    Remember: Start your response directly and avoid repetitive or formulaic introductions. Your goal is to provide a helpful, informative, and engaging answer that directly addresses the user's needs.
-    """
-
-    # Run the LLaMA 3.2 3B model via Ollama
-    response = run_ollama(model_name, combined_prompt)
-
-    # Step 6: Output the final response
-    print(f"Generated Response:\n{response}")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-
-
-#TODO Przeczytaj o LoRA i Flexora zeby troche finetuningowac model w razie potrzeby
