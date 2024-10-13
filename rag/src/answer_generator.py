@@ -29,11 +29,13 @@ def generate_answer(user_id: str, query: str) -> str:
         str: Generated answer.
     """
     # Initialize the embedding model
+    print("tutaj dziala")
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-
+    print("czy tutaj działa??")
     # Retrieve relevant chunks for the user
     results = search_and_rerank(query, embedding_model, user_id, n_results=5)
-
+    print("a czy tutaj działa???")
+    print(results)
     if not results:
         return "No relevant information found."
 
@@ -95,6 +97,7 @@ def generate_answer_with_ollama(prompt: str) -> str:
             {"role": "assistant",
              "content": prompt},],
                              stream=True)
+        return answer["content"]
 
     except Exception as e:
         return f"Error communicating with Ollama: {str(e)}"

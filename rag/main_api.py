@@ -24,7 +24,7 @@ from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
-import tqdm
+from tqdm import tqdm
 
 from src.graph_store import create_graph_entries, create_entity_relationships
 from src.vector_store import create_vector_store
@@ -68,10 +68,24 @@ async def upload_file(
     # Determine file type
     file_extension = os.path.splitext(file.filename)[1].lower()
 
+    # Convert start_page and end_page to integers if provided
+    try:
+        sp = int(start_page) if start_page else 0
+        ep = int(end_page) if end_page else None
+    except ValueError:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "message": "Start page and end page must be integers.",
+                "user_id": user_id,
+                "file_name": file.filename
+            }
+        )
+
     # Process file based on type
     try:
         if file_extension == '.pdf':
-            text_content = pdf_processor.process_pdf(file_path, start_page=start_page, end_page=end_page)
+            text_content = pdf_processor.process_pdf(file_path, start_page=sp, end_page=ep)
 
         elif file_extension in ['.docx', '.odt', '.rtf']:
             text_content = doc_processor.process_document(file_path)
@@ -95,15 +109,15 @@ async def upload_file(
                 }
             )
 
-        # # Chunking the text
+        # Chunking the text
         chunks = create_chunks(text_content)
         embeddings = []
         extracted_metadatas = []
 
         # Initialize the embedding model
         embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        #
-        # # Use tqdm to track progress through the chunks
+
+        # Use tqdm to track progress through the chunks
         for chunk in tqdm(chunks, desc="Processing chunks", unit="chunk"):
             # Generate embeddings
             embedding = embedding_model.encode(chunk)
@@ -119,8 +133,8 @@ async def upload_file(
         # Create graph entries (nodes and relationships)
         create_graph_entries(chunks, extracted_metadatas, user_id)
         create_entity_relationships(extracted_metadatas, user_id)
-
-        # For this example, we'll just return a success message
+        print("everything is ok")
+        # Return a success message
         return JSONResponse(
             status_code=200,
             content={
@@ -142,6 +156,7 @@ async def upload_file(
             }
         )
 
+
 @app.post("/query/")
 async def query_knowledge(
     user_id: str = Form(...),
@@ -149,7 +164,9 @@ async def query_knowledge(
 ):
     try:
         # Generate the answer
+        print("tutaj dziala api 1")
         answer = generate_answer(user_id, query)
+        print("tutaj dziala api 2")
         return JSONResponse(
             status_code=200,
             content={

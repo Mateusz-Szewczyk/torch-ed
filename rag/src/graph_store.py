@@ -7,8 +7,8 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 def ensure_fulltext_indexes():
     with driver.session() as session:
-        # Check existing indexes
-        existing_indexes = session.run("CALL db.indexes YIELD name RETURN name")
+        # Check existing indexes using the updated Neo4j command
+        existing_indexes = session.run("SHOW INDEXES YIELD name RETURN name")
         index_names = [record["name"] for record in existing_indexes]
 
         # Create 'entityFullTextIndex' if it doesn't exist
