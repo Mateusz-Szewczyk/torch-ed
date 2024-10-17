@@ -94,6 +94,7 @@ This endpoint allows users to upload a document (PDF, DOCX, ODT, RTF) and proces
 - `end_page` (optional): The ending page number for processing (for PDFs).
 - `file` (required): The document file to be uploaded.
 
+**`start_page` and `end_page` is used only for PDF files!!!**
 #### Example Request:
 
 ```bash
@@ -120,6 +121,7 @@ This endpoint allows users to query the knowledge base for specific information.
 curl -X 'POST'   'http://localhost:8042/query/'   -F 'user_id=user123'   -F 'query=Who is Amos Tversky?'
 ```
 
+**For testing purposes, please use** *user_id: user123* **, as there is already data uploaded as user123 in the vector store.**
 #### Response:
 - **200 OK**: Returns the generated answer based on the query and retrieved chunks.
 - **500 Internal Server Error**: If there was an error while generating the answer.
@@ -141,7 +143,7 @@ curl -X POST "http://localhost:8042/upload/"     -F "user_id=user123"     -F "fi
 To query the knowledge base for information stored in the uploaded documents, use the `/query/` endpoint with a specific query:
 
 ```bash
-curl -X POST "http://localhost:8042/query/"     -F "user_id=user123"     -F "query=What is the theory of Amos Tversky?"
+curl -X POST "http://localhost:8042/query/"     -F "user_id=user123"     -F "query=Who is Amos Tversky?"
 ```
 
 ---
