@@ -3,6 +3,7 @@ from .graph_store import search_graph_store
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from typing import List, Dict, Any
+import logging
 
 def search_and_rerank(query: str, model: Any, user_id: str, n_results: int = 5) -> List[Dict[str, Any]]:
     """
@@ -30,20 +31,38 @@ def search_and_rerank(query: str, model: Any, user_id: str, n_results: int = 5) 
     combined_results = vector_reranked_results + graph_reranked_results
     return rerank_results(combined_results, n_results)
 
+logger = logging.getLogger(__name__)
+
 def process_vector_results(vector_results: Dict[str, Any], query_embedding: np.ndarray) -> List[Dict[str, Any]]:
     if not vector_results or 'embeddings' not in vector_results or not vector_results['embeddings']:
-        print("No embeddings returned from vector store.")
+        logger.warning("No embeddings returned from vector store.")
         return []
 
     doc_embeddings = np.array(vector_results['embeddings'][0])
     documents = vector_results['documents'][0]
     metadatas = vector_results['metadatas'][0]
 
+    if len(doc_embeddings) == 0:
+        logger.warning("Document embeddings are empty.")
+        return []
+
     if doc_embeddings.ndim == 3:
         doc_embeddings = doc_embeddings.reshape(-1, doc_embeddings.shape[-1])
 
-    query_embedding = query_embedding.reshape(1, -1)
-    similarities = cosine_similarity(query_embedding, doc_embeddings)[0]
+    # Ensure query_embedding is 2D
+    if query_embedding.ndim == 1:
+        query_embedding = query_embedding.reshape(1, -1)
+
+    # Check if doc_embeddings has at least one embedding
+    if doc_embeddings.size == 0:
+        logger.warning("No document embeddings available for similarity calculation.")
+        return []
+
+    try:
+        similarities = cosine_similarity(query_embedding, doc_embeddings)[0]
+    except ValueError as ve:
+        logger.error(f"Error computing cosine similarity: {ve}")
+        return []
 
     return [
         {

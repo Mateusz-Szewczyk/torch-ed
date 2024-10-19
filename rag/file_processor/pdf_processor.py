@@ -37,6 +37,9 @@ import fitz  # PyMuPDF
 import pix2text
 from pix2text.layout_parser import ElementType
 import PyPDF2
+import logging
+
+logger = logging.getLogger(__name__)
 
 #TODO Muszę dodać processing dokumentu txt po przetworzeniu pdf image-based, za pomocą LLM, najlepiej Bielik dla
 # języka polskiego, llama dla angielskiego. (Będę w stanie to dodać dopiero za kilka miesięcy wraz z rozwojem projektu)
@@ -77,25 +80,33 @@ class PDFProcessor:
                str or None: Path to the output text file upon successful extraction,
                    or None if extraction fails.
         """
+        # Ensure start_page is an integer
+        if start_page is None:
+            start_page = 0
+        if end_page is not None and not isinstance(end_page, int):
+            end_page = None
+
 
         pdf_type = self._determine_pdf_type(pdf_file)
-        if pdf_type == "text_based":
-            print("Detected a text-based PDF.")
-            text = self._pdf_to_text(pdf_file, start_page, end_page)
-        elif pdf_type == "image_based":
-            print("Detected an image-based PDF.")
-            text = self._extract_text_from_images(pdf_file, start_page, end_page)
-        elif pdf_type == "mixed_content":
-            print("Detected a mixed-content PDF.")
-            text = self._extract_text_mixed(pdf_file, start_page, end_page)
-        else:
-            print("Cannot process PDF content. Unsupported or empty PDF.")
-            return None
 
-        if text:
-            return text
-        else:
-            print("No text extracted from the PDF.")
+        try:
+            if pdf_type == "text_based":
+                text = self._pdf_to_text(pdf_file, start_page, end_page)
+            elif pdf_type == "image_based":
+                text = self._extract_text_from_images(pdf_file, start_page, end_page)
+            elif pdf_type == "mixed_content":
+                text = self._extract_text_mixed(pdf_file, start_page, end_page)
+            else:
+                print("Cannot process PDF content. Unsupported or empty PDF.")
+                return None
+
+            if text:
+                return text
+            else:
+                print("No text extracted from the PDF.")
+                return None
+        except Exception as e:
+            print(f"Error opening PDF file {pdf_file}: {e}")
             return None
 
     def _pdf_to_text(self, pdf_path, start_page=0, end_page=None):
@@ -182,10 +193,12 @@ class PDFProcessor:
         try:
             with fitz.open(pdf_file) as doc:
                 num_pages = doc.page_count
-                start = start_page
+
+                # Ensure start and end are integers
+                start = start_page if start_page is not None else 0
                 end = min(end_page if end_page is not None else num_pages, num_pages)
 
-                print(f"Processing pages from {start + 1} to {end} out of {num_pages}")
+                logger.info(f"Processing pages from {start + 1} to {end} out of {num_pages}")
 
                 for i in range(start, end):
                     try:
@@ -206,40 +219,26 @@ class PDFProcessor:
 
                         os.remove(img_path)
                     except Exception as e:
-                        print(f"Error processing page {i + 1}: {e}")
+                        logger.error(f"Error processing page {i + 1}: {e}", exc_info=True)
 
             return ''.join(all_text)
         except Exception as e:
-            print(f"Error opening PDF file {pdf_file}: {e}")
+            logger.error(f"Error opening PDF file {pdf_file}: {e}", exc_info=True)
             return None
 
     def _extract_text_directly(self, doc, page_num):
-        """
-        Attempt to extract text directly from a page without OCR.
-
-        :param doc: Opened PyMuPDF document
-        :param page_num: Page number (0-based index)
-        :return: Extracted text or None
-        """
         try:
             page = doc.load_page(page_num)
             text = page.get_text()
-            if text.strip():
+            if text and text.strip():
                 return text
             else:
                 return None
         except Exception as e:
-            print(f"Error extracting direct text from page {page_num + 1}: {e}")
+            logger.error(f"Error extracting direct text from page {page_num + 1}: {e}", exc_info=True)
             return None
 
     def _get_page_text(self, image_path, page_num):
-        """
-        Perform OCR on a page image to extract text.
-
-        :param image_path: Path to the page image
-        :param page_num: Page number (0-based index)
-        :return: Extracted text as a string
-        """
         try:
             recognized_doc = self.p2t.recognize_page(
                 image_path,
@@ -251,14 +250,17 @@ class PDFProcessor:
             page_text = []
             for element in recognized_doc.elements:
                 if element.type in [ElementType.TITLE, ElementType.TEXT]:
-                    page_text.append(element.text)
+                    if element.text:
+                        page_text.append(element.text)
+                    else:
+                        page_text.append('')  # Append empty string if text is None
 
-            extracted_text = '\n'.join(page_text)
-            print(f"Page {page_num + 1} - Extracted Text: {extracted_text[:100]}...")  # Preview first 100 chars
+            extracted_text = '\n'.join(page_text) if page_text else ''
+            logger.info(f"Page {page_num + 1} - Extracted Text: {extracted_text[:100]}...")  # Preview first 100 chars
             return extracted_text
         except Exception as e:
-            print(f"Error performing OCR on page {page_num + 1}: {e}")
-            return None
+            logger.error(f"Error performing OCR on page {page_num + 1}: {e}", exc_info=True)
+            return ''
 
     def _analyze_pdf_content(self, pdf_path, sample_size=5):
         """

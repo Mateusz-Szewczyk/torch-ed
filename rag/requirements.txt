@@ -1,9 +1,9 @@
-fastapi==0.115.0
-uvicorn==0.31.0
-pydantic==2.9.2
-numpy==1.26.4
-langchain==0.3.1
-chromadb==0.5.11
+fastapi
+uvicorn
+pydantic
+numpy
+langchain
+chromadb
 langchain-core
 langchain-community
 langchain-chroma
@@ -21,4 +21,9 @@ pytest
 sentence-transformers
 tqdm
 python-multipart
-
+neo4j
+ollama
+nltk
+torch
+onnxruntime-gpu
+urllib3<2

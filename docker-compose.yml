@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   frontend:
     build: ./frontend
@@ -7,9 +9,10 @@ services:
       - backend
       - rag
     environment:
-      - REACT_APP_DJANGO_API_URL=http://backend:8000  # Use service name for backend
-      - REACT_APP_RAG_API_URL=http://rag:8042  # Use service name for RAG
-
+      - REACT_APP_DJANGO_API_URL=http://backend:8000
+      - REACT_APP_RAG_API_URL=http://rag:8042
+    networks:
+      - app-network
 
   backend:
     build: ./backend
@@ -26,25 +29,46 @@ services:
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DJANGO_DEBUG=${DJANGO_DEBUG}
     env_file:
-      - backend/.env
+      - .env
+    networks:
+      - app-network
 
   rag:
     build: ./rag
     ports:
-      - '8042:8042'
+      - '8042:8042'       # FastAPI Port
+      - '11434:11434'     # Ollama Port
     volumes:
       - ./rag:/app
+      - ./vector_store_data:/app/vector_store_data  # Mount PERSIST_DIRECTORY
+      - ./logs:/var/log/supervisor                 # Mount Supervisor logs
+      - ./uploads:/app/uploads                      # Mount uploads directory
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=password
+      - PERSIST_DIRECTORY=/app/vector_store_data
+      - EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
+      - LLM_MODEL_NAME=llama3.2:3b-instruct-fp16
+      - OLLAMA_API_URL=http://localhost:11434/api/generate
+      - OLLAMA_MODEL_NAME=llama3.2:3b-instruct-fp16
+    depends_on:
+      - neo4j
+    networks:
+      - app-network
 
   neo4j:
     image: neo4j:latest
     ports:
-      - "7474:7474"  # HTTP Neo4j Browser (Web Interface)
-      - "7687:7687"  # Bolt protocol for interacting with Neo4j from application
+      - "7474:7474"  # Neo4j Browser
+      - "7687:7687"  # Bolt protocol
     environment:
-      NEO4J_AUTH: "neo4j/password"
+      - NEO4J_AUTH=neo4j/password
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
+    networks:
+      - app-network
 
   db:
     image: postgres:15
@@ -55,11 +79,17 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
     env_file:
-      - backend/.env
-
+      - .env
+    networks:
+      - app-network
 
 volumes:
   db_data:
   neo4j_data:
   neo4j_logs:
+  uploads:
+  logs:
 
+networks:
+  app-network:
+    driver: bridge
