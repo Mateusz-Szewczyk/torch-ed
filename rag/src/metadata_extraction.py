@@ -28,9 +28,8 @@ def extract_metadata_using_llm(chunk, category):
         dict: A dictionary containing extracted metadata.
     """
     # Configuration via environment variables
-    api_url = os.getenv('OLLAMA_API_URL', 'http://localhost:11434/extract')  # Default URL
+    api_url = os.getenv('OLLAMA_API_URL', 'http://localhost:11434/api/generate')  # Default URL
     model_name = os.getenv('OLLAMA_MODEL_NAME', 'llama3.2:3b-instruct-fp16')  # Default model
-    api_key = os.getenv('OLLAMA_API_KEY')  # Optional API key
 
     # Validate essential configurations
     if not api_url:
@@ -39,8 +38,7 @@ def extract_metadata_using_llm(chunk, category):
 
     # Construct headers
     headers = {'Content-Type': 'application/json'}
-    if api_key:
-        headers['Authorization'] = f'Bearer {api_key}'
+
 
     # Craft the prompt
     prompt = f"""
