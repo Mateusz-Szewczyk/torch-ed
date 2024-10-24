@@ -31,18 +31,19 @@ class Subject(models.Model):
         return self.name
 
 
-# Don't know what to do with it yet
-# class Class(models.Model):
-#     """
-#     Model klasy, która ma przypisanego właściciela i wielu uczniów.
-#     """
-#     name = models.CharField(max_length=100)
-#     owner = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='owned_classes', on_delete=models.CASCADE)
-#     students = models.ManyToManyField(User, related_name='enrolled_classes', blank=True)
+class Token(models.Model):
+    # user_id = models.IntegerField()
+    user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name='author')
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name='owner')
+    jti = models.CharField(max_length=36, unique=True)
+    token = models.CharField(max_length=500)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateField(auto_now_add=True)
+    expires_at = models.DateField(null=True)
 
-#     def __str__(self):
-#         return self.name
-
+    def __str__(self) -> str:
+        return f'Token for {self.owner} - from {self.author}. {self.is_active}'
+    
 
 class Flashcard(models.Model):
     """
