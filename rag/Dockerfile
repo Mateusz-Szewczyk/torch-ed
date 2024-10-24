@@ -1,55 +1,78 @@
-# Użyj bazowego obrazu z obsługą CUDA
-FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+# rag/Dockerfile
 
-# Ustaw katalog roboczy w kontenerze
-WORKDIR /app
+# ================================
+# Stage 1: Builder
+# ================================
+FROM ubuntu:22.04 AS builder
 
-# Zainstaluj zależności systemowe
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update and install dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
     curl \
-    git \
-    sqlite3 \
-    libsqlite3-dev \
-    ca-certificates \
-    # Zależności dla Ollama
-    libunwind-dev \
-    libssl-dev \
-    # Dodatkowe zależności dla bibliotek używanych w projekcie
-    libgl1-mesa-glx \
-    pandoc \
-    poppler-utils \
-    libpoppler-cpp-dev \
-    tesseract-ocr \
-    libtesseract-dev \
-    pkg-config \
+    unzip \
+    wget \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Zweryfikuj wersję sqlite3 (powinna być >= 3.35.0)
-RUN sqlite3 --version
+# Download and install Ollama using the official install script
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# Zainstaluj Python
-RUN apt-get update && apt-get install -y python3.10 python3-pip
+# ================================
+# Stage 2: Runtime
+# ================================
+FROM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu22.04
 
-# Zainstaluj Ollama (jeśli jest potrzebne)
-RUN curl -sSfL https://ollama.ai/install.sh | bash
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Uaktualnij pip
-RUN pip3 install --no-cache-dir --upgrade pip
+# Update and install runtime dependencies, including OpenGL libraries and GLib
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    supervisor \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Skopiuj plik requirements.txt i zainstaluj zależności Pythona
-COPY requirements.txt .
+# Create a non-root user for running the application
+RUN useradd -m appuser
+
+# Set working directory
+WORKDIR /app
+RUN chown -R appuser:appuser /app
+
+# Copy Ollama from the builder stage
+COPY --from=builder /usr/local/bin/ollama /usr/local/bin/ollama
+
+# Ensure Ollama binary has execute permissions
+RUN chmod +x /usr/local/bin/ollama
+
+# Copy application code
+COPY . /app
+
+# Install Python dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Skopiuj kod aplikacji
-COPY . .
+# Ensure necessary directories are created and have proper permissions
+RUN mkdir -p /home/appuser/.ollama/tmp && \
+    mkdir -p /var/log/supervisor /var/run /app/run && \
+    chmod -R 755 /var/log/supervisor /var/run /app/run /home/appuser/.ollama && \
+    chown -R appuser:appuser /home/appuser/.ollama
 
-# Skopiuj i ustaw uprawnienia dla skryptu entrypoint
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
+# Ensure Supervisor's log and run directories are writable by root
+RUN mkdir -p /var/log/supervisor /var/run && \
+    chmod -R 755 /var/log/supervisor /var/run
 
-# Upewnij się, że skrypty Pythona są wykonywalne
-RUN chmod +x main.py
+# Copy Supervisor configuration
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Ustaw punkt wejścia
-ENTRYPOINT ["./entrypoint.sh"]
+# Expose necessary ports
+EXPOSE 8042 11434
+
+# Start Supervisor as root
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
