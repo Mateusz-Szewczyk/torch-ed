@@ -1,9 +1,7 @@
-# core/models.py
-
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.conf import settings
+from django.db.models import Avg
 
 class User(AbstractUser):
     """
@@ -31,18 +29,18 @@ class Subject(models.Model):
         return self.name
 
 
-class Token(models.Model):
-    # user_id = models.IntegerField()
-    user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name='author')
-    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name='owner')
-    jti = models.CharField(max_length=36, unique=True)
-    token = models.CharField(max_length=500)
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateField(auto_now_add=True)
-    expires_at = models.DateField(null=True)
+# class Token(models.Model):
+#     # user_id = models.IntegerField()
+#     user_id = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name='author')
+#     owner = models.ForeignKey(User, on_delete=models.CASCADE, null=False, related_name='owner')
+#     jti = models.CharField(max_length=36, unique=True)
+#     token = models.CharField(max_length=500)
+#     is_active = models.BooleanField(default=True)
+#     created_at = models.DateField(auto_now_add=True)
+#     expires_at = models.DateField(null=True)
 
-    def __str__(self) -> str:
-        return f'Token for {self.owner} - from {self.author}. {self.is_active}'
+#     def __str__(self) -> str:
+#         return f'Token for {self.owner} - from {self.author}. {self.is_active}'
     
 
 class Flashcard(models.Model):

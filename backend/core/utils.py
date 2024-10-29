@@ -1,62 +1,103 @@
 import os
 import requests
-import uuid # for generating random string
-from authlib.jose import jwt
+from authlib.jose import jwt, JWTClaims, JsonWebToken
 from datetime import datetime, timedelta
-from .models import Token
+from authlib.jose.errors import MissingClaimError, InvalidClaimError, ExpiredTokenError
 # from django.conf import settings
 
+class FailedTokenAuthentication(Exception):
+    pass
 
-def generate_token(from_user: int, to_user: int, *, expires_in: int | None = None, scope: tuple[str]=('read',), edit: bool = False) -> str:
-    '''
-    Generates a token containing id of user that created it and who will recive it. Its purpose
-    is to allow user to share their resources (like chat with our bot) with other users through hiss id.
-    '''
-    jti: str = str(uuid.uuid4()) # generating random str
-    for x in scope:
-        if x not in ('read', 'write'):
-            raise ValueError('Invalid scope')
 
-    exp = None
-    if expires_in:
-        exp = timedelta(expires_in) + datetime.now() 
+def generate_token(
+    data: list[int],
+    *,
+    iss:str = 'torched-user-interface',
+    scope: str = 'read',
+    expired: bool = False,
+    **kwargs
+    ) -> JsonWebToken:
+    """
+    Generates jwt with help of (authlib.jose)[https://docs.authlib.org/en/latest/jose/jwt.html]
+    Kwargs can contain: header, private_key.
+    For details see link to authlib.jose
+    _summary_
 
-    payload = {
-        'jti': jti,
-        'user_id': from_user,
-        'reciver': to_user,
-        'exp': exp.timestamp(),
-        'scope': scope
-    }
-    header: dict[str, str] = {'alg': 'HS256'}
-    private_key: str = os.getenv('AUTH_KEY')
-    token = jwt.encode(header, payload, private_key)
+    Args:
+        requested_data (list[int], optional): _description_. Defaults to None.
+        iss (str, optional): _description_. Defaults to 'torched-user-interface'.
+        scope (str, optional): _description_. Defaults to 'read'.
+        expired (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        JsonWebToken: _description_
+    """
+
+        
+    exp = timedelta(days=1) + datetime.now() if not expired else 0
     
-    if not edit:
-        Token.objects.create(
-            user_id=from_user,
-            owner=to_user,
-            jti=jti,
-            token=token,
-            is_active=True,
-            created_at=datetime.now(),
-            expires_at = exp
-        )
+    payload: dict = {
+        'iss': iss,
+        'data': data,
+        'scope': scope,
+        'exp': exp
+    }
+    header: dict[str, str] = kwargs.get('header', {'alg': 'HS256'})
+    private_key: str = kwargs.get('private_key', os.getenv('AUTH_KEY'))
+    token: JsonWebToken = jwt.encode(header, payload, private_key)
 
     return token
 
 
 def decode_token(token: bytes) -> dict | None:
-    scopes: list[str] = ['read', 'write']
+
     private_key: str = os.getenv('AUTH_KEY')
 
-    claims = jwt.decode(token, private_key)
-    #validation
-    if claims['exp'] and datetime.now().timestamp() > claims['exp']:
+    # Decode the token first
+    claims_option = {
+        'iss': {
+            'essential': True,
+            'validate': lambda iss: iss in ['torched-user-interface', 'torched-backend-veryfication']
+        },
+        'data': {
+            'essential': True,
+        },
+        'scope': {
+            'essential': True,
+            'validate': lambda scope: scope in ['read', 'write']
+        },        
+        'exp': {
+            'essential': True,
+            'validate': lambda exp_date:datetime.now().timestamp() > exp_date
+        }
+    }
+    claims: JWTClaims = jwt.decode(token, private_key)
+    claims.claims_option = claims_option
 
-        raise jwt.ExpiredTokenError('Token expired')
+    try:
+        claims.validate()
         
+        # for some reason it won't validate it with .validate()
+        essentials = ['exp', 'data', 'iss', 'scope']
+        if not all(essential in claims for essential in essentials):
+            raise Exception('Missing claim')
+        if not claims_option['scope']['validate'](claims['scope']):
+            raise Exception('Invalid scope')
+        if not claims_option['iss']['validate'](claims['iss']):
+            raise Exception('Invalid iss')
+        
+    except MissingClaimError as e:
+        raise Exception(f"Missing claim: {str(e)}")
+    except InvalidClaimError as e:
+        raise FailedTokenAuthentication(f"Invalid claim")
+    except ExpiredTokenError as e:
+        raise FailedTokenAuthentication(f"Token has expired")
+    except Exception as e:
+        raise FailedTokenAuthentication(f"Failed to decode token: {str(e)}")
+
+    # If all validations pass, return claims
     return claims
+
 
 
 def chatbot_get_answer(user_id: int, query: str, token: bytes) -> dict | str:
