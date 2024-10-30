@@ -27,3 +27,4 @@ nltk
 torch
 onnxruntime-gpu
 urllib3<2
+aiofiles

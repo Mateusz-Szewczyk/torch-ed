@@ -35,7 +35,7 @@ from src.vector_store import create_vector_store
 from src.metadata_extraction import extract_metadata_using_llm
 from file_processor.pdf_processor import PDFProcessor
 from file_processor.documents_processor import DocumentProcessor
-from src.answer_generator import generate_answer
+from src.generators.answer_generator import generate_answer
 from src.chunking import create_chunks
 
 # Initialize FastAPI app
@@ -102,7 +102,7 @@ async def upload_file(
 ):
     """
     Upload Endpoint
-    --------------
+    ---------------
     Handles file uploads, processes the content, generates embeddings, extracts metadata, and updates the knowledge graph.
     """
     logger.info(f"Received upload request from user_id: {user_id} for file: {file.filename}")
@@ -116,24 +116,45 @@ async def upload_file(
 
     # Save the uploaded file
     upload_dir = "uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
+
+    # Check if 'uploads' path exists
+    if os.path.exists(upload_dir):
+        if not os.path.isdir(upload_dir):
+            logger.error(f"Upload path '{upload_dir}' exists and is not a directory.")
+            raise HTTPException(status_code=500, detail=f"Upload path '{upload_dir}' exists and is not a directory.")
+    else:
+        try:
+            os.makedirs(upload_dir)
+            logger.info(f"Created upload directory at '{upload_dir}'.")
+        except Exception as e:
+            logger.error(f"Failed to create upload directory '{upload_dir}': {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to create upload directory: {str(e)}")
+
+    # Ensure filename is secure
+    from pathlib import Path
+    safe_filename = Path(file.filename).name  # Extracts the filename without any path components
+
+    file_path = os.path.join(upload_dir, safe_filename)
+
     try:
         content = await file.read()
-        with open(file_path, "wb") as f:
-            f.write(content)
-        logger.info(f"Saved uploaded file: {file.filename} to {file_path}")
+        # Save the uploaded file asynchronously
+        import aiofiles
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(content)
+        logger.info(f"Saved uploaded file: {safe_filename} to {file_path}")
     except Exception as e:
-        logger.error(f"Failed to save uploaded file: {file.filename}. Error: {e}")
+        logger.error(f"Failed to save uploaded file: {safe_filename}. Error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
     # Determine file type and process file
-    file_extension = os.path.splitext(file.filename)[1].lower()
-    logger.info(f"Determined file type: {file_extension} for file: {file.filename}")
+    file_extension = os.path.splitext(safe_filename)[1].lower()
+    logger.info(f"Determined file type: {file_extension} for file: {safe_filename}")
 
     try:
         if file_extension == '.txt':
-            text_content = open(file_path, "r").read()
+            async with aiofiles.open(file_path, "r") as f:
+                text_content = await f.read()
         elif file_extension == '.pdf':
             text_content = pdf_processor.process_pdf(file_path, start_page=start_page, end_page=end_page)
         elif file_extension in ['.docx', '.odt', '.rtf']:
@@ -146,9 +167,9 @@ async def upload_file(
             logger.error("Failed to extract text from the document.")
             raise ValueError("Failed to extract text from the document.")
 
-        logger.info(f"Extracted text from file: {file.filename}")
+        logger.info(f"Extracted text from file: {safe_filename}")
     except Exception as e:
-        logger.error(f"Error processing file: {file.filename}. Error: {e}")
+        logger.error(f"Error processing file: {safe_filename}. Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
     # Chunking the text
@@ -157,9 +178,9 @@ async def upload_file(
         if not chunks:
             logger.error("Failed to create text chunks from the document.")
             raise ValueError("Failed to create text chunks from the document.")
-        logger.info(f"Created {len(chunks)} chunks from file: {file.filename}")
+        logger.info(f"Created {len(chunks)} chunks from file: {safe_filename}")
     except Exception as e:
-        logger.error(f"Error creating chunks from file: {file.filename}. Error: {e}")
+        logger.error(f"Error creating chunks from file: {safe_filename}. Error: {e}")
         raise HTTPException(status_code=500, detail=f"Error creating chunks: {str(e)}")
 
     # Generate embeddings using batch encoding
@@ -167,7 +188,7 @@ async def upload_file(
         embeddings = embedding_model.encode(chunks, batch_size=32, show_progress_bar=False)
         if len(embeddings) != len(chunks):
             logger.warning(f"Number of embeddings ({len(embeddings)}) does not match number of chunks ({len(chunks)})")
-        logger.info(f"Generated embeddings for chunks from file: {file.filename}")
+        logger.info(f"Generated embeddings for chunks from file: {safe_filename}")
     except Exception as e:
         logger.error(f"Error generating embeddings: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
@@ -175,7 +196,7 @@ async def upload_file(
     # Extract metadata using LLM
     try:
         extracted_metadatas = [extract_metadata_using_llm(chunk, category) for chunk in chunks]
-        logger.info(f"Extracted metadata for chunks from file: {file.filename}")
+        logger.info(f"Extracted metadata for chunks from file: {safe_filename}")
     except Exception as e:
         logger.error(f"Error extracting metadata: {e}")
         raise HTTPException(status_code=500, detail=f"Error extracting metadata: {str(e)}")
@@ -201,10 +222,11 @@ async def upload_file(
     return UploadResponse(
         message="File processed successfully. Metadata and knowledge graph extracted successfully.",
         user_id=user_id,
-        file_name=file.filename,
+        file_name=safe_filename,
         file_description=file_description,
         category=category
     )
+
 
 class QueryResponse(BaseModel):
     user_id: str

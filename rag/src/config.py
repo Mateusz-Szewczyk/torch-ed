@@ -4,10 +4,10 @@ import os
 
 # ChromaDB settings
 CHROMA_DB_IMPL = "sqlite"
-PERSIST_DIRECTORY = os.getenv('PERSIST_DIRECTORY', "/app/vector_store_data")  # Absolute path within container
+PERSIST_DIRECTORY = os.getenv('PERSIST_DIRECTORY', "/app/vector_store_data")
 
 # Neo4j settings
-NEO4J_URI = os.getenv('NEO4J_URI', "bolt://neo4j:7687")  # Use service name 'neo4j'
+NEO4J_URI = os.getenv('NEO4J_URI', "bolt://neo4j:7687")
 NEO4J_USERNAME = os.getenv('NEO4J_USERNAME', "neo4j")
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', "password")
 

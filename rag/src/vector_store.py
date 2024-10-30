@@ -2,7 +2,6 @@
 
 import chromadb
 from .config import PERSIST_DIRECTORY
-import uuid
 import logging
 
 logger = logging.getLogger(__name__)

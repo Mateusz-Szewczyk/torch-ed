@@ -16,7 +16,7 @@ import json
 import logging
 from typing import List
 from sentence_transformers import SentenceTransformer
-from .search_engine import search_and_rerank
+from ..search_engine import search_and_rerank
 import requests  # Replacing ollama library with requests for direct HTTP communication
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
