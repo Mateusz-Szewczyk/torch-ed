@@ -41,3 +41,6 @@ frontend/dist/
 # Docker files
 *.pid
 *.sock
+
+token_log.txt
+*debug*.txt

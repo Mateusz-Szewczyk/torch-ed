@@ -3,14 +3,12 @@ import requests
 from authlib.jose import jwt, JWTClaims, JsonWebToken
 from datetime import datetime, timedelta
 from authlib.jose.errors import MissingClaimError, InvalidClaimError, ExpiredTokenError
-# from django.conf import settings
 
 class FailedTokenAuthentication(Exception):
     pass
 
 
 def generate_token(
-    data: list[int],
     *,
     iss:str = 'torched-user-interface',
     scope: str = 'read',
@@ -18,27 +16,14 @@ def generate_token(
     **kwargs
     ) -> JsonWebToken:
     """
-    Generates jwt with help of (authlib.jose)[https://docs.authlib.org/en/latest/jose/jwt.html]
-    Kwargs can contain: header, private_key.
-    For details see link to authlib.jose
-    _summary_
-
-    Args:
-        requested_data (list[int], optional): _description_. Defaults to None.
-        iss (str, optional): _description_. Defaults to 'torched-user-interface'.
-        scope (str, optional): _description_. Defaults to 'read'.
-        expired (bool, optional): _description_. Defaults to False.
-
-    Returns:
-        JsonWebToken: _description_
+    
     """
 
         
-    exp = timedelta(days=1) + datetime.now() if not expired else 0
+    exp = timedelta(days=1) + datetime.now() if not expired else datetime.now() - timedelta(days=1)
     
     payload: dict = {
         'iss': iss,
-        'data': data,
         'scope': scope,
         'exp': exp
     }
@@ -49,54 +34,63 @@ def generate_token(
     return token
 
 
-def decode_token(token: bytes) -> dict | None:
-
+def decode_token(token: bytes, debug: bool = False,) -> dict | None:
+    """"""
     private_key: str = os.getenv('AUTH_KEY')
 
     # Decode the token first
     claims_option = {
         'iss': {
             'essential': True,
-            'validate': lambda iss: iss in ['torched-user-interface', 'torched-backend-veryfication']
-        },
-        'data': {
-            'essential': True,
+            'validate': lambda data, iss: iss in ['torched-user-interface', 'torched-backend-veryfication']
         },
         'scope': {
             'essential': True,
-            'validate': lambda scope: scope in ['read', 'write']
+            'validate': lambda data, scope: scope in ['read', 'write', 'delete']
         },        
         'exp': {
+        # jwt automatically checks this so validate is not required
             'essential': True,
-            'validate': lambda exp_date:datetime.now().timestamp() > exp_date
+        #     'validate': lambda exp_date: datetime.now().timestamp() >= exp_date
         }
     }
-    claims: JWTClaims = jwt.decode(token, private_key)
-    claims.claims_option = claims_option
+    # will not accept claims_option not any other arguments
+    claims: JWTClaims = jwt.decode(token, private_key, claims_options=claims_option)
 
+    def log(msg: str, debug=False) -> None:
+        path = 'token_log.txt' if not debug else 'debug_token_log.txt'
+        with open(path, 'a') as file:
+            file.write(f'{datetime.now()} - {e}\n') 
+        
     try:
         claims.validate()
         
         # for some reason it won't validate it with .validate()
-        essentials = ['exp', 'data', 'iss', 'scope']
-        if not all(essential in claims for essential in essentials):
-            raise Exception('Missing claim')
-        if not claims_option['scope']['validate'](claims['scope']):
-            raise Exception('Invalid scope')
-        if not claims_option['iss']['validate'](claims['iss']):
-            raise Exception('Invalid iss')
+        # essentials = ['exp', 'data', 'iss', 'scope']
+        # if not all(essential in claims for essential in essentials):
+        #     raise Exception('Missing claim')
+        # if not claims_option['scope']['validate'](claims['scope']):
+        #     raise Exception('Invalid scope')
+        # if not claims_option['iss']['validate'](claims['iss']):
+        #     raise Exception('Invalid iss')   
         
     except MissingClaimError as e:
-        raise Exception(f"Missing claim: {str(e)}")
+        log(e, debug)
+        
     except InvalidClaimError as e:
-        raise FailedTokenAuthentication(f"Invalid claim")
+        log(e, debug)
+        
     except ExpiredTokenError as e:
-        raise FailedTokenAuthentication(f"Token has expired")
+        log(e, debug)
+    
     except Exception as e:
+        log(e, debug)
         raise FailedTokenAuthentication(f"Failed to decode token: {str(e)}")
-
-    # If all validations pass, return claims
-    return claims
+    
+    else:
+        # If all validations pass, return claims
+        return claims
+    return None
 
 
 

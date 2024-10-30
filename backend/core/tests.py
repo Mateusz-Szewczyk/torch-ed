@@ -28,39 +28,24 @@ class ConnectionToRag(TestCase):
 class TokenTest(TestCase):
     def setUp(self) -> None:
         self.secret = os.getenv('AUTH_KEY')
-        self.data = [1, 2, 3]
         self.basic_token_1: JsonWebToken = generate_token(
-            data=self.data,
             scope='read',
             )
         self.basic_token_2: JsonWebToken = generate_token(
-            data=self.data,
             scope='write',
         )
         self.expired_token: JsonWebToken = generate_token(
-            data=self.data,
             scope='read',
             expired=True
         )
         self.wrong_scope_token: JsonWebToken = generate_token(
-            self.data,
             scope='smell'
         )
         self.missing_exp_token: JsonWebToken = jwt.encode(
             header={'alg': 'HS256'},
             payload={
                 'iss': 'torched-user-interface',
-                'data': [1, 2],
                 'scope': 'read',
-                },
-            key=os.getenv('AUTH_KEY')
-        )
-        self.missing_data_token: JsonWebToken = jwt.encode(
-            header={'alg': 'HS256'},
-            payload={
-                'iss': 'torched-user-interface',
-                'scope': 'read',
-                'exp': timedelta(days=1) + datetime.now()
                 },
             key=os.getenv('AUTH_KEY')
         )
@@ -68,84 +53,39 @@ class TokenTest(TestCase):
             header={'alg': 'HS256'},
             payload={
                 'iss': 'torched-user-interface',
-                'data': [1, 2],
                 'exp': timedelta(days=1) + datetime.now()
                 },
             key=os.getenv('AUTH_KEY')
         )
         self.wrong_issuer_token: JsonWebToken = generate_token(
-            data=self.data,
             iss='me'
         )
         
     def test_decode_token(self) -> None:
-        
-        claims: JWTClaims = decode_token(self.basic_token_1)
+        claims: JWTClaims = decode_token(self.basic_token_1, debug=True)
         self.assertEqual(claims['iss'], 'torched-user-interface', 'iss')
-        self.assertEqual(claims['data'], self.data, 'data')
     
     def test_decode_token2(self) -> None:
-        
-        claims: JWTClaims = decode_token(self.basic_token_2)
+        claims: JWTClaims = decode_token(self.basic_token_2, debug=True)
         self.assertEqual(claims['iss'], 'torched-user-interface', 'iss')
-        self.assertEqual(claims['data'], self.data, 'data')
     
     def test_expired_token(self) -> None:
-        try:
-            decode_token(self.expired_token)
-        except FailedTokenAuthentication as e:
-            self.assertEqual(str(e), "Token has expired")
-        else:
-            self.assertEqual(
-                1, 0,
-                'Expected FailedTokenAuthorization: Expired but got nothing')
+        result = decode_token(self.expired_token, debug=True)
+        self.assertEqual(result, None)
+        
     def test_wrong_scope_token(self) -> None:
-        try:
-            decode_token(self.wrong_scope_token)
-        except FailedTokenAuthentication as e:
-            self.assertIn('Failed to decode token:', str(e))
-        else:
-            self.assertEqual(
-                1, 0,
-                'Expected FailedTokenAuthorization: Wrong Scope but got nothing')
-    
+        result = decode_token(self.wrong_scope_token, debug=True)
+        self.assertEqual(result, None)
+        
     def test_wrong_iss_token(self) -> None:
-        try:
-            decode_token(self.wrong_issuer_token)
-        except FailedTokenAuthentication as e:
-            self.assertIn('Failed to decode token:', str(e))
-        else:
-            self.assertEqual(
-                1, 0,
-                'Expected FailedTokenAuthorization: Invalid iss but got nothing')
+        result = decode_token(self.wrong_issuer_token, debug=True)
+        self.assertEqual(result, None)  
+
     def test_missing_exp_token(self) -> None:
-        try:
-            decode_token(self.missing_exp_token)
-        except FailedTokenAuthentication as e:
-            self.assertIn('Failed to decode token:', str(e))
-        else:
-            self.assertEqual(
-                1, 0,
-                'Expected FailedTokenAuthorization: Missing claim but got nothing')
-    
-    def test_missing_data_token(self) -> None:
-        try:
-            decode_token(self.missing_data_token)
-        except FailedTokenAuthentication as e:
-            self.assertIn('Failed to decode token:', str(e))
-        else:
-            self.assertEqual(
-                1, 0,
-                'Expected FailedTokenAuthorization: Missing claim but got nothing')
-    
+        result = decode_token(self.missing_exp_token, debug=True)
+        self.assertEqual(result, None)    
+        
     def test_missing_scope_token(self) -> None:
-        try:
-            decode_token(self.missing_scope_token)
-        except FailedTokenAuthentication as e:
-            self.assertIn('Failed to decode token:', str(e))
-        else:
-            self.assertEqual(
-                1, 0,
-                'Expected FailedTokenAuthorization: Missing claim but got nothing')
-                
+        result = decode_token(self.missing_scope_token, debug=True)
+        self.assertEqual(result, None)                
             

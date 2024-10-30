@@ -8,51 +8,50 @@ class FailedTokenAuthentication(Exception):
     pass
 
 
-def decode_token(token: bytes) -> dict:
-
+def decode_token(token: bytes, debug: bool = False,) -> dict | None:
+    """"""
     private_key: str = os.getenv('AUTH_KEY')
 
     # Decode the token first
     claims_option = {
         'iss': {
             'essential': True,
-            'validate': lambda iss: iss in ['torched-user-interface', 'torched-backend-veryfication']
-        },
-        'data': {
-            'essential': True,
+            'validate': lambda data, iss: iss in ['torched-user-interface', 'torched-backend-veryfication']
         },
         'scope': {
             'essential': True,
-            'validate': lambda scope: scope in ['read', 'write']
+            'validate': lambda data, scope: scope in ['read', 'write', 'delete']
         },        
         'exp': {
+        # jwt automatically checks this so validate is not required
             'essential': True,
-            'validate': lambda exp_date:datetime.now().timestamp() > exp_date
+        #     'validate': lambda exp_date: datetime.now().timestamp() >= exp_date
         }
     }
-    claims: JWTClaims = jwt.decode(token, private_key)
-    claims.claims_option = claims_option
+    claims: JWTClaims = jwt.decode(token, private_key, claims_options=claims_option)
 
-    try:
-        claims.validate()
+    def log(msg: str, debug=False) -> None:
+        path = 'token_log.txt' if not debug else 'debug_token_log.txt'
+        with open(path, 'a') as file:
+            file.write(f'{datetime.now()} - {e}\n') 
         
-        # for some reason it won't validate it with .validate()
-        essentials = ['exp', 'data', 'iss', 'scope']
-        if not all(essential in claims for essential in essentials):
-            raise Exception('Missing claim')
-        if not claims_option['scope']['validate'](claims['scope']):
-            raise Exception('Invalid scope')
-        if not claims_option['iss']['validate'](claims['iss']):
-            raise Exception('Invalid iss')
+    try:
+        claims.validate() 
         
     except MissingClaimError as e:
-        raise Exception(f"Missing claim: {str(e)}")
+        log(e, debug)
+        
     except InvalidClaimError as e:
-        raise FailedTokenAuthentication(f"Invalid claim")
+        log(e, debug)
+        
     except ExpiredTokenError as e:
-        raise FailedTokenAuthentication(f"Token has expired")
+        log(e, debug)
+    
     except Exception as e:
+        log(e, debug)
         raise FailedTokenAuthentication(f"Failed to decode token: {str(e)}")
-
-    # If all validations pass, return claims
-    return claims
+    
+    else:
+        # If all validations pass, return claims
+        return claims
+    return None
