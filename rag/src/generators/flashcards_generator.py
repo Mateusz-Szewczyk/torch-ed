@@ -5,6 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import HumanMessagePromptTemplate
+import os
 
 class LanguageFlashcardGenerator:
     def __init__(self):
@@ -80,7 +81,7 @@ def main():
     generator = LanguageFlashcardGenerator()
 
     request = {
-        "description": "Proszę stwórz dla mnie fiszki do nauki hiragany, zawierające wszystkie znaki znaki.",
+        "description": "Proszę stwórz dla mnie fiszki do nauki hiragany, zawierające wszystkie znaki. Chciałbym aby pytaniem był znaczek hiragany z romaji a odpowiedzią znak w alfabecie normalnym.",
         "topic": "Japanese language basics"
     }
 

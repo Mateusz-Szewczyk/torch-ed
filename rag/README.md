@@ -72,7 +72,6 @@ The `rag` module depends on the following services and packages:
 - **SentenceTransformers**: Used to generate vector embeddings for the text content.
 - **PyMuPDF**: For processing and extracting text from PDF documents.
 - **PyPDF2**: For text-based PDF extraction.
-- **Ollama**: For generating answers based on retrieved chunks using the Llama model.
 
 ---
 

@@ -7,6 +7,7 @@ chromadb
 langchain-core
 langchain-community
 langchain-chroma
+langchain-anthropic
 gpt4all
 beautifulsoup4
 fastapi
@@ -22,9 +23,7 @@ sentence-transformers
 tqdm
 python-multipart
 neo4j
-ollama
 nltk
 torch
-onnxruntime-gpu
 urllib3<2
 aiofiles

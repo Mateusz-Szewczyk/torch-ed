@@ -2,17 +2,15 @@ import unittest
 from unittest.mock import patch, MagicMock
 import os
 import sys
-
-# Add the path to src to the system path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-
-from chunking import create_chunks
-from metadata_extraction import extract_metadata_using_llm
-from vector_store import create_vector_store, load_vector_store, search_vector_store
-from graph_store import create_graph_entries, create_entity_relationships
-from file_processor.pdf_processor import PDFProcessor
+import json
 from sentence_transformers import SentenceTransformer
-from config import EMBEDDING_MODEL_NAME
+
+from rag.src.chunking import create_chunks
+from rag.src.metadata_extraction import MetadataExtractor
+from rag.src.vector_store import create_vector_store, load_vector_store, search_vector_store
+from rag.src.graph_store import create_graph_entries, create_entity_relationships
+from rag.src.config import EMBEDDING_MODEL_NAME
+from rag.file_processor.pdf_processor import PDFProcessor
 
 class TestDataProcessing(unittest.TestCase):
 
@@ -40,11 +38,12 @@ class TestDataProcessing(unittest.TestCase):
             "This is a sample text. It is used for testing purposes.",
             "It is used for testing purposes. The text contains multiple sentences.",
             "The text contains multiple sentences. We will use it to test chunking.",
+            "We will use it to test chunking."
         ]
         self.assertEqual(chunks, expected_chunks)
 
-    @patch('metadata_extraction.ollama.chat')
-    def test_extract_metadata_using_llm(self, mock_ollama_chat):
+
+    def test_extract_metadata(self):
         """
         Test the extract_metadata_using_llm function.
         """
@@ -58,9 +57,8 @@ class TestDataProcessing(unittest.TestCase):
                 })
             }
         }
-        mock_ollama_chat.return_value = mock_response
-
-        metadata = extract_metadata_using_llm("Sample chunk of text.", self.category)
+        metadata_extractor = MetadataExtractor()
+        metadata = metadata_extractor.extract_metadata("Sample chunk of text.", self.category)
         expected_metadata = {
             "names": ["John Doe"],
             "locations": ["Testville"],
@@ -130,11 +128,11 @@ class TestDataProcessing(unittest.TestCase):
         ]
 
         # Create graph entries
-        create_graph_entries(chunks, extracted_metadatas)
+        create_graph_entries(chunks, extracted_metadatas, self.user_id)
         create_entity_relationships(extracted_metadatas)
 
         # Test if nodes and relationships are created
-        from graph_store import driver
+        from rag.src.graph_store import driver
 
         with driver.session() as session:
             # Check if Chunk nodes exist
@@ -155,7 +153,7 @@ class TestDataProcessing(unittest.TestCase):
             rel_count = result.single()['rel_count']
             self.assertGreaterEqual(rel_count, 4)
 
-    @patch('file_processor.pdf_processor.PDFProcessor.process_pdf')
+    @patch('rag.file_processor.pdf_processor.PDFProcessor.process_pdf')
     def test_pdf_processor(self, mock_process_pdf):
         """
         Test the PDFProcessor.
@@ -175,7 +173,7 @@ class TestDataProcessing(unittest.TestCase):
             shutil.rmtree('./vector_store_data')
 
         # Clear Neo4j database
-        from graph_store import driver
+        from rag.src.graph_store import driver
         with driver.session() as session:
             session.run("MATCH (n) DETACH DELETE n")
 

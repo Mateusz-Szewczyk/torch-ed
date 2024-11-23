@@ -22,17 +22,15 @@ Dependencies:
 import os
 from typing import Optional
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
-import torch
 import uvicorn
 import logging
 
 # Importing custom modules
 from src.graph_store import create_graph_entries, create_entity_relationships
 from src.vector_store import create_vector_store
-from src.metadata_extraction import extract_metadata_using_llm
+from src.metadata_extraction import MetadataExtractor
 from file_processor.pdf_processor import PDFProcessor
 from file_processor.documents_processor import DocumentProcessor
 from src.generators.answer_generator import generate_answer
@@ -41,7 +39,7 @@ from src.chunking import create_chunks
 # Initialize FastAPI app
 app = FastAPI(
     title="RAG Knowledge Base API",
-    description="API for uploading documents and querying a knowledge base using RAG and Ollama.",
+    description="API for uploading documents and querying a knowledge base using RAG.",
     version="1.0.0"
 )
 
@@ -55,19 +53,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize device
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-logger.info(f"Using device: {device}")
-
 # Initialize file processors
-pdf_processor = PDFProcessor(device=device)
+pdf_processor = PDFProcessor()
 document_processor = DocumentProcessor()
 
 # Initialize the embedding model once at module level for performance
 EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'all-MiniLM-L6-v2')
 try:
-    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME, device=device)
-    logger.info(f"Initialized embedding model: {EMBEDDING_MODEL_NAME} on device: {device}")
+    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    logger.info(f"Initialized embedding model: {EMBEDDING_MODEL_NAME}")
 except Exception as e:
     logger.error(f"Failed to initialize embedding model '{EMBEDDING_MODEL_NAME}': {e}")
     raise
@@ -193,12 +187,17 @@ async def upload_file(
         logger.error(f"Error generating embeddings: {e}")
         raise HTTPException(status_code=500, detail=f"Error generating embeddings: {str(e)}")
 
+    # Initialize the MetadataExtractor
+    metadata_extractor = MetadataExtractor()
+
     # Extract metadata using LLM
     try:
-        extracted_metadatas = [extract_metadata_using_llm(chunk, category) for chunk in chunks]
+        extracted_metadatas = [
+            metadata_extractor.extract_metadata(chunk=chunk, category=category) for chunk in chunks
+        ]
         logger.info(f"Extracted metadata for chunks from file: {safe_filename}")
     except Exception as e:
-        logger.error(f"Error extracting metadata: {e}")
+        logger.error(f"Error extracting metadata: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error extracting metadata: {str(e)}")
 
     # Create vector store (after metadata extraction)
@@ -246,7 +245,7 @@ async def query_knowledge(
     logger.info(f"Received query from user_id: {user_id} - '{query}'")
     try:
         # Generate the answer using the answer generator module
-        answer = generate_answer(user_id, query)
+        answer = generate_answer(user_id, query, max_iterations=2, max_generated_passages=5)
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
         return QueryResponse(
             user_id=user_id,

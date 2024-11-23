@@ -1,35 +1,16 @@
-# answer_generator.py
-
-"""
-Answer Generator Module
-=======================
-This module provides functions to generate answers to user queries using retrieved chunks and the Ollama Llama model.
-
-Functions:
-- `generate_answer`: Main function to generate an answer for a given user and query.
-- `create_prompt`: Creates a prompt for the Llama model.
-- `generate_answer_with_ollama`: Generates an answer using the Ollama Llama model via direct HTTP requests.
-"""
-
 import os
-import json
 import logging
-from typing import List
+from typing import List, Tuple
 from sentence_transformers import SentenceTransformer
+from langchain_anthropic import ChatAnthropic
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage
+from langchain_core.prompts import HumanMessagePromptTemplate
 from ..search_engine import search_and_rerank
-import requests  # Replacing ollama library with requests for direct HTTP communication
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 # Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Set to DEBUG for more detailed logs
-
-# You can add handlers if needed, for example:
-# handler = logging.StreamHandler()
-# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# handler.setFormatter(formatter)
-# logger.addHandler(handler)
 
 # Initialize the embedding model once at module level for performance
 EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'all-MiniLM-L6-v2')
@@ -40,160 +21,234 @@ except Exception as e:
     logger.error(f"Failed to initialize embedding model '{EMBEDDING_MODEL_NAME}': {e}")
     raise
 
-def generate_answer(user_id: str, query: str) -> str:
+# Initialize Anthropic model
+try:
+    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not anthropic_api_key:
+        raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
+    anthropic_model = ChatAnthropic(
+        model_name="claude-3-5-haiku-latest",
+        anthropic_api_key=anthropic_api_key
+    )
+    logger.info("Initialized Anthropic Claude model.")
+except Exception as e:
+    logger.error(f"Failed to initialize Anthropic model: {e}")
+    raise
+
+def generate_answer(user_id: str, query: str, max_iterations: int = 2, max_generated_passages: int = 5) -> str:
     """
-    Generates an answer based on retrieved chunks for the given user and query using Ollama's Llama model.
+    Generates an answer based on the Astute RAG algorithm for the given user and query.
 
     Args:
         user_id (str): The ID of the user.
         query (str): The user's query.
+        max_iterations (int): Number of iterations for knowledge consolidation.
+        max_generated_passages (int): Maximum number of passages to generate from internal knowledge.
 
     Returns:
         str: Generated answer.
     """
     logger.info(f"Generating answer for user_id: {user_id} with query: '{query}'")
 
-    # Retrieve relevant chunks for the user
+    # Step 1: Adaptive Generation of Internal Knowledge
+    try:
+        internal_passages = generate_internal_passages(query, max_generated_passages)
+        logger.info(f"Generated {len(internal_passages)} internal passages.")
+    except Exception as e:
+        logger.error(f"Error generating internal passages: {e}", exc_info=True)
+        internal_passages = []
+
+    # Step 2: Retrieve relevant external chunks for the user
     try:
         results = search_and_rerank(query, embedding_model, user_id, n_results=5)
+        external_passages = [result.get('content', '') for result in results]
+        logger.info(f"Retrieved {len(external_passages)} external passages for user_id: {user_id}")
     except Exception as e:
-        logger.error(f"Error during search and rerank for user_id: {user_id}, query: '{query}': {e}", exc_info=True)
-        return "An error occurred while retrieving information."
+        logger.error(f"Error during search and rerank: {e}", exc_info=True)
+        external_passages = []
 
-    if not results:
+    if not internal_passages and not external_passages:
         logger.warning(f"No relevant information found for user_id: {user_id} with query: '{query}'")
         return "No relevant information found."
 
-    # Extract the content from the results
-    chunks = [result.get('content', '') for result in results]
-    logger.info(f"Retrieved {len(chunks)} chunks for user_id: {user_id}")
+    # Step 2 & 3: Combine Internal and External Passages and Assign Sources
+    combined_passages = external_passages + internal_passages
+    source_indicators = ['external'] * len(external_passages) + ['internal'] * len(internal_passages)
 
-    # Create the prompt for the Llama model
-    try:
-        prompt = create_prompt(query, chunks)
-        logger.debug(f"Generated prompt: {prompt}")
-    except Exception as e:
-        logger.error(f"Error creating prompt for user_id: {user_id}, query: '{query}': {e}", exc_info=True)
-        return "An error occurred while generating the prompt."
+    print(combined_passages)
 
-    # Generate the answer using the Llama model via Ollama
-    try:
-        answer = generate_answer_with_ollama(prompt)
-        logger.info(f"Generated answer for user_id: {user_id}")
-    except Exception as e:
-        logger.error(f"Error generating answer for user_id: {user_id}: {e}", exc_info=True)
-        return "An error occurred while generating the answer."
+    # Step 4: Iterative Source-aware Knowledge Consolidation
+    consolidated_passages, consolidated_sources = iterative_consolidation(
+        query,
+        combined_passages,
+        source_indicators,
+        max_iterations
+    )
 
+    # Step 5: Answer Finalization
+    answer = finalize_answer(query, consolidated_passages, consolidated_sources)
+
+    logger.info(f"Generated answer for user_id: {user_id}")
     return answer
 
-def create_prompt(query: str, chunks: List[str]) -> str:
+def generate_internal_passages(query: str, max_generated_passages: int) -> List[str]:
     """
-    Creates a prompt for the Llama model using the query and retrieved chunks.
+    Generates internal passages from the LLM's internal knowledge based on the query.
 
     Args:
         query (str): The user's query.
-        chunks (List[str]): List of relevant text chunks.
+        max_generated_passages (int): Maximum number of passages to generate.
 
     Returns:
-        str: The prompt to be sent to the Llama model.
+        List[str]: A list of generated internal passages.
     """
-    # Combine the chunks into a context
-    context = "\n\n".join(chunks)
+    # Prompt template for generating internal passages
+    prompt_template = ChatPromptTemplate.from_messages([
+        SystemMessage(content="You are a knowledgeable assistant helping to generate relevant information for a query."),
+        HumanMessagePromptTemplate.from_template("""
+        Based on your internal knowledge, generate up to {max_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
+        
+        Question:
+        {query}
+        
+        Passages:
+        """)
+    ])
 
-    # Create the prompt with instructions
-    prompt = f"""You are an AI assistant that provides helpful and accurate answers to the user's questions based on the provided context.
-
-Context:
-{context}
-
-Question:
-{query}
-
-Answer:"""
-
-    return prompt
-
-def generate_answer_with_ollama(prompt: str) -> str:
-    """
-    Generates an answer using the Llama model via the Ollama service.
-
-    Args:
-        prompt (str): The prompt to send to the model.
-
-    Returns:
-        str: The generated answer.
-
-    Raises:
-        Exception: If communication with Ollama fails or invalid responses are received.
-    """
-    # Configuration via environment variables
-    OLLAMA_API_URL = os.getenv('OLLAMA_API_URL', 'http://localhost:11434/api/generate')
-    OLLAMA_MODEL_NAME = os.getenv('OLLAMA_MODEL_NAME', "llama2:13b")
-
-    if not OLLAMA_API_URL:
-        logger.error("OLLAMA_API_URL environment variable not set.")
-        raise EnvironmentError("OLLAMA_API_URL environment variable not set.")
-
-    headers = {'Content-Type': 'application/json'}
-
-    payload = {
-        'model': OLLAMA_MODEL_NAME,
-        'prompt': prompt
-    }
-
-    # Set up a session with retries
-    session = requests.Session()
-    retry_strategy = Retry(
-        total=3,
-        backoff_factor=0.3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["POST"]
-    )
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
+    response = prompt_template | anthropic_model
 
     try:
-        logger.debug(f"Sending request to Ollama: {OLLAMA_API_URL}")
-        response = session.post(OLLAMA_API_URL, json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
+        output = response.invoke({
+            "query": query,
+            "max_passages": max_generated_passages
+        })
 
-        # Read the response line by line
-        answer_parts = []
-        for line in response.text.strip().split('\n'):
-            if line:
-                try:
-                    data = json.loads(line)
-                    content = data.get('response', '')
-                    if content:
-                        answer_parts.append(content)
-                except json.JSONDecodeError as e:
-                    logger.error(f"JSON decode error on line: {line} Error: {e}")
-                    continue  # Skip lines that can't be parsed
+        # Access the content of the AIMessage
+        output_text = output.content
 
-        answer = ''.join(answer_parts).strip()
+        # Split the output into individual passages
+        passages = [p.strip() for p in output_text.strip().split('\n\n') if p.strip()]
+        print(f"Passages: {passages}")
+        return passages
 
-        if not answer:
-            logger.warning("Received empty answer from Ollama.")
-            return "I'm sorry, I couldn't generate an answer at this time."
-
-        logger.debug(f"Received answer from Ollama: {answer}")
-        return answer
-
-    except requests.exceptions.HTTPError as http_err:
-        logger.error(f"HTTP error occurred while communicating with Ollama: {http_err}", exc_info=True)
-        raise Exception(f"HTTP error occurred: {http_err}")
-    except requests.exceptions.ConnectionError as conn_err:
-        logger.error(f"Connection error occurred while communicating with Ollama: {conn_err}", exc_info=True)
-        raise Exception(f"Connection error occurred: {conn_err}")
-    except requests.exceptions.Timeout as timeout_err:
-        logger.error(f"Timeout error occurred while communicating with Ollama: {timeout_err}", exc_info=True)
-        raise Exception(f"Timeout error occurred: {timeout_err}")
-    except requests.exceptions.RequestException as req_err:
-        logger.error(f"Request exception occurred while communicating with Ollama: {req_err}. Response text: {response.text}", exc_info=True)
-        raise Exception(f"An error occurred: {req_err}")
     except Exception as e:
-        logger.error(f"An unexpected error occurred while communicating with Ollama: {e}", exc_info=True)
-        raise Exception(f"An unexpected error occurred: {e}")
+        logger.error(f"Error generating internal passages: {e}", exc_info=True)
+        return []
 
+def iterative_consolidation(query: str, passages: List[str], sources: List[str], max_iterations: int) -> Tuple[List[str], List[str]]:
+    """
+    Iteratively consolidates the knowledge from passages considering their sources.
 
+    Args:
+        query (str): The user's query.
+        passages (List[str]): List of passages.
+        sources (List[str]): Corresponding list of sources ('internal' or 'external').
+        max_iterations (int): Number of consolidation iterations.
+
+    Returns:
+        Tuple[List[str], List[str]]: Consolidated passages and their sources.
+    """
+    for iteration in range(max_iterations):
+        logger.info(f"Consolidation iteration {iteration + 1}")
+        prompt_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content="You are an assistant that consolidates information from different sources."),
+            HumanMessagePromptTemplate.from_template("""
+                Given the following passages and their sources, consolidate the information by identifying consistent details, resolving conflicts, and removing irrelevant content.
+                
+                Question:
+                {query}
+                
+                Passages and Sources:
+                {passages_and_sources}
+                
+                Consolidated Passages:
+                """)
+        ])
+
+        # Prepare passages and sources for the prompt
+        passages_and_sources = ""
+        for passage, source in zip(passages, sources):
+            passages_and_sources += f"Source: {source}\nPassage: {passage}\n\n"
+
+        response = prompt_template | anthropic_model
+
+        try:
+            output = response.invoke({
+                "query": query,
+                "passages_and_sources": passages_and_sources
+            })
+
+            # Access the content of the AIMessage
+            output_text = output.content
+
+            # Parse the consolidated passages and sources from the output
+            # Assuming the output is formatted as:
+            # "Passage: ... \nSource: ... \n\n"
+            new_passages = []
+            new_sources = []
+            entries = output_text.strip().split('\n\n')
+            for entry in entries:
+                lines = entry.strip().split('\n')
+                passage_text = ''
+                source_text = ''
+                for line in lines:
+                    if line.startswith("Passage:"):
+                        passage_text = line[len("Passage:"):].strip()
+                    elif line.startswith("Source:"):
+                        source_text = line[len("Source:"):].strip()
+                if passage_text and source_text:
+                    new_passages.append(passage_text)
+                    new_sources.append(source_text)
+            passages = new_passages
+            sources = new_sources
+
+        except Exception as e:
+            logger.error(f"Error during consolidation iteration {iteration + 1}: {e}", exc_info=True)
+            break  # Exit the loop if consolidation fails
+    print(f"Sources: {sources}")
+    return passages, sources
+
+def finalize_answer(query: str, passages: List[str], sources: List[str]) -> str:
+    """
+    Generates the final answer based on the consolidated passages and their sources.
+
+    Args:
+        query (str): The user's query.
+        passages (List[str]): Consolidated passages.
+        sources (List[str]): Corresponding sources.
+
+    Returns:
+        str: The final answer.
+    """
+    prompt_template = ChatPromptTemplate.from_messages([
+        SystemMessage(content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information."),
+        HumanMessagePromptTemplate.from_template("""
+        Based on the following consolidated passages and their sources, generate the most accurate and reliable answer to the question. Consider the reliability of each source, cross-confirmation between sources, and the thoroughness of the information.
+        
+        Question:
+        {query}
+        
+        Consolidated Passages and Sources:
+        {passages_and_sources}
+        
+        Final Answer:
+        """)
+    ])
+
+    # Prepare passages and sources for the prompt
+    passages_and_sources = ""
+    for passage, source in zip(passages, sources):
+        passages_and_sources += f"Source: {source}\nPassage: {passage}\n\n"
+
+    response = prompt_template | anthropic_model
+
+    try:
+        answer = response.invoke({
+            "query": query,
+            "passages_and_sources": passages_and_sources
+        })
+        return answer.content.strip()
+
+    except Exception as e:
+        logger.error(f"Error during answer finalization: {e}", exc_info=True)
+        return "An error occurred while generating the final answer."

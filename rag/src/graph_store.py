@@ -3,7 +3,7 @@ from .config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 from typing import List, Dict, Any
 
 # Initialize the Neo4j driver
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
 
 def ensure_fulltext_indexes():
     with driver.session() as session:

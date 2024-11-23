@@ -14,5 +14,5 @@ NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', "password")
 # Embedding model
 EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'all-MiniLM-L6-v2')
 
-# Ollama LLM model
-LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', "llama3.2:3b-instruct-fp16")
+# LLM model
+LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', "claude-3-haiku-20240307")

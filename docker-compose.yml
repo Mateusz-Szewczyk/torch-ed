@@ -37,11 +37,9 @@ services:
     build: ./rag
     ports:
       - '8042:8042'       # FastAPI Port
-      - '11434:11434'     # Ollama Port
     volumes:
       - ./rag:/app
       - ./vector_store_data:/app/vector_store_data  # Mount PERSIST_DIRECTORY
-      - ./logs:/var/log/supervisor                 # Mount Supervisor logs
       - ./uploads:/app/uploads                      # Mount uploads directory
     environment:
       - NEO4J_URI=bolt://neo4j:7687
@@ -49,9 +47,7 @@ services:
       - NEO4J_PASSWORD=password
       - PERSIST_DIRECTORY=/app/vector_store_data
       - EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
-      - LLM_MODEL_NAME=llama3.2:3b-instruct-fp16
-      - OLLAMA_API_URL=http://localhost:11434/api/generate
-      - OLLAMA_MODEL_NAME=llama3.2:3b-instruct-fp16
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     depends_on:
       - neo4j
     networks:
