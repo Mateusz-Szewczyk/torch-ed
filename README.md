@@ -76,8 +76,3 @@ To provide a smart, personalized learning experience that adapts to your needs a
    - Educational technology trends
    - Productivity and wellness tips
    - Career development guidance
-
-
-
-
-Join us in shaping the future of education! 🎓✨
