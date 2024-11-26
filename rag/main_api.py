@@ -33,7 +33,7 @@ from src.vector_store import create_vector_store
 from src.metadata_extraction import MetadataExtractor
 from file_processor.pdf_processor import PDFProcessor
 from file_processor.documents_processor import DocumentProcessor
-from src.generators.answer_generator import generate_answer
+from src.agent.agent import agent_response
 from src.chunking import create_chunks
 
 # Initialize FastAPI app
@@ -245,7 +245,7 @@ async def query_knowledge(
     logger.info(f"Received query from user_id: {user_id} - '{query}'")
     try:
         # Generate the answer using the answer generator module
-        answer = generate_answer(user_id, query, max_iterations=2, max_generated_passages=5)
+        answer = agent_response(user_id, query, max_iterations=2, max_generated_passages=5)
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
         return QueryResponse(
             user_id=user_id,
