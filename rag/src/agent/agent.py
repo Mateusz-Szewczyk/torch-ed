@@ -68,30 +68,29 @@ def initialize_agent_and_tools(user_id, model_name):
     # Create the prompt template
     tool_descriptions = "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
 
-    template = f"""You are a helpful AI assistant that uses tools to help users learn and find information.
-    You have access to the following tools:
+    template = f"""Jesteś pomocnym asystentem AI, który używa narzędzi do pomocy użytkownikom w nauce i znajdowaniu informacji. Adaptujesz się do języka użytkownika (polskiego) i dostarczasz jak najlepszą odpowiedź, korzystając z dostępnych narzędzi.
+    Na początku zaplanuj dokładnie swoje działania, pierwsza myśl powinna polegać na planie działania!!!
+    Twoje myśli i wszystkie działania powinny być w języku użytkownika. Twoimi użytkownikami będą głównie ludzie polsko i angielkojęzyczni.
+    Masz dostęp do następujących narzędzi:
 
     {tool_descriptions}
 
-    For any question, first think about which tool would be most appropriate.
+    Dla każdego pytania najpierw zastanów się, które narzędzie będzie najbardziej odpowiednie do zebrania niezbędnych informacji.
 
-    - **Flashcard Generator**: Use this tool when the user wants to create flashcards. Pass the user's entire prompt directly as a single string in the action input. Ensure that the flashcards are detailed and returned in JSON format as specified.
+    Najpierw użyj odpowiednich narzędzi, aby zebrać wszystkie istotne dane potrzebne do odpowiedzi na prośbę użytkownika.
 
-    - **Tavily Search Tool**: [Description remains the same]
+    **Z NARZĘDZIA flashcard_generator KORZYSTAJ TYLKO PO ZDOBYCIU INFORMACJI, NA SAMYM KONCU DZIAŁANIA!!!**
 
-    - **RAG Tool**: [Description remains the same]
+    Na końcu zadania, jeśli to konieczne, użyj narzędzia 'flashcard_generator' do stworzenia fiszek.
 
-    If none of the tools are appropriate, you can have a direct conversation with the user.
+    Jeśli żadne z narzędzi nie jest odpowiednie, możesz prowadzić bezpośrednią rozmowę z użytkownikiem.
 
-    **Instructions**:
+    Pamiętaj, aby dostarczyć kompleksową i pełną odpowiedź.
 
-    When responding, use the following format (without deviation):
+    Wykryj język wejściowy i odpowiedz w tym samym języku.
 
-    Question: the user's question Thought: your reasoning about which tool to use Action: the action to take, must be one of [{', '.join([tool.name for tool in tools])}] Action Input: the input to the action Observation: the result of the action ... (this Thought/Action/Action Input/Observation can repeat N times) Thought: I now know the final answer Final Answer: the final answer to the user's question (if generating flashcards, return them in JSON format)
-
-    Always explain your reasoning before providing the final answer.
-
-    {{agent_scratchpad}}"""
+    Najnowsza wiadomość: {input}
+    """
 
     prompt = PromptTemplate(
         input_variables=["input", "agent_scratchpad"],
@@ -147,7 +146,7 @@ def agent_response(user_id: str, query: str, model_name="claude-3-haiku-20240307
 # Example usage
 if __name__ == "__main__":
     user_id = "user123"
-    query = "Create flashcards for each element with the name, symbol, and atomic number on one side, and additional information like properties, uses, and position on the table on the other side."
+    query = "Czy wiesz, jakie są korzyści z korzystania z architektury Astute RAG?"
 
     answer = agent_response(user_id, query)
     print("Answer:")

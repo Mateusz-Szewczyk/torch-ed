@@ -35,13 +35,18 @@ if not anthropic_api_key:
 
 import json
 
+
 class FlashcardGenerator(BaseTool):
     name: str = "flashcard_generator"
-    description: str = (
-        "Generates flashcards based on a topic and description. "
-        "Input should be a string containing the topic and/or description. "
-        "Useful for creating study materials or learning aids."
-    )
+    description: str = """ To narzędzie generuje fiszki na podstawie dostarczonych danych.
+    Jeżeli użytkownik podał konkretną ilość fiszek w zapytaniu poproś o konkretną ilośc fiszek.
+    
+    Z tego narzędzia można skorzystać tylko raz, jeżeli to narzędzie było wcześniej użyte proszę nie korzystaj z niego.
+    Przykładowe Wejścia:
+    -Proszę wygeneruj 18 fiszek do nauki pierwiastków układu okresowego
+    -Proszę wygeneruj fiszki do nauki najczęściej używanych stwierdzeń w języku hiszpańskim
+"""
+
     model: ChatAnthropic = Field(default=None)
     flashcard_prompt: ChatPromptTemplate = Field(default=None)
     output_parser: JsonOutputParser = Field(default=None)
@@ -54,35 +59,34 @@ class FlashcardGenerator(BaseTool):
 
         # Define the prompt template for flashcard generation
         self.flashcard_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="RETURN ONLY IN JSON FORMAT WITHOUT ADDITIONAL TEXT"),
+            SystemMessage(content="Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku!"),
             HumanMessagePromptTemplate.from_template("""
-                Generate flashcards about {topic} based on the following description:
-                {description}
+    Wygeneruj fiszki na temat {topic} na podstawie następującego opisu:
+    {description}
+    Jeśli użytkownik nie podał liczby fiszek do stworzenia, proszę zdecyduj, ile fiszek powinno zostać utworzonych.
+    Jeśli opis dotyczy tłumaczenia i język znajduje się na tej liście:
+    {{
+        "japanese": "romaji",
+        "chinese": "pinyin",
+        "korean": "romanization",
+        "russian": "transliteration",
+        "arabic": "transliteration",
+        "thai": "transliteration",
+        "hindi": "transliteration"
+    }},
+    uwzględnij podaną romanizację/transliterację w pytaniu.
 
-                If the description is related with translation and language is in this list:
-                {{
-                    "japanese": "romaji",
-                    "chinese": "pinyin",
-                    "korean": "romanization",
-                    "russian": "transliteration",
-                    "arabic": "transliteration",
-                    "thai": "transliteration",
-                    "hindi": "transliteration"
-                }},
-                include the provided romanization/transliteration in the question.
-                
-                Think about the best way to format these flashcards, what will be the best combination of questions and answers.
-                
-                Return the flashcards in this exact JSON format:
-                [
-                    {{
-                        "question": "string",  // original word, with romanization/transliteration if applicable
-                        "answer": "string"     // translated word
-                    }},
-                    // ... additional flashcards
-                ]
-                """)
-        ])
+    Pomyśl o najlepszym sposobie sformatowania tych fiszek, jaka będzie najlepsza kombinacja pytań i odpowiedzi.
+
+    Zwróć fiszki w dokładnie takim formacie JSON:
+    [
+        {{
+            "question": "string", 
+            "answer": "string"    
+        }},
+        // ... dodatkowe fiszki
+    ]
+    """)])
         self.output_parser = JsonOutputParser()
 
     def _run(self, input_str: str) -> str:
@@ -117,6 +121,7 @@ class FlashcardGenerator(BaseTool):
         })
 
         return json.dumps(response)
+
 
 class RAGTool(BaseTool):
     name: str = "rag_tool"
@@ -205,7 +210,8 @@ class RAGTool(BaseTool):
         """
         # Prompt template for generating internal passages
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="You are a knowledgeable assistant helping to generate relevant information for a query."),
+            SystemMessage(
+                content="You are a knowledgeable assistant helping to generate relevant information for a query."),
             HumanMessagePromptTemplate.from_template("""
         Based on your internal knowledge, generate up to {max_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
 
@@ -235,7 +241,8 @@ class RAGTool(BaseTool):
             logger.error(f"Error generating internal passages: {e}", exc_info=True)
             return []
 
-    def iterative_consolidation(self, query: str, passages: List[str], sources: List[str], max_iterations: int) -> Tuple[List[str], List[str]]:
+    def iterative_consolidation(self, query: str, passages: List[str], sources: List[str], max_iterations: int) -> \
+    Tuple[List[str], List[str]]:
         """
         Iteratively consolidates the knowledge from passages considering their sources.
 
@@ -321,7 +328,8 @@ class RAGTool(BaseTool):
             str: The final answer.
         """
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information."),
+            SystemMessage(
+                content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information."),
             HumanMessagePromptTemplate.from_template("""
         Based on the following consolidated passages and their sources, generate the most accurate and reliable answer to the question. Consider the reliability of each source, cross-confirmation between sources, and the thoroughness of the information.
 
