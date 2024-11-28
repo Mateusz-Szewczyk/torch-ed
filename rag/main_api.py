@@ -2,7 +2,7 @@
 
 """
 Main API Module
-==============
+=============
 This module defines the FastAPI application with endpoints for uploading files and querying knowledge.
 It includes processing for PDF and document files, chunking, embedding, metadata extraction, and knowledge graph creation.
 
@@ -19,13 +19,9 @@ Dependencies:
 - Requests
 """
 
-import os
-from typing import Optional
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
-import uvicorn
-import logging
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
 
 # Importing custom modules
 from src.graph_store import create_graph_entries, create_entity_relationships
@@ -36,12 +32,37 @@ from file_processor.documents_processor import DocumentProcessor
 from src.agent.agent import agent_response
 from src.chunking import create_chunks
 
+# main_api.py
+
+import os
+from typing import Optional
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware  # Import CORS middleware
+from pydantic import BaseModel
+from sentence_transformers import SentenceTransformer
+import uvicorn
+import logging
+
+# ... rest of your imports
+
 # Initialize FastAPI app
 app = FastAPI(
     title="RAG Knowledge Base API",
     description="API for uploading documents and querying a knowledge base using RAG.",
     version="1.0.0"
 )
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Update with your frontend's URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ... rest of your code
+
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +86,15 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize embedding model '{EMBEDDING_MODEL_NAME}': {e}")
     raise
+
+# Load API keys
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+if not ANTHROPIC_API_KEY:
+    raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
+
+TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
+if not TAVILY_API_KEY:
+    raise ValueError("Tavily API key is not set. Please set the TAVILY_API_KEY environment variable.")
 
 # Define a response model for the upload endpoint
 class UploadResponse(BaseModel):
@@ -245,8 +275,9 @@ async def query_knowledge(
     logger.info(f"Received query from user_id: {user_id} - '{query}'")
     try:
         # Generate the answer using the answer generator module
-        answer = agent_response(user_id, query, max_iterations=2, max_generated_passages=5)
+        answer = agent_response(user_id, query, model_name="claude-3-haiku-20240307", anthropic_api_key=ANTHROPIC_API_KEY, tavily_api_key=TAVILY_API_KEY)
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
+        print(answer)
         return QueryResponse(
             user_id=user_id,
             query=query,

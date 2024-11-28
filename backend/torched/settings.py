@@ -39,7 +39,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     'rest_framework',
-    'django_elasticsearch_dsl',
     'core',
     'corsheaders',
 ]
@@ -138,14 +137,6 @@ STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-ELASTICSEARCH_DSL = {
-    'default': {
-        'hosts': 'localhost:9200/',
-        'http_auth': ('elastic', '123456'),
-        'use_ssl': True,
-        'verify_certs': False,
-    },
-}
 
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [

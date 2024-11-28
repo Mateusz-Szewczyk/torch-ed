@@ -11,7 +11,7 @@ import os
 from pydantic import Field
 
 # Import your search engine function
-from rag.src.search_engine import search_and_rerank
+from ..search_engine import search_and_rerank
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class FlashcardGenerator(BaseTool):
     flashcard_prompt: ChatPromptTemplate = Field(default=None)
     output_parser: JsonOutputParser = Field(default=None)
 
-    def __init__(self, model_name: str = "claude-3-5-haiku-latest", anthropic_api_key: str = None):
+    def __init__(self, model_name: str = "claude-3-haiku-20240307", anthropic_api_key: str = None):
         super().__init__()
         if not anthropic_api_key:
             raise ValueError("Anthropic API key is not set.")
@@ -131,7 +131,7 @@ class RAGTool(BaseTool):
     user_id: str = Field(default=None)
     model: ChatAnthropic = Field(default=None)
 
-    def __init__(self, user_id: str, model_name: str = "claude-3-5-haiku-latest", anthropic_api_key: str = None):
+    def __init__(self, user_id: str, model_name: str = "claude-3-haiku-20240307", anthropic_api_key: str = None):
         super().__init__()
         self.user_id = user_id
         if not anthropic_api_key:

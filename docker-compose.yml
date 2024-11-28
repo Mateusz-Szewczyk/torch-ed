@@ -48,6 +48,7 @@ services:
       - PERSIST_DIRECTORY=/app/vector_store_data
       - EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
     depends_on:
       - neo4j
     networks:

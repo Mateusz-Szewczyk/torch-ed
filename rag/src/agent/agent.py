@@ -5,106 +5,97 @@ from langchain.agents import AgentType, initialize_agent
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
 
-# Import tools
-from tools import FlashcardGenerator
-from tools import RAGTool
-from langchain_community.tools import TavilySearchResults  # Import Tavily Search tool
+# Import narzędzi
+from .tools import FlashcardGenerator
+from .tools import RAGTool
+from langchain_community.tools import TavilySearchResults  # Import narzędzia Tavily Search
 
-# Configure logging
+# Konfiguracja logowania
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def initialize_agent_and_tools(user_id, model_name):
-    """Initialize the agent and tools with proper configuration."""
+def initialize_agent_and_tools(user_id, model_name, anthropic_api_key, tavily_api_key):
+    """Inicjalizuje agenta i narzędzia z odpowiednią konfiguracją."""
 
-    # Initialize Anthropic API key
-    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
-    if not anthropic_api_key:
-        raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
-
-    # Initialize Tavily API key
-    tavily_api_key = os.getenv('TAVILY_API_KEY')
-    if not tavily_api_key:
-        raise ValueError("Tavily API key is not set. Please set the TAVILY_API_KEY environment variable.")
-
-    # Initialize the language model
+    # Inicjalizacja modelu językowego
     llm = ChatAnthropic(
         model_name=model_name,
         anthropic_api_key=anthropic_api_key,
         temperature=0
     )
 
-    # Initialize tools
+    # Inicjalizacja narzędzi
     try:
         flashcard_tool = FlashcardGenerator(
             model_name=model_name,
             anthropic_api_key=anthropic_api_key
         )
-        logger.info("Initialized FlashcardGenerator tool.")
+        logger.info("Zainicjalizowano narzędzie FlashcardGenerator.")
     except Exception as e:
-        logger.error(f"Failed to initialize FlashcardGenerator tool: {e}")
+        logger.error(f"Nie udało się zainicjalizować narzędzia FlashcardGenerator: {e}")
         raise
 
-    # Initialize the RAG tool
+    # Inicjalizacja narzędzia RAGTool
     rag_tool = RAGTool(
         user_id=user_id,
         model_name=model_name,
         anthropic_api_key=anthropic_api_key
     )
 
-    # Initialize Tavily Search tool
+    # Inicjalizacja narzędzia Tavily Search
     tavily_tool = TavilySearchResults(
+        tavily_api_key=tavily_api_key,
         max_results=5,
         search_depth="advanced",
         include_answer=True,
         include_raw_content=True,
         include_images=True,
     )
-    logger.info("Initialized TavilySearchResults tool.")
+    logger.info("Zainicjalizowano narzędzie TavilySearchResults.")
 
-    # Create list of tools
+    # Tworzenie listy narzędzi
     tools = [flashcard_tool, rag_tool, tavily_tool]
 
-    # Create the prompt template
+    # Tworzenie szablonu promptu
     tool_descriptions = "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
 
     template = f"""Jesteś pomocnym asystentem AI, który używa narzędzi do pomocy użytkownikom w nauce i znajdowaniu informacji. Adaptujesz się do języka użytkownika (polskiego) i dostarczasz jak najlepszą odpowiedź, korzystając z dostępnych narzędzi.
-    Na początku zaplanuj dokładnie swoje działania, pierwsza myśl powinna polegać na planie działania!!!
-    Twoje myśli i wszystkie działania powinny być w języku użytkownika. Twoimi użytkownikami będą głównie ludzie polsko i angielkojęzyczni.
-    Masz dostęp do następujących narzędzi:
+Na początku zaplanuj dokładnie swoje działania, pierwsza myśl powinna polegać na planie działania!!!
+Twoje myśli i wszystkie działania powinny być w języku użytkownika. Twoimi użytkownikami będą głównie ludzie polsko i angielkojęzyczni.
+Masz dostęp do następujących narzędzi:
 
-    {tool_descriptions}
+{tool_descriptions}
 
-    Dla każdego pytania najpierw zastanów się, które narzędzie będzie najbardziej odpowiednie do zebrania niezbędnych informacji.
+Dla każdego pytania najpierw zastanów się, które narzędzie będzie najbardziej odpowiednie do zebrania niezbędnych informacji.
 
-    Najpierw użyj odpowiednich narzędzi, aby zebrać wszystkie istotne dane potrzebne do odpowiedzi na prośbę użytkownika.
+Najpierw użyj odpowiednich narzędzi, aby zebrać wszystkie istotne dane potrzebne do odpowiedzi na prośbę użytkownika.
 
-    **Z NARZĘDZIA flashcard_generator KORZYSTAJ TYLKO PO ZDOBYCIU INFORMACJI, NA SAMYM KONCU DZIAŁANIA!!!**
+**Z NARZĘDZIA flashcard_generator KORZYSTAJ TYLKO PO ZDOBYCIU INFORMACJI, NA SAMYM KOŃCU DZIAŁANIA!!!**
 
-    Na końcu zadania, jeśli to konieczne, użyj narzędzia 'flashcard_generator' do stworzenia fiszek.
+Na końcu zadania, jeśli to konieczne, użyj narzędzia 'flashcard_generator' do stworzenia fiszek.
 
-    Jeśli żadne z narzędzi nie jest odpowiednie, możesz prowadzić bezpośrednią rozmowę z użytkownikiem.
+Jeśli żadne z narzędzi nie jest odpowiednie, możesz prowadzić bezpośrednią rozmowę z użytkownikiem.
 
-    Pamiętaj, aby dostarczyć kompleksową i pełną odpowiedź.
+Pamiętaj, aby dostarczyć kompleksową i pełną odpowiedź.
 
-    Wykryj język wejściowy i odpowiedz w tym samym języku.
+Wykryj język wejściowy i odpowiedz w tym samym języku.
 
-    Najnowsza wiadomość: {input}
-    """
+Najnowsza wiadomość: {input}
+"""
 
     prompt = PromptTemplate(
         input_variables=["input", "agent_scratchpad"],
         template=template
     )
 
-    # Initialize memory
+    # Inicjalizacja pamięci
     memory = ConversationBufferMemory(
         memory_key="chat_history",
         input_key="input",
         return_messages=True
     )
 
-    # Initialize the agent using initialize_agent
+    # Inicjalizacja agenta za pomocą initialize_agent
     agent = initialize_agent(
         tools=tools,
         llm=llm,
@@ -118,36 +109,54 @@ def initialize_agent_and_tools(user_id, model_name):
 
     return agent
 
-def agent_response(user_id: str, query: str, model_name="claude-3-haiku-20240307") -> str:
+def agent_response(user_id: str, query: str, model_name="claude-3-haiku-20240307", anthropic_api_key=None, tavily_api_key=None) -> str:
     """
-    Generates an answer based on the user's query.
+    Generuje odpowiedź na podstawie zapytania użytkownika.
 
     Args:
-        user_id (str): The ID of the user.
-        query (str): The user's query.
+        user_id (str): ID użytkownika.
+        query (str): Zapytanie użytkownika.
+        model_name (str): Nazwa modelu do użycia.
+        anthropic_api_key (str): Klucz API dla Anthropic.
+        tavily_api_key (str): Klucz API dla Tavily.
 
     Returns:
-        str: Generated answer.
+        str: Wygenerowana odpowiedź.
     """
-    logger.info(f"Generating answer for user_id: {user_id} with query: '{query}'")
+    logger.info(f"Generowanie odpowiedzi dla user_id: {user_id} z zapytaniem: '{query}'")
+
+    # Sprawdzenie kluczy API
+    if not anthropic_api_key:
+        anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not anthropic_api_key:
+            raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
+
+    if not tavily_api_key:
+        tavily_api_key = os.getenv('TAVILY_API_KEY')
+        if not tavily_api_key:
+            raise ValueError("Tavily API key is not set. Please set the TAVILY_API_KEY environment variable.")
 
     try:
-        # Initialize agent
-        agent = initialize_agent_and_tools(user_id, model_name)
+        # Inicjalizacja agenta
+        agent = initialize_agent_and_tools(user_id, model_name, anthropic_api_key, tavily_api_key)
 
-        # Use the agent to process the query
+        # Przetwarzanie zapytania za pomocą agenta
         response = agent.run(query)
         return response
 
     except Exception as e:
-        logger.error(f"Error generating answer: {e}", exc_info=True)
-        return f"An error occurred while generating the answer: {str(e)}"
+        logger.error(f"Błąd podczas generowania odpowiedzi: {e}", exc_info=True)
+        return f"Wystąpił błąd podczas generowania odpowiedzi: {str(e)}"
 
-# Example usage
+# Przykład użycia
 if __name__ == "__main__":
     user_id = "user123"
     query = "Czy wiesz, jakie są korzyści z korzystania z architektury Astute RAG?"
 
-    answer = agent_response(user_id, query)
+    # Pobierz klucze API z zmiennych środowiskowych
+    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+    tavily_api_key = os.getenv('TAVILY_API_KEY')
+
+    answer = agent_response(user_id, query, anthropic_api_key=anthropic_api_key, tavily_api_key=tavily_api_key)
     print("Answer:")
     print(answer)
