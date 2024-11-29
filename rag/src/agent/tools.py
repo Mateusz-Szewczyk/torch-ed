@@ -9,9 +9,15 @@ from langchain_core.prompts import HumanMessagePromptTemplate
 import logging
 import os
 from pydantic import Field
+import json
 
 # Import your search engine function
 from ..search_engine import search_and_rerank
+
+# Database imports
+from sqlalchemy.orm import Session
+from ..database import SessionLocal
+from ..models import Deck, Flashcard
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -33,19 +39,19 @@ anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
 if not anthropic_api_key:
     raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
 
-import json
 
 
 class FlashcardGenerator(BaseTool):
     name: str = "flashcard_generator"
-    description: str = """ To narzędzie generuje fiszki na podstawie dostarczonych danych.
-    Jeżeli użytkownik podał konkretną ilość fiszek w zapytaniu poproś o konkretną ilośc fiszek.
-    
-    Z tego narzędzia można skorzystać tylko raz, jeżeli to narzędzie było wcześniej użyte proszę nie korzystaj z niego.
+    description: str = """To narzędzie generuje fiszki na podstawie dostarczonych danych.
+    Jeżeli użytkownik podał konkretną ilość fiszek w zapytaniu, poproś o konkretną ilość fiszek.
+    Narzędzie generuje fiszki w formacie JSON, które zawierają pytanie i odpowiedź.
+    Narzędzie adaptuje się do języka użytkownika i dostarcza jak najlepszą odpowiedź.
+    Z tego narzędzia można skorzystać tylko raz, jeżeli to narzędzie było wcześniej użyte, proszę nie korzystaj z niego.
     Przykładowe Wejścia:
     -Proszę wygeneruj 18 fiszek do nauki pierwiastków układu okresowego
     -Proszę wygeneruj fiszki do nauki najczęściej używanych stwierdzeń w języku hiszpańskim
-"""
+    """
 
     model: ChatAnthropic = Field(default=None)
     flashcard_prompt: ChatPromptTemplate = Field(default=None)
@@ -61,72 +67,112 @@ class FlashcardGenerator(BaseTool):
         self.flashcard_prompt = ChatPromptTemplate.from_messages([
             SystemMessage(content="Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku!"),
             HumanMessagePromptTemplate.from_template("""
-    Wygeneruj fiszki na temat {topic} na podstawie następującego opisu:
-    {description}
-    Jeśli użytkownik nie podał liczby fiszek do stworzenia, proszę zdecyduj, ile fiszek powinno zostać utworzonych.
-    Jeśli opis dotyczy tłumaczenia i język znajduje się na tej liście:
-    {{
-        "japanese": "romaji",
-        "chinese": "pinyin",
-        "korean": "romanization",
-        "russian": "transliteration",
-        "arabic": "transliteration",
-        "thai": "transliteration",
-        "hindi": "transliteration"
-    }},
-    uwzględnij podaną romanizację/transliterację w pytaniu.
+            Wygeneruj fiszki na temat {topic} na podstawie następującego opisu:
+            {description}
 
-    Pomyśl o najlepszym sposobie sformatowania tych fiszek, jaka będzie najlepsza kombinacja pytań i odpowiedzi.
+            Wygenerowane fiszki powinny być w języku użytkownika, czyli w tym języku, w którym jest napisany opis i tytuł.
+            Jeśli użytkownik nie podał liczby fiszek do stworzenia, proszę zdecyduj, ile fiszek powinno zostać utworzonych.
+            Jeśli opis dotyczy tłumaczenia i język znajduje się na tej liście:
+            {{
+                "japanese": "romaji",
+                "chinese": "pinyin",
+                "korean": "romanization",
+                "russian": "transliteration",
+                "arabic": "transliteration",
+                "thai": "transliteration",
+                "hindi": "transliteration"
+            }},
+            uwzględnij podaną romanizację/transliterację w pytaniu.
 
-    Zwróć fiszki w dokładnie takim formacie JSON:
-    [
-        {{
-            "question": "string", 
-            "answer": "string"    
-        }},
-        // ... dodatkowe fiszki
-    ]
-    """)])
+            Pomyśl o najlepszym sposobie sformatowania tych fiszek, jaka będzie najlepsza kombinacja pytań i odpowiedzi.
+
+            Zwróć fiszki w dokładnie takim formacie JSON:
+            [
+                {{
+                    "question": "string", 
+                    "answer": "string"    
+                }}
+            ]
+            """)
+
+        ])
         self.output_parser = JsonOutputParser()
 
     def _run(self, input_str: str) -> str:
         """
-        Generate flashcards based on the input string.
+        Generate flashcards based on the input string and save them to the database.
 
         Args:
             input_str: A string containing the topic and/or description.
 
         Returns:
-            A string containing the generated flashcards in JSON format.
+            A string confirming the operation.
         """
 
-        # For simplicity, set description as input_str, topic as empty or a default value
+        # Extract topic and description from input_str
+        # Możesz dodać logikę parsowania, jeśli potrzebujesz
+        topic = ""  # Możesz zmodyfikować to, aby wyodrębnić temat z input_str, jeśli jest dostępny
+        description = input_str
+
+        # Generate flashcards
         prompt_with_context = self.flashcard_prompt | self.model | self.output_parser
 
-        response = prompt_with_context.invoke({
-            "description": input_str,
-            "topic": ""
-        })
+        try:
+            response = prompt_with_context.invoke({
+                "description": description,
+                "topic": topic
+            })
+            flashcards = response  # Zakładam, że odpowiedź to lista słowników z 'question' i 'answer'
 
-        # Convert the response to a JSON string to return
-        return json.dumps(response)
+            # Konwersja odpowiedzi do stringa JSON do zwrócenia
+            flashcards_json = json.dumps(flashcards, ensure_ascii=False)
+
+            # Zapis fiszek do bazy danych
+            db: Session = SessionLocal()
+            try:
+                # Utworzenie nowego zestawu
+                new_deck = Deck(name=topic, description=description)
+                db.add(new_deck)
+                db.commit()
+                db.refresh(new_deck)
+
+                # Utworzenie fiszek z unikalnymi ID powiązanymi z zestawem
+                for card in flashcards:
+                    new_flashcard = Flashcard(
+                        question=card.get('question', ''),
+                        answer=card.get('answer', ''),
+                        deck_id=new_deck.id
+                    )
+                    db.add(new_flashcard)
+
+                db.commit()
+
+                logger.info(f"Successfully created deck with ID {new_deck.id} and saved {len(flashcards)} flashcards.")
+                return flashcards_json
+
+            except Exception as e:
+                db.rollback()
+                logger.error(f"An error occurred while saving flashcards to the database: {e}")
+                raise e
+            finally:
+                db.close()
+
+        except Exception as e:
+            logger.error(f"An error occurred during flashcard generation: {e}")
+            raise e
 
     async def _arun(self, input_str: str) -> str:
         """Asynchronous version of the run method."""
-        prompt_with_context = self.flashcard_prompt | self.model | self.output_parser
-
-        response = await prompt_with_context.ainvoke({
-            "description": input_str,
-            "topic": ""
-        })
-
-        return json.dumps(response)
+        # Dla uproszczenia używamy synchronicznej metody _run w kontekście asynchronicznym
+        # W rzeczywistości rozważ użycie asynchronicznych sesji bazy danych
+        return self._run(input_str)
 
 
 class RAGTool(BaseTool):
     name: str = "rag_tool"
     description: str = (
-        "Uses the Retrieval-Augmented Generation pipeline to answer queries using internal and external knowledge."
+        "Uses the Retrieval-Augmented Generation pipeline to answer queries using internal and external knowledge.",
+        "The tool will recognize the user's language and will adapt to it"
     )
     user_id: str = Field(default=None)
     model: ChatAnthropic = Field(default=None)
@@ -211,15 +257,15 @@ class RAGTool(BaseTool):
         # Prompt template for generating internal passages
         prompt_template = ChatPromptTemplate.from_messages([
             SystemMessage(
-                content="You are a knowledgeable assistant helping to generate relevant information for a query."),
+                content="You are a knowledgeable assistant helping to generate relevant information for a query. You will recognize query and passages language and adapt to it."),
             HumanMessagePromptTemplate.from_template("""
-        Based on your internal knowledge, generate up to {max_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
+Based on your internal knowledge, generate up to {max_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
 
-        Question:
-        {query}
+Question:
+{query}
 
-        Passages:
-        """)
+Passages:
+""")
         ])
 
         response = prompt_template | self.model
@@ -258,18 +304,18 @@ class RAGTool(BaseTool):
         for iteration in range(max_iterations):
             logger.info(f"Consolidation iteration {iteration + 1}")
             prompt_template = ChatPromptTemplate.from_messages([
-                SystemMessage(content="You are an assistant that consolidates information from different sources."),
+                SystemMessage(content="You are an assistant that consolidates information from different sources. You will recognize query and passages language and adapt to it."),
                 HumanMessagePromptTemplate.from_template("""
-        Given the following passages and their sources, consolidate the information by identifying consistent details, resolving conflicts, and removing irrelevant content.
+Given the following passages and their sources, consolidate the information by identifying consistent details, resolving conflicts, and removing irrelevant content.
 
-        Question:
-        {query}
+Question:
+{query}
 
-        Passages and Sources:
-        {passages_and_sources}
+Passages and Sources:
+{passages_and_sources}
 
-        Consolidated Passages:
-        """)
+Consolidated Passages:
+""")
             ])
 
             # Prepare passages and sources for the prompt
@@ -329,18 +375,18 @@ class RAGTool(BaseTool):
         """
         prompt_template = ChatPromptTemplate.from_messages([
             SystemMessage(
-                content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information."),
+                content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information. You will recognize query and passages language and adapt to it."),
             HumanMessagePromptTemplate.from_template("""
-        Based on the following consolidated passages and their sources, generate the most accurate and reliable answer to the question. Consider the reliability of each source, cross-confirmation between sources, and the thoroughness of the information.
+Based on the following consolidated passages and their sources, generate the most accurate and reliable answer to the question. Consider the reliability of each source, cross-confirmation between sources, and the thoroughness of the information.
 
-        Question:
-        {query}
+Question:
+{query}
 
-        Consolidated Passages and Sources:
-        {passages_and_sources}
+Consolidated Passages and Sources:
+{passages_and_sources}
 
-        Final Answer:
-        """)
+Final Answer:
+""")
         ])
 
         # Prepare passages and sources for the prompt
