@@ -16,7 +16,6 @@ pypandoc
 striprtf
 odfpy
 PyMuPDF
-pix2text
 PyPDF2
 pytest
 sentence-transformers
@@ -27,3 +26,6 @@ nltk
 torch
 urllib3<2
 aiofiles
+sqlalchemy
+psycopg2-binary
+python-dotenv
