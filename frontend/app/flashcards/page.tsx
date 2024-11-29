@@ -1,192 +1,212 @@
+// components/FlashcardsPage.tsx
+
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { EditDeckDialog } from '@/components/EditDeckDialog'
+import { AddFlashcardDialog } from '@/components/AddFlashcardDialog'
+import axios from 'axios'
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { ChevronLeft, Pencil, Trash2 } from 'lucide-react'
-import { EditDeckDialog } from "@/components/EditDeckDialog"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { PlusCircle, BookOpen, Loader2, Info, ChevronRight } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { CustomTooltip } from '@/components/CustomTooltip'
 
-type Flashcard = {
-  id: number
+interface Flashcard {
+  id: number | null
   question: string
   answer: string
 }
 
-type Deck = {
+interface Deck {
   id: number
   name: string
-  cards: Flashcard[]
+  description?: string
+  flashcards: Flashcard[]
 }
 
-const initialDecks: Deck[] = [
-  {
-    id: 1,
-    name: "General Knowledge",
-    cards: [
-      { id: 1, question: "What is the capital of France?", answer: "Paris" },
-      { id: 2, question: "Who painted the Mona Lisa?", answer: "Leonardo da Vinci" },
-      { id: 3, question: "What is the largest planet in our solar system?", answer: "Jupiter" },
-    ]
-  },
-  {
-    id: 2,
-    name: "Science",
-    cards: [
-      { id: 1, question: "What is the chemical symbol for water?", answer: "H2O" },
-      { id: 2, question: "What is the largest organ in the human body?", answer: "Skin" },
-      { id: 3, question: "What is the speed of light?", answer: "299,792,458 meters per second" },
-    ]
-  },
-  {
-    id: 3,
-    name: "History",
-    cards: [
-      { id: 1, question: "In which year did World War II end?", answer: "1945" },
-      { id: 2, question: "Who was the first President of the United States?", answer: "George Washington" },
-      { id: 3, question: "What ancient wonder was located in Alexandria?", answer: "The Lighthouse of Alexandria" },
-    ]
-  }
-]
+export default function FlashcardsPage() {
+  const [decks, setDecks] = useState<Deck[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
 
-export default function Flashcards() {
-  const [decks, setDecks] = useState<Deck[]>(initialDecks)
-  const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null)
-  const [currentCardIndex, setCurrentCardIndex] = useState(0)
-  const [showAnswer, setShowAnswer] = useState(false)
-
-  const handleDeckSelect = (deck: Deck) => {
-    setSelectedDeck(deck)
-    setCurrentCardIndex(0)
-    setShowAnswer(false)
-  }
-
-  const handleNextCard = () => {
-    if (selectedDeck) {
-      setCurrentCardIndex((prevIndex) => (prevIndex + 1) % selectedDeck.cards.length)
-      setShowAnswer(false)
-    }
-  }
-
-  const handlePrevCard = () => {
-    if (selectedDeck) {
-      setCurrentCardIndex((prevIndex) => (prevIndex - 1 + selectedDeck.cards.length) % selectedDeck.cards.length)
-      setShowAnswer(false)
-    }
-  }
-
-  const toggleAnswer = () => {
-    setShowAnswer(!showAnswer)
-  }
-
-  const returnToDeckSelection = () => {
-    setSelectedDeck(null)
-    setCurrentCardIndex(0)
-    setShowAnswer(false)
-  }
-
-  const handleEditDeck = (id: number, name: string, cards: Flashcard[]) => {
-    const updatedDecks = decks.map(deck => 
-      deck.id === id ? { ...deck, name, cards } : deck
-    )
-    setDecks(updatedDecks)
-    if (selectedDeck && selectedDeck.id === id) {
-      setSelectedDeck({ ...selectedDeck, name, cards })
-      if (currentCardIndex >= cards.length) {
-        setCurrentCardIndex(Math.max(cards.length - 1, 0))
+  const fetchDecks = async () => {
+    try {
+      const response = await axios.get<Deck[]>('http://localhost:8043/decks/')
+      setDecks(response.data)
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response) {
+        setError(err.response.data.detail || 'An error occurred while fetching decks.')
+      } else {
+        setError('An unexpected error occurred while fetching decks.')
       }
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleDeleteDeck = (id: number) => {
-    const updatedDecks = decks.filter(deck => deck.id !== id)
-    setDecks(updatedDecks)
-    if (selectedDeck && selectedDeck.id === id) {
-      returnToDeckSelection()
+  useEffect(() => {
+    fetchDecks()
+  }, [])
+
+  const handleSave = async (updatedDeck: Deck) => {
+    try {
+      if (updatedDeck.id === 0) {
+        // Tworzenie nowego zestawu (deck)
+        const createDeckResponse = await axios.post<Deck>('http://localhost:8043/decks/', {
+          name: updatedDeck.name,
+          description: updatedDeck.description,
+        })
+        const newDeck = createDeckResponse.data
+        setDecks(prevDecks => [...prevDecks, newDeck])
+      } else {
+        // Aktualizacja istniejącego zestawu (deck)
+        await axios.put(`http://localhost:8043/decks/${updatedDeck.id}/`, {
+          name: updatedDeck.name,
+          description: updatedDeck.description,
+        })
+        setDecks(prevDecks => prevDecks.map(deck =>
+          deck.id === updatedDeck.id ? { ...deck, name: updatedDeck.name, description: updatedDeck.description } : deck
+        ))
+      }
+    } catch (error) {
+      console.error("Error saving deck:", error)
+      setError('An error occurred while saving the deck.')
     }
+  }
+
+  const handleDelete = async (deckId: number) => {
+    try {
+      await axios.delete(`http://localhost:8043/decks/${deckId}/`)
+      setDecks(decks.filter(deck => deck.id !== deckId))
+    } catch (err: unknown) {
+      console.error(err)
+      setError('An error occurred while deleting the deck.')
+    }
+  }
+
+  const handleAddFlashcard = async (deckId: number, newFlashcard: Omit<Flashcard, 'id'>) => {
+    try {
+      const response = await axios.post<Flashcard>(`http://localhost:8043/decks/${deckId}/flashcards/`, newFlashcard)
+      setDecks(prevDecks => prevDecks.map(deck =>
+        deck.id === deckId ? { ...deck, flashcards: [...deck.flashcards, response.data] } : deck
+      ))
+    } catch (error) {
+      console.error("Error adding flashcard:", error)
+      setError('An error occurred while adding the flashcard.')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="mr-2 h-16 w-16 animate-spin" />
+        <span className="text-xl font-semibold">Loading decks...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Card className="w-[350px]">
+          <CardHeader>
+            <CardTitle className="text-destructive">Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p>{error}</p>
+          </CardContent>
+          <CardFooter>
+            <Button onClick={fetchDecks}>Try Again</Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
   }
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-4 bg-background text-foreground">
-      {selectedDeck ? (
-        <>
-          <div className="w-full max-w-md mb-4">
-            <Button variant="ghost" onClick={returnToDeckSelection} className="mb-4">
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Decks
-            </Button>
-            <h1 className="text-2xl font-bold mb-6">{selectedDeck.name}</h1>
-          </div>
-          <Card className="w-full max-w-md bg-card text-card-foreground">
-            <CardContent className="p-6">
-              <div className="text-center mb-4">
-                <h2 className="text-xl font-semibold mb-2">
-                  {showAnswer ? "Answer" : "Question"}
-                </h2>
-                <p className="text-lg">
-                  {showAnswer ? selectedDeck.cards[currentCardIndex].answer : selectedDeck.cards[currentCardIndex].question}
-                </p>
-              </div>
-              <div className="flex justify-center space-x-2 mb-4">
-                <Button onClick={handlePrevCard} variant="outline">Previous</Button>
-                <Button onClick={toggleAnswer} variant="outline">
-                  {showAnswer ? "Show Question" : "Show Answer"}
+    <div className="p-4 max-w-4xl mx-auto">
+      <div className="text-center mb-6 flex items-center justify-center">
+        <h1 className="text-3xl font-bold">Flashcards</h1>
+        <CustomTooltip
+          content='Need Flashcards? Chat can help you produce study-ready flashcards in seconds. Sample Request: "Generate 10 flashcards to help me with my math exam preparation."'
+        >
+          <Button variant="ghost" size="icon" className="ml-2">
+            <Info className="h-4 w-4" />
+            <span className="sr-only">More information</span>
+          </Button>
+        </CustomTooltip>
+      </div>
+      {decks.length === 0 ? (
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>Welcome to Flashcards!</CardTitle>
+            <CardDescription>Get started by creating your first deck.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center space-y-4 py-8">
+            <BookOpen className="h-24 w-24 text-muted-foreground" />
+            <p className="text-center text-muted-foreground">
+              You don't have any flashcard decks yet. Create a new deck to begin your learning journey!
+            </p>
+          </CardContent>
+          <CardFooter className="flex justify-center">
+            <EditDeckDialog
+              deck={{ id: 0, name: '', description: '', flashcards: [] }}
+              onSave={handleSave}
+              trigger={
+                <Button>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Create Your First Deck
                 </Button>
-                <Button onClick={handleNextCard} variant="outline">Next</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+              }
+            />
+          </CardFooter>
+        </Card>
       ) : (
-        <div className="w-full max-w-md">
-          <h1 className="text-2xl font-bold mb-6">Choose a Flashcard Deck</h1>
-          <div className="space-y-4">
-            {decks.map((deck) => (
-              <div key={deck.id} className="flex items-center space-x-2">
-                <Button
-                  onClick={() => handleDeckSelect(deck)}
-                  variant="outline"
-                  className="flex-grow justify-start text-left h-auto py-4"
-                >
-                  <div>
-                    <div className="font-semibold">{deck.name}</div>
-                    <div className="text-sm text-muted-foreground">{deck.cards.length} cards</div>
-                  </div>
+        <>
+          <div className="mb-4 flex justify-end">
+            <EditDeckDialog
+              deck={{ id: 0, name: '', description: '', flashcards: [] }}
+              onSave={handleSave}
+              trigger={
+                <Button>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Create New Deck
                 </Button>
-                <EditDeckDialog
-                  deck={deck}
-                  onSave={handleEditDeck}
-                  trigger={
-                    <Button variant="outline" size="icon">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  }
-                />
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete this deck and all its flashcards.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDeleteDeck(deck.id)}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+              }
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {decks.map(deck => (
+              <Card key={deck.id} className="flex flex-col">
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <CardTitle>{deck.name}</CardTitle>
+                    <div className="flex space-x-2">
+                      <EditDeckDialog deck={deck} onSave={handleSave} trigger={<Button variant="outline" size="sm">Edit</Button>} />
+                      <Button variant="destructive" size="sm" onClick={() => handleDelete(deck.id)}>Delete</Button>
+                    </div>
+                  </div>
+                  <CardDescription>{deck.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{deck.flashcards.length} flashcards</p>
+                </CardContent>
+                <CardFooter className="mt-auto flex space-x-2">
+                  <AddFlashcardDialog
+                    deckId={deck.id}
+                    onAddFlashcard={handleAddFlashcard}
+                    trigger={<Button variant="outline" size="sm">Add Flashcard</Button>}
+                  />
+                  <Button variant="ghost" size="sm">
+                    Study <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </CardFooter>
+              </Card>
             ))}
           </div>
-        </div>
+        </>
       )}
     </div>
   )
 }
-
