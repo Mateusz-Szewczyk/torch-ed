@@ -1,6 +1,5 @@
 # pdf_processor.py
 import fitz
-import pix2text
 import PyPDF2
 import logging
 
@@ -16,11 +15,8 @@ class PDFProcessor:
             device (str, optional): Device to run OCR on (e.g., 'cuda' for GPU, 'cpu').
                 Defaults to 'cpu'.
         """
-
         self.language = language
-
-        # Initialize Pix2Text with CPU device
-        self.p2t = pix2text.Pix2Text.from_config(device=device)
+        # Usunięto inicjalizację pix2text, ponieważ jest ona wyłączona
 
     def process_pdf(self, pdf_file, start_page=0, end_page=None):
         """
