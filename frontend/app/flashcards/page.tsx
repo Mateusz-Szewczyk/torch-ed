@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Pencil, Trash2 } from 'lucide-react'
+import { EditDeckDialog } from "@/components/EditDeckDialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 
 type Flashcard = {
   id: number
@@ -17,7 +19,7 @@ type Deck = {
   cards: Flashcard[]
 }
 
-const decks: Deck[] = [
+const initialDecks: Deck[] = [
   {
     id: 1,
     name: "General Knowledge",
@@ -48,6 +50,7 @@ const decks: Deck[] = [
 ]
 
 export default function Flashcards() {
+  const [decks, setDecks] = useState<Deck[]>(initialDecks)
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null)
   const [currentCardIndex, setCurrentCardIndex] = useState(0)
   const [showAnswer, setShowAnswer] = useState(false)
@@ -82,6 +85,27 @@ export default function Flashcards() {
     setShowAnswer(false)
   }
 
+  const handleEditDeck = (id: number, name: string, cards: Flashcard[]) => {
+    const updatedDecks = decks.map(deck => 
+      deck.id === id ? { ...deck, name, cards } : deck
+    )
+    setDecks(updatedDecks)
+    if (selectedDeck && selectedDeck.id === id) {
+      setSelectedDeck({ ...selectedDeck, name, cards })
+      if (currentCardIndex >= cards.length) {
+        setCurrentCardIndex(Math.max(cards.length - 1, 0))
+      }
+    }
+  }
+
+  const handleDeleteDeck = (id: number) => {
+    const updatedDecks = decks.filter(deck => deck.id !== id)
+    setDecks(updatedDecks)
+    if (selectedDeck && selectedDeck.id === id) {
+      returnToDeckSelection()
+    }
+  }
+
   return (
     <div className="h-full flex flex-col items-center justify-center p-4 bg-background text-foreground">
       {selectedDeck ? (
@@ -103,7 +127,7 @@ export default function Flashcards() {
                   {showAnswer ? selectedDeck.cards[currentCardIndex].answer : selectedDeck.cards[currentCardIndex].question}
                 </p>
               </div>
-              <div className="flex justify-center space-x-2">
+              <div className="flex justify-center space-x-2 mb-4">
                 <Button onClick={handlePrevCard} variant="outline">Previous</Button>
                 <Button onClick={toggleAnswer} variant="outline">
                   {showAnswer ? "Show Question" : "Show Answer"}
@@ -118,17 +142,46 @@ export default function Flashcards() {
           <h1 className="text-2xl font-bold mb-6">Choose a Flashcard Deck</h1>
           <div className="space-y-4">
             {decks.map((deck) => (
-              <Button
-                key={deck.id}
-                onClick={() => handleDeckSelect(deck)}
-                variant="outline"
-                className="w-full justify-start text-left h-auto py-4"
-              >
-                <div>
-                  <div className="font-semibold">{deck.name}</div>
-                  <div className="text-sm text-muted-foreground">{deck.cards.length} cards</div>
-                </div>
-              </Button>
+              <div key={deck.id} className="flex items-center space-x-2">
+                <Button
+                  onClick={() => handleDeckSelect(deck)}
+                  variant="outline"
+                  className="flex-grow justify-start text-left h-auto py-4"
+                >
+                  <div>
+                    <div className="font-semibold">{deck.name}</div>
+                    <div className="text-sm text-muted-foreground">{deck.cards.length} cards</div>
+                  </div>
+                </Button>
+                <EditDeckDialog
+                  deck={deck}
+                  onSave={handleEditDeck}
+                  trigger={
+                    <Button variant="outline" size="icon">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  }
+                />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="icon">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete this deck and all its flashcards.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDeleteDeck(deck.id)}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             ))}
           </div>
         </div>
