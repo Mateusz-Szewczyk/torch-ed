@@ -43,7 +43,7 @@ export default function Chat() {
 
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:8042/query/', {
+        const response = await fetch('http://localhost:8043/query/', {
           method: 'POST',
           body: createFormData({
             user_id: 'user123',

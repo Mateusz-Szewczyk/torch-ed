@@ -4,99 +4,142 @@ import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Trash2, Plus } from 'lucide-react'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { Trash2 } from 'lucide-react'
+
+interface Flashcard {
+  id: number | null
+  question: string
+  answer: string
+}
+
+interface Deck {
+  id: number
+  name: string
+  description?: string
+  flashcards: Flashcard[]
+}
 
 interface EditDeckDialogProps {
-  deck: { id: number; name: string; cards: { id: number; question: string; answer: string }[] }
-  onSave: (id: number, name: string, cards: { id: number; question: string; answer: string }[]) => void
+  deck: Deck
+  onSave: (updatedDeck: Deck) => void
   trigger: React.ReactNode
 }
 
-export function EditDeckDialog({ deck, onSave, trigger }: EditDeckDialogProps) {
+export const EditDeckDialog = ({ deck, onSave, trigger }: EditDeckDialogProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const [name, setName] = useState(deck.name)
-  const [cards, setCards] = useState(deck.cards)
+  const [description, setDescription] = useState(deck.description || '')
+  const [flashcards, setFlashcards] = useState<Flashcard[]>(deck.flashcards)
 
-  const handleSave = () => {
-    onSave(deck.id, name, cards)
+  const handleAddFlashcard = () => {
+    setFlashcards([...flashcards, { id: null, question: '', answer: '' }])
+  }
+
+  const handleFlashcardChange = (index: number, field: 'question' | 'answer', value: string) => {
+    const updatedFlashcards = [...flashcards]
+    updatedFlashcards[index][field] = value
+    setFlashcards(updatedFlashcards)
+  }
+
+  const handleDeleteFlashcard = (index: number) => {
+    const updatedFlashcards = flashcards.filter((_, i) => i !== index)
+    setFlashcards(updatedFlashcards)
+  }
+
+  const handleSaveClick = (e: React.FormEvent) => {
+    e.preventDefault()
+    const updatedDeck: Deck = {
+      ...deck,
+      name,
+      description,
+      flashcards,
+    }
+    onSave(updatedDeck)
     setIsOpen(false)
-  }
-
-  const handleAddCard = () => {
-    setCards([...cards, { id: Date.now(), question: '', answer: '' }])
-  }
-
-  const handleDeleteCard = (id: number) => {
-    setCards(cards.filter(card => card.id !== id))
-  }
-
-  const handleUpdateCard = (id: number, field: 'question' | 'answer', value: string) => {
-    setCards(cards.map(card => card.id === id ? { ...card, [field]: value } : card))
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] bg-background text-foreground">
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="text-foreground">Edit Deck: {name}</DialogTitle>
+          <DialogTitle>{deck.id === 0 ? 'Create New Deck' : 'Edit Deck'}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="deckName">Deck Name</Label>
+        <form onSubmit={handleSaveClick} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="deck-name">Deck Name</Label>
             <Input
-              id="deckName"
+              id="deck-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="col-span-3"
+              placeholder="Enter deck name"
+              required
             />
           </div>
-          {cards.map((card, index) => (
-            <div key={card.id} className="grid gap-2 p-4 border rounded-md">
-              <div className="flex justify-between items-center">
-                <Label>Flashcard {index + 1}</Label>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="outline" size="icon">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete this flashcard.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDeleteCard(card.id)}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+          <div className="space-y-2">
+            <Label htmlFor="deck-description">Deck Description</Label>
+            <Textarea
+              id="deck-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter deck description"
+            />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Flashcards:</h3>
+            {flashcards.map((fc, index) => (
+              <div key={index} className="border rounded-md p-4 mb-4 space-y-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium">Flashcard {index + 1}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteFlashcard(index)}
+                    aria-label={`Delete flashcard ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`flashcard-question-${index}`}>Question</Label>
+                  <Input
+                    id={`flashcard-question-${index}`}
+                    value={fc.question}
+                    onChange={(e) => handleFlashcardChange(index, 'question', e.target.value)}
+                    placeholder="Enter the question"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`flashcard-answer-${index}`}>Answer</Label>
+                  <Textarea
+                    id={`flashcard-answer-${index}`}
+                    value={fc.answer}
+                    onChange={(e) => handleFlashcardChange(index, 'answer', e.target.value)}
+                    placeholder="Enter the answer"
+                    required
+                  />
+                </div>
               </div>
-              <Input
-                value={card.question}
-                onChange={(e) => handleUpdateCard(card.id, 'question', e.target.value)}
-                placeholder="Question"
-                className="col-span-3"
-              />
-              <Input
-                value={card.answer}
-                onChange={(e) => handleUpdateCard(card.id, 'answer', e.target.value)}
-                placeholder="Answer"
-                className="col-span-3"
-              />
-            </div>
-          ))}
-          <Button onClick={handleAddCard} variant="outline">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Flashcard
-          </Button>
-        </div>
-        <Button onClick={handleSave}>Save Changes</Button>
+            ))}
+            <Button type="button" variant="outline" onClick={handleAddFlashcard} className="w-full mt-2">
+              Add Flashcard
+            </Button>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit">
+              Save
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

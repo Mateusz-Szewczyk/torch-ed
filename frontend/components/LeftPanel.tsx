@@ -38,7 +38,7 @@ export function LeftPanel() {
   }
 
   return (
-    <div className={`bg-background text-foreground border-r border-border transition-all duration-300 ${isPanelVisible ? 'w-64' : 'w-16'} flex flex-col`}>
+    <div className={`bg-background text-foreground border-r border-border transition-all duration-300 ${isPanelVisible ? 'w-64' : 'w-20'} flex flex-col`}>
       <div className="p-4 flex-grow">
         <h2 className={`text-xl font-semibold mb-4 ${isPanelVisible ? '' : 'sr-only'}`}>Menu</h2>
         <div className="space-y-4">
