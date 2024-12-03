@@ -1,5 +1,5 @@
 # tools.py
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple
 from langchain.tools import BaseTool
 from langchain_anthropic import ChatAnthropic
 from langchain_core.output_parsers import JsonOutputParser
@@ -85,7 +85,8 @@ class FlashcardGenerator(BaseTool):
             uwzględnij podaną romanizację/transliterację w pytaniu.
 
             Pomyśl o najlepszym sposobie sformatowania tych fiszek, jaka będzie najlepsza kombinacja pytań i odpowiedzi.
-
+            Proszę zastanów się również jaka powinna być nazwa zestawu fiszek, oraz jego opis.
+            
             Zwróć fiszki w dokładnie takim formacie JSON:
             [
                 {{
@@ -93,6 +94,13 @@ class FlashcardGenerator(BaseTool):
                     "answer": "string"    
                 }}
             ]
+            
+            Ostateczna odpowiedź powinna mieć taki format:
+            {{
+                topic: "string", #nazwa zestawu fiszek,
+                description: "string", #opis zestawu fiszek,
+                flashcards:[{{fiszki}}]
+            }}
             """)
 
         ])
@@ -122,10 +130,18 @@ class FlashcardGenerator(BaseTool):
                 "description": description,
                 "topic": topic
             })
-            flashcards = response  # Zakładam, że odpowiedź to lista słowników z 'question' i 'answer'
+
+            # Access dictionary keys using indexing
+            flashcards = response.get('flashcards', [])
+            topic = response.get('topic', 'Default Topic')  # Provide a default if not present
+            description = response.get('description', 'No description provided.')
 
             # Konwersja odpowiedzi do stringa JSON do zwrócenia
-            flashcards_json = json.dumps(flashcards, ensure_ascii=False)
+            flashcards_json = json.dumps({
+                "topic": topic,
+                "description": description,
+                "flashcards": flashcards
+            }, ensure_ascii=False)
 
             # Zapis fiszek do bazy danych
             db: Session = SessionLocal()

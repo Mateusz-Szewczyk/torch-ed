@@ -1,0 +1,158 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { ArrowLeft, RotateCcw } from 'lucide-react'
+
+interface Flashcard {
+  id?: number;
+  question: string;
+  answer: string;
+}
+
+interface Deck {
+  id: number;
+  name: string;
+  description?: string;
+  flashcards: Flashcard[];
+}
+
+interface StudyDeckProps {
+  deck: Deck;
+  onExit: () => void;
+}
+
+export function StudyDeck({ deck, onExit }: StudyDeckProps) {
+  const [currentCardIndex, setCurrentCardIndex] = useState(0)
+  const [isFlipped, setIsFlipped] = useState(false)
+  const [remainingCards, setRemainingCards] = useState<Flashcard[]>([])
+  const [visibleCard, setVisibleCard] = useState(deck.flashcards[0] || { question: '', answer: '' })
+
+  const currentCard = remainingCards[currentCardIndex] || { question: '', answer: '' };
+
+  useEffect(() => {
+    setRemainingCards([...deck.flashcards])
+  }, [deck])
+
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    if (!isFlipped) {
+      timeoutId = setTimeout(() => {
+        setVisibleCard(remainingCards[currentCardIndex] || { question: '', answer: '' });
+      }, 250); // Half of the flip animation duration
+    }
+    return () => clearTimeout(timeoutId);
+  }, [isFlipped, currentCardIndex, remainingCards]);
+
+  const handleFlip = () => {
+    setIsFlipped(!isFlipped)
+  }
+
+  const handleRating = (rating: 'easy' | 'good' | 'hard') => {
+    setIsFlipped(false);
+
+    setTimeout(() => {
+      const currentCard = remainingCards[currentCardIndex];
+      let updatedRemainingCards = remainingCards.filter((_, index) => index !== currentCardIndex);
+
+      if (rating === 'hard') {
+        updatedRemainingCards.splice(Math.min(currentCardIndex + 3, updatedRemainingCards.length), 0, currentCard);
+      } else if (rating === 'good') {
+        updatedRemainingCards.push(currentCard);
+      }
+
+      setRemainingCards(updatedRemainingCards);
+
+      if (updatedRemainingCards.length > 0) {
+        setCurrentCardIndex(currentCardIndex % updatedRemainingCards.length);
+      } else {
+        setCurrentCardIndex(-1);
+      }
+    }, 250); // Half of the flip animation duration
+  }
+
+  const resetDeck = () => {
+    setRemainingCards([...deck.flashcards])
+    setCurrentCardIndex(0)
+    setIsFlipped(false)
+  }
+
+  if (remainingCards.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <h2 className="text-2xl font-bold mb-4">No Flashcards Available</h2>
+        <p className="mb-4">This deck doesn't have any flashcards yet.</p>
+        <Button onClick={onExit} variant="outline">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Decks
+        </Button>
+      </div>
+    )
+  }
+
+  if (currentCardIndex === -1) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <h2 className="text-2xl font-bold mb-4">Congratulations!</h2>
+        <p className="mb-4">You've completed all the flashcards in this deck.</p>
+        <div className="flex space-x-4">
+          <Button onClick={resetDeck}>
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reset Deck
+          </Button>
+          <Button onClick={onExit} variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Decks
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      {/* Header */}
+      <header className="p-4 flex justify-start">
+        <Button onClick={onExit} variant="ghost">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Exit Study
+        </Button>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-grow flex flex-col items-center justify-center p-4 space-y-4">
+        <div className="mb-4 text-sm font-medium">
+          Card {currentCardIndex + 1} of {remainingCards.length}
+        </div>
+        <div className="w-80 h-64 [perspective:1000px]">
+          <Card
+            className={`w-full h-full cursor-pointer transition-all duration-500 [transform-style:preserve-3d] ${
+              isFlipped ? '[transform:rotateY(180deg)]' : ''
+            }`}
+            onClick={handleFlip}
+          >
+            <CardContent className="absolute w-full h-full flex items-center justify-center p-4 [backface-visibility:hidden]">
+              <p className="text-xl font-semibold">{visibleCard?.question}</p>
+            </CardContent>
+            <CardContent className="absolute w-full h-full flex items-center justify-center p-4 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              <p className="text-xl font-semibold">{visibleCard?.answer}</p>
+            </CardContent>
+          </Card>
+        </div>
+        {/* Rating Buttons */}
+        <div className="h-20 flex justify-center items-center">
+          {isFlipped && (
+            <div className="flex space-x-4">
+              <Button onClick={() => handleRating('hard')} className="bg-red-500 hover:bg-red-600 text-white">Hard</Button>
+              <Button onClick={() => handleRating('good')} className="bg-blue-300 hover:bg-blue-400 text-gray-800">Good</Button>
+              <Button onClick={() => handleRating('easy')} className="bg-green-500 hover:bg-green-600 text-white">Easy</Button>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
+

@@ -4,6 +4,7 @@
 
 import * as RadixDialog from '@radix-ui/react-dialog'
 import { ReactNode } from 'react'
+import { cn } from "@/lib/utils" // Upewnij się, że masz ten utility
 
 interface DialogProps {
   children: ReactNode
@@ -21,11 +22,12 @@ export const Dialog = ({ children, open, onOpenChange }: DialogProps) => {
 
 interface DialogTriggerProps {
   children: ReactNode
+  className?: string
 }
 
-export const DialogTrigger = ({ children }: DialogTriggerProps) => {
+export const DialogTrigger = ({ children, className }: DialogTriggerProps) => {
   return (
-    <RadixDialog.Trigger asChild>
+    <RadixDialog.Trigger asChild className={className}>
       {children}
     </RadixDialog.Trigger>
   )
@@ -33,16 +35,36 @@ export const DialogTrigger = ({ children }: DialogTriggerProps) => {
 
 interface DialogContentProps {
   children: ReactNode
+  className?: string
 }
 
-export const DialogContent = ({ children }: DialogContentProps) => {
+export const DialogContent = ({ children, className }: DialogContentProps) => {
   return (
     <RadixDialog.Portal>
-      <RadixDialog.Overlay className="fixed inset-0 bg-black bg-opacity-50" />
-      <RadixDialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto">
+      <RadixDialog.Overlay
+        className={cn(
+          "fixed inset-0 bg-black/50",
+          "dark:bg-black/70"
+        )}
+      />
+      <RadixDialog.Content
+        className={cn(
+          "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
+          "bg-background text-foreground",
+          "dark:bg-background dark:text-foreground",
+          "p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto",
+          "shadow-lg",
+          className
+        )}
+      >
         {children}
-        {/* Dodanie przycisku zamykającego dialog */}
-        <RadixDialog.Close className="absolute top-2 right-2 text-gray-500 hover:text-gray-700">
+        <RadixDialog.Close
+          className={cn(
+            "absolute top-2 right-2",
+            "text-muted-foreground hover:text-foreground",
+            "dark:text-muted-foreground dark:hover:text-foreground"
+          )}
+        >
           ×
         </RadixDialog.Close>
       </RadixDialog.Content>
@@ -52,11 +74,12 @@ export const DialogContent = ({ children }: DialogContentProps) => {
 
 interface DialogHeaderProps {
   children: ReactNode
+  className?: string
 }
 
-export const DialogHeader = ({ children }: DialogHeaderProps) => {
+export const DialogHeader = ({ children, className }: DialogHeaderProps) => {
   return (
-    <div className="mb-4">
+    <div className={cn("mb-4", className)}>
       {children}
     </div>
   )
@@ -64,11 +87,19 @@ export const DialogHeader = ({ children }: DialogHeaderProps) => {
 
 interface DialogTitleProps {
   children: ReactNode
+  className?: string
 }
 
-export const DialogTitle = ({ children }: DialogTitleProps) => {
+export const DialogTitle = ({ children, className }: DialogTitleProps) => {
   return (
-    <RadixDialog.Title className="text-lg font-semibold">
+    <RadixDialog.Title
+      className={cn(
+        "text-lg font-semibold",
+        "text-foreground",
+        "dark:text-foreground",
+        className
+      )}
+    >
       {children}
     </RadixDialog.Title>
   )

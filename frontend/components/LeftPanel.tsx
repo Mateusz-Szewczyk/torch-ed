@@ -1,77 +1,31 @@
+// components/LeftPanel.tsx
+
 'use client'
 
 import { useState } from 'react'
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { BookOpen, Upload, File, X, MessageSquare, ChevronLeft, ChevronRight, UserCircle, Settings } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, UserCircle, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { LoginRegisterDialog } from "@/components/LoginRegisterDialog"
 import { SettingsDialog } from "@/components/SettingsDialog"
 import { useTheme } from '@/contexts/ThemeContext'
-
-type UploadedFile = {
-  id: string;
-  name: string;
-  size: number;
-}
+import ManageFileDialog from '@/components/ManageFileDialog' // Import the new component
 
 export function LeftPanel() {
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isPanelVisible, setIsPanelVisible] = useState(true)
   const { theme } = useTheme()
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files) {
-      const newFiles = Array.from(files).map(file => ({
-        id: Math.random().toString(36).substr(2, 9),
-        name: file.name,
-        size: file.size
-      }))
-      setUploadedFiles(prev => [...prev, ...newFiles])
-    }
-  }
-
-  const removeFile = (id: string) => {
-    setUploadedFiles(prev => prev.filter(file => file.id !== id))
-  }
+  // Zakładam, że masz dostęp do user_id, np. z kontekstu użytkownika
+  const userId = 'user-123' // Przykładowe ID, zastąp rzeczywistym
 
   return (
-    <div className={`bg-background text-foreground border-r border-border transition-all duration-300 ${isPanelVisible ? 'w-64' : 'w-20'} flex flex-col`}>
+    <div className={`bg-card text-foreground border-r border-border transition-all duration-300 ${isPanelVisible ? 'w-64' : 'w-20'} flex flex-col`}>
       <div className="p-4 flex-grow">
         <h2 className={`text-xl font-semibold mb-4 ${isPanelVisible ? '' : 'sr-only'}`}>Menu</h2>
         <div className="space-y-4">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="w-full justify-start">
-                <File className="h-4 w-4" />
-                {isPanelVisible && <span className="ml-2">Uploaded Files</span>}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-background border-border">
-              <DialogHeader>
-                <DialogTitle className="text-foreground">Uploaded Files</DialogTitle>
-              </DialogHeader>
-              <ScrollArea className="h-[300px] w-full pr-4">
-                {uploadedFiles.map(file => (
-                  <div key={file.id} className="flex items-center justify-between py-2">
-                    <span className="truncate text-foreground">{file.name}</span>
-                    <Button variant="ghost" size="sm" onClick={() => removeFile(file.id)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </ScrollArea>
-              <Button asChild className="w-full mt-4">
-                <label>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload New File
-                  <input type="file" className="hidden" onChange={handleFileUpload} multiple />
-                </label>
-              </Button>
-            </DialogContent>
-          </Dialog>
+          {/* Use ManageFileDialog component */}
+          <ManageFileDialog userId={userId} isPanelVisible={isPanelVisible} />
+
           <Button asChild variant="outline" className="w-full justify-start">
             <Link href="/flashcards">
               <BookOpen className="h-4 w-4" />
@@ -80,8 +34,7 @@ export function LeftPanel() {
           </Button>
           <Button asChild variant="outline" className="w-full justify-start">
             <Link href="/">
-              <MessageSquare className="h-4 w-4" />
-              {isPanelVisible && <span className="ml-2">Chat</span>}
+              <span className="ml-2">Chat</span>
             </Link>
           </Button>
         </div>
@@ -113,4 +66,3 @@ export function LeftPanel() {
     </div>
   )
 }
-

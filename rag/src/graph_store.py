@@ -1,31 +1,36 @@
+# graph_knowledge.py
+
+from itertools import combinations
 from neo4j import GraphDatabase
 from .config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 from typing import List, Dict, Any
+import logging
 
 # Initialize the Neo4j driver
-driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 def ensure_fulltext_indexes():
     with driver.session() as session:
-        # Check existing indexes using the updated Neo4j command
         existing_indexes = session.run("SHOW INDEXES YIELD name RETURN name")
         index_names = [record["name"] for record in existing_indexes]
 
-        # Create 'entityFullTextIndex' if it doesn't exist
         if 'entityFullTextIndex' not in index_names:
             session.run("""
                 CREATE FULLTEXT INDEX entityFullTextIndex FOR (n:Entity) ON EACH [n.name, n.type];
             """)
-            print("Created 'entityFullTextIndex' full-text index.")
+            logger.info("Created 'entityFullTextIndex' full-text index.")
 
-        # Create 'chunkTextIndex' if it doesn't exist
         if 'chunkTextIndex' not in index_names:
             session.run("""
                 CREATE FULLTEXT INDEX chunkTextIndex FOR (n:Chunk) ON EACH [n.text];
             """)
-            print("Created 'chunkTextIndex' full-text index.")
+            logger.info("Created 'chunkTextIndex' full-text index.")
 
-def create_graph_entries(chunks, extracted_metadatas, user_id):
+def create_graph_entries(chunks: List[str], extracted_metadatas: List[Dict], user_id: str, file_name: str):
     """
     Creates nodes and relationships in the graph database based on text chunks and extracted metadata.
 
@@ -33,6 +38,7 @@ def create_graph_entries(chunks, extracted_metadatas, user_id):
         chunks (List[str]): List of text chunks.
         extracted_metadatas (List[dict]): List of dictionaries with extracted metadata for each chunk.
         user_id (str): User identifier to which the data belongs.
+        file_name (str): Name of the file associated with the chunks.
 
     Returns:
         None
@@ -43,15 +49,16 @@ def create_graph_entries(chunks, extracted_metadatas, user_id):
 
     with driver.session() as session:
         for i, (chunk, metadata) in enumerate(zip(chunks, extracted_metadatas)):
-            # Create Chunk node with user_id property
+            # Create Chunk node with user_id and file_name properties
             session.run(
                 """
-                MERGE (c:Chunk {id: $chunk_id, user_id: $user_id})
+                MERGE (c:Chunk {id: $chunk_id, user_id: $user_id, file_name: $file_name})
                 SET c.text = $text
                 """,
                 chunk_id=str(i),
                 text=chunk,
-                user_id=user_id
+                user_id=user_id,
+                file_name=file_name
             )
 
             for entity_type in ['names', 'locations', 'dates', 'key_terms']:
@@ -75,14 +82,18 @@ def create_graph_entries(chunks, extracted_metadatas, user_id):
                         # Create relationship between Chunk and Entity
                         session.run(
                             """
-                            MATCH (c:Chunk {id: $chunk_id, user_id: $user_id})
+                            MATCH (c:Chunk {id: $chunk_id, user_id: $user_id, file_name: $file_name})
                             MATCH (e:Entity {name: $entity, user_id: $user_id})
                             MERGE (c)-[:CONTAINS_ENTITY]->(e)
                             """,
                             chunk_id=str(i),
                             entity=entity.strip(),
-                            user_id=user_id
+                            user_id=user_id,
+                            file_name=file_name
                         )
+
+    logger.info(f"Graph entries created for user_id: {user_id}, file_name: {file_name}")
+
 
 def create_entity_relationships(extracted_metadatas, user_id):
     """
@@ -148,6 +159,42 @@ def search_graph_store(query: str, user_id: str = None) -> List[Dict[str, Any]]:
         print(f"An error occurred while searching the graph store: {e}")
         return []
 
+
+def delete_knowledge_from_graph(user_id: str, file_name: str) -> bool:
+    """
+    Deletes all Chunk nodes and their relationships associated with a given user_id and file_name.
+
+    Args:
+        user_id (str): The user's unique identifier.
+        file_name (str): The name of the file whose knowledge is to be deleted.
+
+    Returns:
+        bool: True if deletion was successful, False otherwise.
+    """
+    try:
+        with driver.session() as session:
+            result = session.run(
+                """
+                MATCH (c:Chunk {user_id: $user_id, file_name: $file_name})
+                DETACH DELETE c
+                RETURN COUNT(c) AS deleted_count
+                """,
+                user_id=user_id,
+                file_name=file_name
+            )
+            record = result.single()
+            deleted_count = record["deleted_count"] if record else 0
+            if deleted_count > 0:
+                logger.info(f"Deleted {deleted_count} Chunk nodes from Neo4j for user_id: {user_id}, file_name: {file_name}")
+                return True
+            else:
+                logger.warning(f"No Chunk nodes found in Neo4j for user_id: {user_id}, file_name: {file_name}")
+                return False
+    except Exception as e:
+        logger.error(f"Error deleting knowledge from Neo4j: {e}")
+        return False
+
+
 def _execute_entity_query(session, params: Dict[str, Any]) -> List[Dict[str, Any]]:
     query = _build_entity_query(params)
     results = session.run(query, params)
@@ -207,11 +254,11 @@ def _build_chunk_query(params: Dict[str, Any]) -> str:
     if params.get('user_id'):
         query += "WHERE c.user_id = $user_id\n"
     query += """
-    WITH c, score
-    ORDER BY score DESC
-    RETURN c.text AS chunk_text, score
-    LIMIT 10
-    """
+                WITH c, score
+                ORDER BY score DESC
+                RETURN c.text AS chunk_text, score
+                LIMIT 10
+             """
     return query
 
 def _process_entity_result(record) -> Dict[str, Any]:
@@ -241,5 +288,4 @@ def _process_chunk_result(record) -> Dict[str, Any]:
         'source': 'chunk_text'
     }
 
-# Don't forget to import combinations
 from itertools import combinations

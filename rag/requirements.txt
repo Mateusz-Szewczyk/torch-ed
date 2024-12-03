@@ -29,3 +29,12 @@ aiofiles
 sqlalchemy
 psycopg2-binary
 python-dotenv
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-dotenv
+aiofiles
+sentence-transformers
+torch
+requests

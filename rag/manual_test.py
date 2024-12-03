@@ -1,5 +1,5 @@
 # manual_test.py
-from rag.file_processor.pdf_processor import PDFProcessor
+from rag.src.file_processor import PDFProcessor
 
 def manual_test():
     pdf_path = 'uploads/test.pdf'

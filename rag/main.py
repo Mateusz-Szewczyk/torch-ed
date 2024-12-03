@@ -1,82 +1,72 @@
-from sentence_transformers import SentenceTransformer
-from src.search_engine import search_and_rerank
-from file_processor.pdf_processor import PDFProcessor
-from src.chunking import create_chunks
+# main.py
 
-def display_results(results):
-    print("\nWyniki wyszukiwania i rerankingu:")
-    for result in results:
-        source = result.get('source', 'unknown')
-        content = result.get('content', '')
-        similarity_score = result.get('similarity_score', 0)
-        normalized_score = result.get('normalized_score', 0)
-        metadata = result.get('metadata', {})
+import os
+import logging
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-        print(f"Źródło: {source}")
-        print(f"Treść:\n{content}\n")
+# Importuj modele i bazę danych
+from src.models import Base, ORMFile, Deck, Flashcard
+from src.routers import files, decks, flashcards, query
+from src.database import engine
 
-        if metadata:
-            if 'entities' in metadata and metadata['entities']:
-                print(f"Encje: {metadata['entities']}")
-            if 'relations' in metadata and metadata['relations']:
-                print(f"Relacje: {metadata['relations']}")
-        print(f"Wynik podobieństwa: {similarity_score:.4f}")
-        print(f"Wynik znormalizowany: {normalized_score:.4f}")
-        print("-" * 40)
+# Inicjalizacja logowania
+logging.basicConfig(
+    level=logging.INFO,  # Ustaw na DEBUG dla bardziej szczegółowych logów
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
+# Inicjalizacja bazy danych
+Base.metadata.create_all(bind=engine)
+logger.info("Database tables created.")
 
-def main():
-    # # Sample data setup (replace with actual data)
-    pdfprocessor = PDFProcessor()
-    text = pdfprocessor.process_pdf('./tests/test_files/test.pdf', start_page=7, end_page=90)
-    #
-    if text is None:
-        print("Error: Failed to process PDF.")
-        return
+# Inicjalizacja FastAPI aplikacji
+app = FastAPI(
+    title="RAG Knowledge Base API",
+    description="API for uploading documents, querying a knowledge base using RAG, and managing flashcards and decks.",
+    version="1.0.0"
+)
 
-    user_id = 'user123'
-    file_description = 'To jest książka o psychologii'
-    category = 'psychologia'
+# Dodanie CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Zaktualizuj URL frontend jeśli potrzebne
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # # Chunking the text
-    chunks = create_chunks(text)
-    embeddings = []
-    extracted_metadatas = []
+# Event Handlers
+@app.on_event("startup")
+def on_startup():
+    logger.info("Application startup complete.")
 
-    # Initialize the embedding model
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    #
-    # # Use tqdm to track progress through the chunks
-    # for chunk in tqdm(chunks, desc="Processing chunks", unit="chunk"):
-    #     # Generate embeddings
-    #     embedding = embedding_model.encode(chunk)
-    #     embeddings.append(embedding)
-    #
-    #     # Extract metadata using LLM
-    #     metadata = extract_metadata_using_llm(chunk, category)
-    #     extracted_metadatas.append(metadata)
-    #
-    # # Create vector store (after metadata extraction)
-    # create_vector_store(chunks, embeddings, user_id, file_description, category, extracted_metadatas)
-    #
-    # # Create graph entries (nodes and relationships)
-    # create_graph_entries(chunks, extracted_metadatas, user_id)
-    # create_entity_relationships(extracted_metadatas, user_id)
-    #
-    # # Optional: print or log final metadata for debugging purposes
-    # for chunk, metadata in zip(chunks, extracted_metadatas):
-    #     print("Chunk: ", chunk)
-    #     print("Metadata: ", metadata)
+@app.on_event("shutdown")
+def on_shutdown():
+    logger.info("Application is shutting down.")
 
-    # Now, use the search engine to query the data
-    query = "Wytłumacz mi czym jest System 1 i System 2"
-    results = search_and_rerank(query, embedding_model, user_id, n_results=5)
+# Endpoint zdrowia
+@app.get("/health")
+async def health_check():
+    logger.info("Health check endpoint was called.")
+    return {"status": "OK"}
 
-    # Print the results
-    display_results(results)
+# Root endpoint
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 
+# Includowanie routerów
+app.include_router(files.router, prefix="/api/files", tags=["Files"])
+app.include_router(decks.router, prefix="/api/decks", tags=["Decks"])
+app.include_router(flashcards.router, prefix="/api/flashcards", tags=["Flashcards"])
+app.include_router(query.router, prefix="/api/query", tags=["Query"])
 
-
-
-if __name__ == '__main__':
-    main()
+# Uruchomienie aplikacji
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8043, reload=True)

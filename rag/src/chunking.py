@@ -1,10 +1,12 @@
 import logging
 import re
+from typing import List
 
 # Initialize logger
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-def create_chunks(text, chunk_size=8, overlap=2):
+def create_chunks(text: str, chunk_size: int = 8, overlap: int = 2) -> List[str]:
     """
     Splits the input text into overlapping chunks of sentences.
 
@@ -34,7 +36,7 @@ def create_chunks(text, chunk_size=8, overlap=2):
         logger.warning(f"NLTK chunking failed: {e}. Falling back to simple chunking.")
         return simple_chunking(text, chunk_size, overlap)
 
-def nltk_chunking(text, chunk_size, overlap):
+def nltk_chunking(text: str, chunk_size: int, overlap: int) -> List[str]:
     try:
         import nltk
         from nltk.tokenize import sent_tokenize
@@ -42,7 +44,6 @@ def nltk_chunking(text, chunk_size, overlap):
     except LookupError:
         logger.warning("NLTK 'punkt' resource not found. Downloading now...")
         nltk.download('punkt', quiet=True)
-        nltk.download('punkt_tab')
     except ImportError:
         logger.error("NLTK is not installed. Falling back to simple chunking.")
         return simple_chunking(text, chunk_size, overlap)
@@ -50,12 +51,12 @@ def nltk_chunking(text, chunk_size, overlap):
     sentences = sent_tokenize(text)
     return create_chunks_from_sentences(sentences, chunk_size, overlap)
 
-def simple_chunking(text, chunk_size, overlap):
+def simple_chunking(text: str, chunk_size: int, overlap: int) -> List[str]:
     # Simple sentence splitting based on common sentence-ending punctuation
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return create_chunks_from_sentences(sentences, chunk_size, overlap)
 
-def create_chunks_from_sentences(sentences, chunk_size, overlap):
+def create_chunks_from_sentences(sentences: List[str], chunk_size: int, overlap: int) -> List[str]:
     num_sentences = len(sentences)
 
     if num_sentences == 0:

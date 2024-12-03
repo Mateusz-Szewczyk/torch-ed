@@ -1,28 +1,43 @@
-'use client'
+// SettingsDialog.tsx
 
-import { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { useTheme } from '@/contexts/ThemeContext'
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { useTheme } from '@/contexts/ThemeContext';
 
 export function SettingsDialog({ children }: { children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false)
-  const { theme, toggleTheme } = useTheme()
-  const [language, setLanguage] = useState('en')
+  const [isOpen, setIsOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
+  const [language, setLanguage] = useState('en');
+
+  useEffect(() => {
+    console.log('Current theme:', theme);
+  }, [theme]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-background text-foreground">
+      <DialogContent
+        className={`
+          sm:max-w-[425px] 
+          bg-background text-foreground
+          dark:bg-background dark:text-foreground
+        `}
+      >
         <DialogHeader>
-          <DialogTitle className="text-foreground">Settings</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="flex items-center justify-between">
-            <Label htmlFor="dark-mode" className="flex flex-col space-y-1">
+            <Label
+              htmlFor="dark-mode"
+              className="flex flex-col space-y-1"
+            >
               <span>Dark Mode</span>
               <span className="font-normal text-sm text-muted-foreground">
                 Toggle dark mode on or off
@@ -42,8 +57,6 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
               </SelectTrigger>
               <SelectContent position="popper">
                 <SelectItem value="en">English</SelectItem>
-                <SelectItem value="es">Español</SelectItem>
-                <SelectItem value="fr">Français</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -51,6 +64,5 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
         <Button onClick={() => setIsOpen(false)}>Save Changes</Button>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
-

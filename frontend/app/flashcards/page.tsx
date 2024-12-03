@@ -1,37 +1,38 @@
-// components/FlashcardsPage.tsx
-
 'use client'
 
 import { useState, useEffect } from 'react'
 import { EditDeckDialog } from '@/components/EditDeckDialog'
-import { AddFlashcardDialog } from '@/components/AddFlashcardDialog'
 import axios from 'axios'
 import { Button } from "@/components/ui/button"
 import { PlusCircle, BookOpen, Loader2, Info, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CustomTooltip } from '@/components/CustomTooltip'
+import { StudyDeck } from '@/components/StudyDeck'
 
 interface Flashcard {
-  id: number | null
-  question: string
-  answer: string
+  id?: number;
+  question: string;
+  answer: string;
 }
 
 interface Deck {
-  id: number
-  name: string
-  description?: string
-  flashcards: Flashcard[]
+  id: number;
+  name: string;
+  description?: string;
+  flashcards: Flashcard[];
 }
 
 export default function FlashcardsPage() {
   const [decks, setDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const [studyingDeck, setStudyingDeck] = useState<Deck | null>(null)
 
   const fetchDecks = async () => {
+    setLoading(true)
+    setError(null)
     try {
-      const response = await axios.get<Deck[]>('http://localhost:8043/decks/')
+      const response = await axios.get<Deck[]>('http://localhost:8043/api/decks/')
       setDecks(response.data)
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response) {
@@ -56,24 +57,48 @@ export default function FlashcardsPage() {
         const createDeckResponse = await axios.post<Deck>('http://localhost:8043/decks/', {
           name: updatedDeck.name,
           description: updatedDeck.description,
-        })
-        const newDeck = createDeckResponse.data
-        setDecks(prevDecks => [...prevDecks, newDeck])
+          flashcards: updatedDeck.flashcards.map(fc => ({
+            question: fc.question,
+            answer: fc.answer
+          })),
+        });
+        const newDeck = createDeckResponse.data;
+        setDecks(prevDecks => [...prevDecks, newDeck]);
       } else {
         // Aktualizacja istniejącego zestawu (deck)
-        await axios.put(`http://localhost:8043/decks/${updatedDeck.id}/`, {
+        const updateDeckResponse = await axios.put<Deck>(`http://localhost:8043/decks/${updatedDeck.id}/`, {
           name: updatedDeck.name,
           description: updatedDeck.description,
-        })
+          flashcards: updatedDeck.flashcards.map(fc => {
+            if (fc.id) {
+              return {
+                id: fc.id,
+                question: fc.question,
+                answer: fc.answer
+              };
+            } else {
+              return {
+                question: fc.question,
+                answer: fc.answer
+              };
+            }
+          }),
+        });
+        const updatedDeckFromServer = updateDeckResponse.data;
         setDecks(prevDecks => prevDecks.map(deck =>
-          deck.id === updatedDeck.id ? { ...deck, name: updatedDeck.name, description: updatedDeck.description } : deck
-        ))
+          deck.id === updatedDeckFromServer.id ? updatedDeckFromServer : deck
+        ));
       }
-    } catch (error) {
-      console.error("Error saving deck:", error)
-      setError('An error occurred while saving the deck.')
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error) && error.response) {
+        console.error("Error saving deck:", error.response.data);
+        setError(`Error: ${JSON.stringify(error.response.data)}`);
+      } else {
+        console.error("Error saving deck:", error);
+        setError('An error occurred while saving the deck.');
+      }
     }
-  }
+  };
 
   const handleDelete = async (deckId: number) => {
     try {
@@ -85,16 +110,12 @@ export default function FlashcardsPage() {
     }
   }
 
-  const handleAddFlashcard = async (deckId: number, newFlashcard: Omit<Flashcard, 'id'>) => {
-    try {
-      const response = await axios.post<Flashcard>(`http://localhost:8043/decks/${deckId}/flashcards/`, newFlashcard)
-      setDecks(prevDecks => prevDecks.map(deck =>
-        deck.id === deckId ? { ...deck, flashcards: [...deck.flashcards, response.data] } : deck
-      ))
-    } catch (error) {
-      console.error("Error adding flashcard:", error)
-      setError('An error occurred while adding the flashcard.')
-    }
+  const handleStudy = (deck: Deck) => {
+    setStudyingDeck(deck);
+  }
+
+  const handleExitStudy = () => {
+    setStudyingDeck(null);
   }
 
   if (loading) {
@@ -124,18 +145,22 @@ export default function FlashcardsPage() {
     )
   }
 
+  if (studyingDeck) {
+    return <StudyDeck deck={studyingDeck} onExit={handleExitStudy} />;
+  }
+
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="text-center mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold">Flashcards</h1>
-        <CustomTooltip
-          content='Need Flashcards? Chat can help you produce study-ready flashcards in seconds. Sample Request: "Generate 10 flashcards to help me with my math exam preparation."'
-        >
-          <Button variant="ghost" size="icon" className="ml-2">
-            <Info className="h-4 w-4" />
-            <span className="sr-only">More information</span>
-          </Button>
-        </CustomTooltip>
+          <CustomTooltip
+            content='Need Flashcards? Chat can help you produce study-ready flashcards in seconds. Sample Request: "Generate 10 flashcards to help me with my math exam preparation."'
+          >
+            <Button variant="ghost" size="icon" className="ml-2">
+              <Info className="h-4 w-4" />
+              <span className="sr-only">More information</span>
+            </Button>
+          </CustomTooltip>
       </div>
       {decks.length === 0 ? (
         <Card className="w-full">
@@ -192,13 +217,8 @@ export default function FlashcardsPage() {
                 <CardContent>
                   <p className="text-sm text-muted-foreground">{deck.flashcards.length} flashcards</p>
                 </CardContent>
-                <CardFooter className="mt-auto flex space-x-2">
-                  <AddFlashcardDialog
-                    deckId={deck.id}
-                    onAddFlashcard={handleAddFlashcard}
-                    trigger={<Button variant="outline" size="sm">Add Flashcard</Button>}
-                  />
-                  <Button variant="ghost" size="sm">
+                <CardFooter className="mt-auto">
+                  <Button variant="ghost" size="sm" className="ml-2" onClick={() => handleStudy(deck)}>
                     Study <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 </CardFooter>

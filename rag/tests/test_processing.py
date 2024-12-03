@@ -1,16 +1,15 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import os
-import sys
 import json
 from sentence_transformers import SentenceTransformer
 
 from rag.src.chunking import create_chunks
 from rag.src.metadata_extraction import MetadataExtractor
-from rag.src.vector_store import create_vector_store, load_vector_store, search_vector_store
+from rag.src.vector_store import create_vector_store, search_vector_store
 from rag.src.graph_store import create_graph_entries, create_entity_relationships
 from rag.src.config import EMBEDDING_MODEL_NAME
-from rag.file_processor.pdf_processor import PDFProcessor
+from rag.src.file_processor import PDFProcessor
 
 class TestDataProcessing(unittest.TestCase):
 

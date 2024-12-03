@@ -1,6 +1,8 @@
+// components/Chat.tsx
+
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,10 +20,19 @@ interface QueryResponse {
   answer: string;
 }
 
-export default function Chat() {
+interface ChatProps {
+  userId: string;
+}
+
+const Chat: React.FC<ChatProps> = ({ userId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8043/api';
 
   const createFormData = (data: { user_id: string; query: string }): FormData => {
     const formData = new FormData();
@@ -32,7 +43,7 @@ export default function Chat() {
 
   const handleSend = async () => {
     if (input.trim()) {
-      const currentInput = input; // Zapisz aktualną wartość input
+      const currentInput = input.trim(); // Zapisz aktualną wartość input
       const userMessage: Message = {
         id: Date.now(),
         text: currentInput,
@@ -43,16 +54,20 @@ export default function Chat() {
 
       try {
         setIsLoading(true);
-        const response = await fetch('http://localhost:8043/query/', {
+        setError(null);
+        setSuccessMessage(null);
+
+        const response = await fetch(`${API_BASE_URL}/query/`, {
           method: 'POST',
           body: createFormData({
-            user_id: 'user123',
-            query: currentInput, // Użyj zapisanej wartości input
+            user_id: userId,
+            query: currentInput,
           }),
         });
 
         if (!response.ok) {
-          throw new Error(`Błąd sieciowy: ${response.statusText}`);
+          const errorData = await response.json();
+          throw new Error(errorData.detail || `Błąd sieciowy: ${response.statusText}`);
         }
 
         const data: QueryResponse = await response.json();
@@ -65,6 +80,7 @@ export default function Chat() {
         };
 
         setMessages((prevMessages) => [...prevMessages, botMessage]);
+        setSuccessMessage('Odpowiedź otrzymana pomyślnie.');
       } catch (error: unknown) {
         console.error('Błąd podczas komunikacji z API:', error);
 
@@ -80,15 +96,28 @@ export default function Chat() {
           sender: 'bot',
         };
         setMessages((prevMessages) => [...prevMessages, errorMessage]);
+        setError(errorMessageText);
       } finally {
         setIsLoading(false);
       }
     }
   };
 
+  // Funkcja do przewijania do najnowszej wiadomości
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  };
+
+  // Przewijanie do dołu przy każdej zmianie wiadomości
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
+
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         <div className="space-y-4">
           {messages.map((message) => (
             <div
@@ -133,7 +162,21 @@ export default function Chat() {
             <span className="sr-only">Wyślij</span>
           </Button>
         </div>
+        {/* Komunikat sukcesu */}
+        {successMessage && (
+          <p className="mt-2 text-sm text-green-600">
+            {successMessage}
+          </p>
+        )}
+        {/* Komunikat błędu */}
+        {error && (
+          <p className="mt-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );
 }
+
+export default Chat;
