@@ -59,6 +59,7 @@ class UploadResponse(BaseModel):
 class UploadedFileRead(BaseModel):
     id: int
     name: str
+    description: Optional[str] = None  # Opcjonalne pole
 
     class Config:
         orm_mode = True

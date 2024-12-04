@@ -1,9 +1,13 @@
-'use client'
+// components/StudyDeck.tsx
 
-import { useState, useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, RotateCcw } from 'lucide-react'
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next'; // Importujemy hook useTranslation
 
 interface Flashcard {
   id?: number;
@@ -24,30 +28,30 @@ interface StudyDeckProps {
 }
 
 export function StudyDeck({ deck, onExit }: StudyDeckProps) {
-  const [currentCardIndex, setCurrentCardIndex] = useState(0)
-  const [isFlipped, setIsFlipped] = useState(false)
-  const [remainingCards, setRemainingCards] = useState<Flashcard[]>([])
-  const [visibleCard, setVisibleCard] = useState(deck.flashcards[0] || { question: '', answer: '' })
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [remainingCards, setRemainingCards] = useState<Flashcard[]>([]);
+  const [visibleCard, setVisibleCard] = useState(deck.flashcards[0] || { question: '', answer: '' });
 
-  const currentCard = remainingCards[currentCardIndex] || { question: '', answer: '' };
+  const { t } = useTranslation(); // Inicjalizacja hooka tłumaczeń
 
   useEffect(() => {
-    setRemainingCards([...deck.flashcards])
-  }, [deck])
+    setRemainingCards([...deck.flashcards]);
+  }, [deck]);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     if (!isFlipped) {
       timeoutId = setTimeout(() => {
         setVisibleCard(remainingCards[currentCardIndex] || { question: '', answer: '' });
-      }, 250); // Half of the flip animation duration
+      }, 250); // Pół czasu trwania animacji flip
     }
     return () => clearTimeout(timeoutId);
-  }, [isFlipped, currentCardIndex, remainingCards]);
+  }, [isFlipped, currentCardIndex, remainingCards, t]);
 
   const handleFlip = () => {
-    setIsFlipped(!isFlipped)
-  }
+    setIsFlipped(!isFlipped);
+  };
 
   const handleRating = (rating: 'easy' | 'good' | 'hard') => {
     setIsFlipped(false);
@@ -69,47 +73,46 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       } else {
         setCurrentCardIndex(-1);
       }
-    }, 250); // Half of the flip animation duration
-  }
+    }, 250); // Pół czasu trwania animacji flip
+  };
 
   const resetDeck = () => {
-    setRemainingCards([...deck.flashcards])
-    setCurrentCardIndex(0)
-    setIsFlipped(false)
-  }
+    setRemainingCards([...deck.flashcards]);
+    setCurrentCardIndex(0);
+    setIsFlipped(false);
+  };
 
   if (remainingCards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
-        <h2 className="text-2xl font-bold mb-4">No Flashcards Available</h2>
-        <p className="mb-4">This deck doesn't have any flashcards yet.</p>
+        <h2 className="text-2xl font-bold mb-4">{t('no_flashcards_available')}</h2>
+        <p className="mb-4">{t('deck_has_no_flashcards')}</p>
         <Button onClick={onExit} variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Decks
+          {t('back_to_decks')}
         </Button>
       </div>
-    )
+    );
   }
 
   if (currentCardIndex === -1) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
-        <h2 className="text-2xl font-bold mb-4">Congratulations!</h2>
-        <p className="mb-4">You've completed all the flashcards in this deck.</p>
+        <h2 className="text-2xl font-bold mb-4">{t('congratulations')}</h2>
+        <p className="mb-4">{t('completed_flashcards')}</p>
         <div className="flex space-x-4">
           <Button onClick={resetDeck}>
             <RotateCcw className="mr-2 h-4 w-4" />
-            Reset Deck
+            {t('reset_deck')}
           </Button>
           <Button onClick={onExit} variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Decks
+            {t('back_to_decks')}
           </Button>
         </div>
       </div>
-    )
+    );
   }
-
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -117,14 +120,14 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       <header className="p-4 flex justify-start">
         <Button onClick={onExit} variant="ghost">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Exit Study
+          {t('exit_study')}
         </Button>
       </header>
 
       {/* Main Content */}
       <main className="flex-grow flex flex-col items-center justify-center p-4 space-y-4">
         <div className="mb-4 text-sm font-medium">
-          Card {currentCardIndex + 1} of {remainingCards.length}
+          {t('card_counter', { current: currentCardIndex + 1, total: remainingCards.length })}
         </div>
         <div className="w-80 h-64 [perspective:1000px]">
           <Card
@@ -145,14 +148,19 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
         <div className="h-20 flex justify-center items-center">
           {isFlipped && (
             <div className="flex space-x-4">
-              <Button onClick={() => handleRating('hard')} className="bg-red-500 hover:bg-red-600 text-white">Hard</Button>
-              <Button onClick={() => handleRating('good')} className="bg-blue-300 hover:bg-blue-400 text-gray-800">Good</Button>
-              <Button onClick={() => handleRating('easy')} className="bg-green-500 hover:bg-green-600 text-white">Easy</Button>
+              <Button onClick={() => handleRating('hard')} className="bg-red-500 hover:bg-red-600 text-white">
+                {t('hard')}
+              </Button>
+              <Button onClick={() => handleRating('good')} className="bg-blue-300 hover:bg-blue-400 text-gray-800">
+                {t('good')}
+              </Button>
+              <Button onClick={() => handleRating('easy')} className="bg-green-500 hover:bg-green-600 text-white">
+                {t('easy')}
+              </Button>
             </div>
           )}
         </div>
       </main>
     </div>
-  )
+  );
 }
-

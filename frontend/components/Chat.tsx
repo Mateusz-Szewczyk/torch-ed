@@ -1,5 +1,3 @@
-// components/Chat.tsx
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -7,6 +5,7 @@ import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTranslation } from 'react-i18next';
 
 type Message = {
   id: number;
@@ -32,7 +31,8 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8043/api';
+  const { t } = useTranslation();
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
 
   const createFormData = (data: { user_id: string; query: string }): FormData => {
     const formData = new FormData();
@@ -43,7 +43,7 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
 
   const handleSend = async () => {
     if (input.trim()) {
-      const currentInput = input.trim(); // Zapisz aktualną wartość input
+      const currentInput = input.trim();
       const userMessage: Message = {
         id: Date.now(),
         text: currentInput,
@@ -67,11 +67,10 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.detail || `Błąd sieciowy: ${response.statusText}`);
+          throw new Error(errorData.detail || t('error_network', { statusText: response.statusText }));
         }
 
         const data: QueryResponse = await response.json();
-        console.log('API Response:', data); // Opcjonalne logowanie odpowiedzi API
 
         const botMessage: Message = {
           id: Date.now(),
@@ -80,21 +79,21 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
         };
 
         setMessages((prevMessages) => [...prevMessages, botMessage]);
-        setSuccessMessage('Odpowiedź otrzymana pomyślnie.');
+        setSuccessMessage(t('response_received'));
       } catch (error: unknown) {
-        console.error('Błąd podczas komunikacji z API:', error);
+        console.error(t('error_api'), error);
 
-        let errorMessageText = 'Przepraszamy, wystąpił błąd. Spróbuj ponownie później.';
-
-        if (error instanceof Error) {
-          errorMessageText = `Przepraszamy, wystąpił błąd: ${error.message}. Spróbuj ponownie później.`;
-        }
+        const errorMessageText =
+          error instanceof Error
+            ? t('error_generic_with_message', { message: error.message })
+            : t('error_generic');
 
         const errorMessage: Message = {
           id: Date.now(),
           text: errorMessageText,
           sender: 'bot',
         };
+
         setMessages((prevMessages) => [...prevMessages, errorMessage]);
         setError(errorMessageText);
       } finally {
@@ -103,14 +102,12 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
     }
   };
 
-  // Funkcja do przewijania do najnowszej wiadomości
   const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   };
 
-  // Przewijanie do dołu przy każdej zmianie wiadomości
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
@@ -122,9 +119,7 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${
-                message.sender === 'user' ? 'justify-end' : 'justify-start'
-              }`}
+              className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
                 className={`inline-block w-auto max-w-[75%] p-3 rounded-lg ${
@@ -140,7 +135,7 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
           {isLoading && (
             <div className="flex justify-start">
               <div className="inline-block w-auto max-w-[75%] p-3 rounded-lg bg-secondary text-secondary-foreground">
-                Piszę odpowiedź...
+                {t('writing_response')}
               </div>
             </div>
           )}
@@ -153,30 +148,20 @@ const Chat: React.FC<ChatProps> = ({ userId }) => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Wpisz wiadomość..."
+            placeholder={t('type_message')}
             className="flex-1"
             disabled={isLoading}
           />
           <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
             <SendIcon className="h-4 w-4" />
-            <span className="sr-only">Wyślij</span>
+            <span className="sr-only">{t('send')}</span>
           </Button>
         </div>
-        {/* Komunikat sukcesu */}
-        {successMessage && (
-          <p className="mt-2 text-sm text-green-600">
-            {successMessage}
-          </p>
-        )}
-        {/* Komunikat błędu */}
-        {error && (
-          <p className="mt-2 text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        {successMessage && <p className="mt-2 text-sm text-green-600">{successMessage}</p>}
+        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       </div>
     </div>
   );
-}
+};
 
 export default Chat;

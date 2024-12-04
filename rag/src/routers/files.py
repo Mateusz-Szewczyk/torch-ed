@@ -217,13 +217,16 @@ async def list_uploaded_files(request: ListFilesRequest, db: Session = Depends(g
         request (ListFilesRequest): The request body containing user_id.
 
     Returns:
-        List[UploadedFileRead]: List of uploaded files.
+        List[UploadedFileRead]: List of uploaded files with descriptions.
     """
     user_id = request.user_id
     logger.info(f"Fetching uploaded files for user_id: {user_id}")
     try:
         files = db.query(ORMFile).filter(ORMFile.user_id == user_id).all()
-        uploaded_files = [UploadedFileRead(id=file.id, name=file.name) for file in files]
+        uploaded_files = [
+            UploadedFileRead(id=file.id, name=file.name, description=file.description)
+            for file in files
+        ]
         return uploaded_files
     except Exception as e:
         logger.error(f"Error fetching uploaded files: {e}")
