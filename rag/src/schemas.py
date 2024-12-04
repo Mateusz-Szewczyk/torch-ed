@@ -1,7 +1,8 @@
 # src/schemas.py
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, Field
 from typing import Optional, List
+from datetime import datetime
 
 class FlashcardBase(BaseModel):
     question: str
@@ -43,6 +44,11 @@ class DeckRead(DeckBase):
     class Config:
         orm_mode = True
 
+class QueryRequest(BaseModel):
+    user_id: str
+    query: str
+    conversation_id: int
+
 class QueryResponse(BaseModel):
     user_id: str
     query: str
@@ -75,3 +81,31 @@ class DeleteKnowledgeResponse(BaseModel):
 
 class ListFilesRequest(BaseModel):
     user_id: str
+
+class ConversationBase(BaseModel):
+    user_id: str
+    title: Optional[str] = None  # Add this line
+
+class ConversationCreate(ConversationBase):
+    pass
+
+class ConversationRead(ConversationBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class MessageCreate(BaseModel):
+    sender: str
+    text: str
+
+class MessageRead(BaseModel):
+    id: int
+    conversation_id: int
+    sender: str
+    text: str
+    created_at: datetime = datetime.now()
+
+    class Config:
+        orm_mode = True

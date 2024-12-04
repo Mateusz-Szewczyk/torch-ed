@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { CustomTooltip } from '@/components/CustomTooltip'
 import { StudyDeck } from '@/components/StudyDeck'
 import { useTranslation } from 'react-i18next'; // Importujemy hook useTranslation
+import React from 'react'
 
 interface Flashcard {
   id?: number;

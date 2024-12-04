@@ -1,7 +1,7 @@
 # src/routers/query.py
 
 from fastapi import APIRouter, HTTPException, Depends, Form
-from ..schemas import QueryResponse
+from ..schemas import QueryResponse, QueryRequest
 from ..dependencies import get_db
 
 from ..agent.agent import agent_response
@@ -23,18 +23,15 @@ if not TAVILY_API_KEY:
     raise ValueError("Tavily API key is not set. Please set the TAVILY_API_KEY environment variable.")
 
 @router.post("/", response_model=QueryResponse)
-async def query_knowledge(
-        user_id: str = Form(..., description="Unique identifier for the user."),
-        query: str = Form(..., description="The user's query to the knowledge base.")
-):
-    """
-    Query Endpoint
-    --------------
-    Handles user queries by retrieving relevant information and generating answers using the knowledge base.
-    """
+async def query_knowledge(request: QueryRequest):
+    user_id = request.user_id
+    query = request.query
+    conversation_id = request.conversation_id
+
     logger.info(f"Received query from user_id: {user_id} - '{query}'")
+
     try:
-        # Generowanie odpowiedzi może być blokujące, więc uruchamiamy to w osobnym wątku
+        # Generowanie odpowiedzi
         answer = await asyncio.to_thread(
             agent_response,
             user_id,

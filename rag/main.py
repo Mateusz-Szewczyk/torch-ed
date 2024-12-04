@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Importuj modele i bazę danych
-from src.models import Base, ORMFile, Deck, Flashcard
-from src.routers import files, decks, flashcards, query
+from src.models import Base, ORMFile, Deck, Flashcard, Conversation, Message  # Dodano Conversation i Message
+from src.routers import files, decks, flashcards, query, chats  # Dodano 'chats'
 from src.database import engine
 
 # Inicjalizacja logowania
@@ -28,7 +28,7 @@ logger.info("Database tables created.")
 # Inicjalizacja FastAPI aplikacji
 app = FastAPI(
     title="RAG Knowledge Base API",
-    description="API for uploading documents, querying a knowledge base using RAG, and managing flashcards and decks.",
+    description="API for uploading documents, querying a knowledge base using RAG, and managing flashcards, decks, and chats.",
     version="1.0.0"
 )
 
@@ -66,6 +66,7 @@ app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(decks.router, prefix="/api/decks", tags=["Decks"])
 app.include_router(flashcards.router, prefix="/api/flashcards", tags=["Flashcards"])
 app.include_router(query.router, prefix="/api/query", tags=["Query"])
+app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])  # Dodano chats.router
 
 # Uruchomienie aplikacji
 if __name__ == "__main__":
