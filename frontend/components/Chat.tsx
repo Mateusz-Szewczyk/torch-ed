@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from 'react-i18next';
+import BouncingDots from './BouncingDots'
 
 type Message = {
   id: number;
@@ -184,8 +185,8 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
               <div
                 className={`inline-block w-auto max-w-[75%] p-3 rounded-lg ${
                   message.sender === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-secondary-foreground'
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'bg-background text-foreground'
                 }`}
               >
                 {message.text}
@@ -195,7 +196,7 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
           {isLoading && (
             <div className="flex justify-start">
               <div className="inline-block w-auto max-w-[75%] p-3 rounded-lg bg-secondary text-secondary-foreground">
-                {t('writing_response')}
+                <BouncingDots />
               </div>
             </div>
           )}
