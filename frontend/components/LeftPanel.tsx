@@ -1,6 +1,7 @@
 // components/LeftPanel.tsx
 'use client';
 
+import { Home } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +15,8 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  Edit2,
+  MoreVertical,
 } from 'lucide-react';
 import Link from 'next/link';
 import { LoginRegisterDialog } from '@/components/LoginRegisterDialog';
@@ -26,6 +29,15 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { useRouter } from 'next/navigation';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 interface Conversation {
   id: number;
@@ -34,7 +46,11 @@ interface Conversation {
 }
 
 interface LeftPanelProps {
-  setCurrentConversationId: (conversationId: number | null) => void;
+  userId: string;
+  isPanelVisible: boolean;
+  setIsPanelVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  currentConversationId: number | null;
+  setCurrentConversationId: React.Dispatch<React.SetStateAction<number | null>>;
 }
 
 export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
@@ -46,7 +62,7 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
   const { t, i18n } = useTranslation();
   const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
 
-  const userId = 'user-123'; // Zastąp faktycznym ID użytkownika z autentykacji
+  const userId = 'user-123'; // Replace with actual user ID from authentication
 
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
@@ -63,9 +79,10 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
 
   useEffect(() => {
     router.prefetch('/flashcards');
+    router.prefetch('/'); // Prefetch home route as well
   }, [router]);
 
-  // Pobieranie konwersacji z API
+  // Fetch conversations from API
   useEffect(() => {
     const fetchConversations = async () => {
       try {
@@ -97,7 +114,7 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
         const newConv = await response.json();
         setConversations((prev) => [...prev, newConv]);
         setCurrentConversationId(newConv.id);
-        router.push('/');
+        router.push(`/chat/${newConv.id}`);
       } else {
         console.error('Failed to create conversation:', response.statusText);
       }
@@ -108,7 +125,7 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
 
   const handleConversationClick = (conversationId: number) => {
     setCurrentConversationId(conversationId);
-    router.push('/');
+    router.push(`/chat/${conversationId}`);
   };
 
   const handleDeleteConversation = async (conversationId: number) => {
@@ -129,6 +146,72 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
     }
   };
 
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [currentEditingConv, setCurrentEditingConv] =
+    useState<Conversation | null>(null);
+  const [newTitle, setNewTitle] = useState('');
+
+  const openEditDialog = (conv: Conversation) => {
+    setCurrentEditingConv(conv);
+    setNewTitle(conv.title || '');
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveNewTitle = async () => {
+    if (currentEditingConv) {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/chats/${currentEditingConv.id}`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle }),
+          }
+        );
+        if (response.ok) {
+          // Update conversation state
+          setConversations((prevConversations) =>
+            prevConversations.map((conv) =>
+              conv.id === currentEditingConv.id
+                ? { ...conv, title: newTitle }
+                : conv
+            )
+          );
+          setIsEditDialogOpen(false);
+        } else {
+          console.error('Failed to update conversation:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error updating conversation:', error);
+      }
+    }
+  };
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] =
+    useState<Conversation | null>(null);
+
+  const openDeleteDialog = (conv: Conversation) => {
+    setConversationToDelete(conv);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (conversationToDelete) {
+      await handleDeleteConversation(conversationToDelete.id);
+      setIsDeleteDialogOpen(false);
+      setConversationToDelete(null);
+    }
+  };
+
+  const [menuOpenForConvId, setMenuOpenForConvId] = useState<number | null>(
+    null
+  );
+
+  const toggleMenuForConv = (convId: number) => {
+    setMenuOpenForConvId((prev) => (prev === convId ? null : convId));
+  };
+
   const handleMouseEnter = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => setIsHovered(true), 200);
@@ -137,6 +220,7 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
   const handleMouseLeave = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => setIsHovered(false), 200);
+    setMenuOpenForConvId(null);
   };
 
   return (
@@ -146,13 +230,28 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
       } flex flex-col`}
     >
       <div className="p-4 flex-grow">
-        <h2
-          className={`text-xl font-semibold mb-4 ${
-            isPanelVisible ? '' : 'sr-only'
-          }`}
-        >
-          {t('menu')}
-        </h2>
+        {/* Header with Menu and Home Button */}
+        <div className="flex items-center justify-between mb-4">
+          <h2
+            className={`text-xl font-semibold ${
+              isPanelVisible ? '' : 'sr-only'
+            }`}
+          >
+            {t('menu')}
+          </h2>
+          {/* Home Button */}
+          <Button
+            asChild
+            variant="ghost"
+            className="p-2 rounded-full hover:bg-secondary/80 transition-colors duration-200"
+            aria-label={t('home')}
+          >
+            <Link href="/">
+              <Home className="h-6 w-6" />
+            </Link>
+          </Button>
+        </div>
+
         <div className="space-y-4">
           <ManageFileDialog userId={userId} isPanelVisible={isPanelVisible} />
 
@@ -200,7 +299,7 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
                     {t('new_conversation')}
                   </Button>
                   {conversations.map((conv) => (
-                    <div key={conv.id} className="flex items-center">
+                    <div key={conv.id} className="relative flex items-center">
                       <Button
                         variant="ghost"
                         className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
@@ -210,11 +309,37 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
                       </Button>
                       <Button
                         variant="ghost"
-                        className="text-red-500 hover:bg-secondary/80 transition-colors duration-200"
-                        onClick={() => handleDeleteConversation(conv.id)}
+                        className="text-gray-500 hover:bg-secondary/80 transition-colors duration-200"
+                        onClick={() => toggleMenuForConv(conv.id)}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <MoreVertical className="h-4 w-4" />
                       </Button>
+                      {menuOpenForConvId === conv.id && (
+                        <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-md shadow-lg z-10">
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
+                            onClick={() => {
+                              openEditDialog(conv);
+                              setMenuOpenForConvId(null);
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4 mr-2" />
+                            {t('edit_title')}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200"
+                            onClick={() => {
+                              openDeleteDialog(conv);
+                              setMenuOpenForConvId(null);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            {t('delete_conversation')}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -251,6 +376,8 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
         </div>
       </div>
 
+      {/* Home button is already placed beside the Menu header */}
+
       <Button
         variant="ghost"
         className="self-end mb-4 mr-2 hover:bg-secondary/80 transition-colors duration-200"
@@ -263,6 +390,56 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
           <ChevronRight className="h-4 w-4" />
         )}
       </Button>
+
+      {/* Edit Conversation Title Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('edit_conversation_title')}</DialogTitle>
+          </DialogHeader>
+          <Input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder={t('enter_new_title')}
+            className="mt-2"
+          />
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              {t('cancel')}
+            </Button>
+            <Button variant="primary" onClick={handleSaveNewTitle}>
+              {t('save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Conversation Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('confirm_delete_title')}</DialogTitle>
+            <DialogDescription>
+              {t('confirm_delete_description')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setIsDeleteDialogOpen(false)}
+            >
+              {t('cancel')}
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              {t('delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

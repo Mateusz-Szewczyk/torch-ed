@@ -1,15 +1,15 @@
 // components/ui/dialog.tsx
 
-'use client'
+'use client';
 
-import * as RadixDialog from '@radix-ui/react-dialog'
-import { ReactNode } from 'react'
-import { cn } from "@/lib/utils" // Upewnij się, że masz ten utility
+import * as RadixDialog from '@radix-ui/react-dialog';
+import { ReactNode } from 'react';
+import { cn } from "@/lib/utils"; // Upewnij się, że masz tę funkcję
 
 interface DialogProps {
-  children: ReactNode
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
+  children: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export const Dialog = ({ children, open, onOpenChange }: DialogProps) => {
@@ -17,25 +17,25 @@ export const Dialog = ({ children, open, onOpenChange }: DialogProps) => {
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       {children}
     </RadixDialog.Root>
-  )
-}
+  );
+};
 
 interface DialogTriggerProps {
-  children: ReactNode
-  className?: string
+  children: ReactNode;
+  className?: string;
 }
 
 export const DialogTrigger = ({ children, className }: DialogTriggerProps) => {
   return (
-    <RadixDialog.Trigger asChild className={className}>
+    <RadixDialog.Trigger asChild>
       {children}
     </RadixDialog.Trigger>
-  )
-}
+  );
+};
 
 interface DialogContentProps {
-  children: ReactNode
-  className?: string
+  children: ReactNode;
+  className?: string;
 }
 
 export const DialogContent = ({ children, className }: DialogContentProps) => {
@@ -43,8 +43,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
     <RadixDialog.Portal>
       <RadixDialog.Overlay
         className={cn(
-          "fixed inset-0 bg-black/50",
-          "dark:bg-black/70"
+          "fixed inset-0 bg-black/50 dark:bg-black/70 z-50" // Dodano z-50
         )}
       />
       <RadixDialog.Content
@@ -54,6 +53,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
           "dark:bg-background dark:text-foreground",
           "p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto",
           "shadow-lg",
+          "z-50", // Dodano z-50
           className
         )}
       >
@@ -69,12 +69,12 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
         </RadixDialog.Close>
       </RadixDialog.Content>
     </RadixDialog.Portal>
-  )
-}
+  );
+};
 
 interface DialogHeaderProps {
-  children: ReactNode
-  className?: string
+  children: ReactNode;
+  className?: string;
 }
 
 export const DialogHeader = ({ children, className }: DialogHeaderProps) => {
@@ -82,12 +82,12 @@ export const DialogHeader = ({ children, className }: DialogHeaderProps) => {
     <div className={cn("mb-4", className)}>
       {children}
     </div>
-  )
-}
+  );
+};
 
 interface DialogTitleProps {
-  children: ReactNode
-  className?: string
+  children: ReactNode;
+  className?: string;
 }
 
 export const DialogTitle = ({ children, className }: DialogTitleProps) => {
@@ -102,5 +102,50 @@ export const DialogTitle = ({ children, className }: DialogTitleProps) => {
     >
       {children}
     </RadixDialog.Title>
-  )
+  );
+};
+
+interface DialogDescriptionProps {
+  children: ReactNode;
+  className?: string;
 }
+
+export const DialogDescription = ({ children, className }: DialogDescriptionProps) => {
+  return (
+    <RadixDialog.Description
+      className={cn(
+        "text-sm text-muted-foreground",
+        "dark:text-muted-foreground",
+        className
+      )}
+    >
+      {children}
+    </RadixDialog.Description>
+  );
+};
+
+interface DialogFooterProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export const DialogFooter = ({ children, className }: DialogFooterProps) => {
+  return (
+    <div className={cn("mt-4 flex justify-end space-x-2", className)}>
+      {children}
+    </div>
+  );
+};
+
+interface DialogCloseProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export const DialogClose = ({ children, className }: DialogCloseProps) => {
+  return (
+    <RadixDialog.Close asChild>
+      {children}
+    </RadixDialog.Close>
+  );
+};

@@ -1,6 +1,6 @@
 # src/schemas.py
 
-from pydantic import BaseModel, validator, Field
+from pydantic import BaseModel, validator, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -109,3 +109,12 @@ class MessageRead(BaseModel):
 
     class Config:
         orm_mode = True
+
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+
+    @field_validator('title')
+    def title_not_empty(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError('Title cannot be empty')
+        return v

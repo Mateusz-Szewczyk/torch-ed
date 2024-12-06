@@ -1,8 +1,9 @@
+// components/ClientProvider.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import i18n from '@/utils/i18n';
+import i18n from '../utils/i18n'; // Ensure the path to i18n is correct
 import { ThemeProvider } from 'next-themes';
 
 interface ClientProviderProps {
@@ -16,15 +17,15 @@ const ClientProvider: React.FC<ClientProviderProps> = ({ children, initialLangua
   useEffect(() => {
     if (i18n.language !== initialLanguage) {
       i18n.changeLanguage(initialLanguage).then(() => {
-        setIsInitialized(true); // Ustawienie stanu po zmianie języka
+        setIsInitialized(true); // Set state after changing the language
       });
     } else {
-      setIsInitialized(true); // Język już jest ustawiony
+      setIsInitialized(true); // Language is already set
     }
   }, [initialLanguage]);
 
   if (!isInitialized) {
-    return null; // Opcjonalnie: możesz dodać spinner ładowania
+    return null; // Optionally: you can add a loading spinner here
   }
 
   return (

@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from 'react-i18next';
-import BouncingDots from './BouncingDots'
+import BouncingDots from './BouncingDots';
+import TypewriterText from './TypewriterText';
 
 type Message = {
   id: number;
@@ -15,6 +16,8 @@ type Message = {
   text: string;
   sender: 'user' | 'bot';
   created_at: string;
+  isNew?: boolean; // Oznacza, czy wiadomość jest nowa (od bota)
+  isError?: boolean; // Oznacza, czy wiadomość jest błędem
 };
 
 interface ChatProps {
@@ -26,14 +29,22 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-
+  const endRef = useRef<HTMLDivElement>(null); // Nowa referencja
   const { t } = useTranslation();
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
 
-  // Pobieranie wiadomości dla danej konwersacji
+  // Automatyczne przewijanie na dół
+  useEffect(() => {
+    if (endRef.current) {
+      endRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isTyping]);
+
+  // Fetch messages for the conversation
   useEffect(() => {
     const fetchMessages = async () => {
       try {
@@ -41,8 +52,14 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
           `${API_BASE_URL}/chats/${conversationId}/messages/`
         );
         if (response.ok) {
-          const data = await response.json();
-          setMessages(data);
+          const data: Message[] = await response.json();
+          // Oznacz wszystkie załadowane wiadomości jako nie-nowe i nie-błędy
+          const loadedMessages = data.map(msg => ({
+            ...msg,
+            isNew: false,
+            isError: false,
+          }));
+          setMessages(loadedMessages);
         } else {
           console.error('Failed to fetch messages:', response.statusText);
         }
@@ -73,9 +90,9 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
 
       try {
         setIsLoading(true);
-        setError(null);
+        setError('');
 
-        // Zapisanie wiadomości użytkownika w bazie danych
+        // Save user's message to the database
         await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -85,7 +102,7 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
           }),
         });
 
-        // Wysłanie zapytania do bota z dodanym conversation_id
+        // Send query to the bot with added conversation_id
         const response = await fetch(`${API_BASE_URL}/query/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -106,7 +123,8 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
             throw new Error(messages);
           } else {
             throw new Error(
-              errorDetail || t('error_network', { statusText: response.statusText })
+              errorDetail ||
+                t('error_network', { statusText: response.statusText })
             );
           }
         }
@@ -119,9 +137,10 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
           text: data.answer,
           sender: 'bot',
           created_at: new Date().toISOString(),
+          isNew: true, // Oznacz jako nową wiadomość
         };
 
-        // Zapisanie odpowiedzi bota w bazie danych
+        // Save bot's response to the database
         await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -131,7 +150,10 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
           }),
         });
 
+        // Add bot's message and set isTyping to true
         setMessages((prevMessages) => [...prevMessages, botMessage]);
+        setIsLoading(false);
+        setIsTyping(true); // Set isTyping to true when bot starts typing
       } catch (error: unknown) {
         console.error(t('error_api'), error);
 
@@ -151,55 +173,62 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
           text: errorMessageText,
           sender: 'bot',
           created_at: new Date().toISOString(),
+          isNew: true, // Oznacz jako nową wiadomość
+          isError: true, // Oznacz jako wiadomość o błędzie
         };
 
         setMessages((prevMessages) => [...prevMessages, errorMessage]);
         setError(errorMessageText);
       } finally {
-        setIsLoading(false);
+        setIsLoading(false); // Move this after setting isTyping
       }
     }
   };
 
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.sender === 'user' ? 'justify-end' : 'justify-start'
-              }`}
-            >
+          {messages.map((message, index) => {
+            const isLastMessage = index === messages.length - 1;
+            return (
               <div
-                className={`inline-block w-auto max-w-[75%] p-3 rounded-lg ${
-                  message.sender === 'user'
-                    ? 'bg-secondary text-secondary-foreground'
-                    : 'bg-background text-foreground'
+                key={message.id}
+                className={`flex ${
+                  message.sender === 'user' ? 'justify-end' : 'justify-start'
                 }`}
               >
-                {message.text}
+                <div
+                  className={`inline-block w-auto max-w-[75%] p-3 rounded-lg ${
+                    message.sender === 'user'
+                      ? 'bg-secondary text-secondary-foreground'
+                      : 'bg-background text-foreground'
+                  }`}
+                >
+                  {message.sender === 'bot' && message.isNew && !message.isError ? (
+                    <TypewriterText
+                      text={message.text}
+                      onTypingComplete={
+                        isLastMessage && isTyping
+                          ? () => setIsTyping(false)
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    message.text
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          {isLoading && (
+            );
+          })}
+          {(isLoading || isTyping) && (
             <div className="flex justify-start">
               <div className="inline-block w-auto max-w-[75%] p-3 rounded-lg bg-secondary text-secondary-foreground">
                 <BouncingDots />
               </div>
             </div>
           )}
+          <div ref={endRef} /> {/* Dummy div for scrollIntoView */}
         </div>
       </ScrollArea>
       <div className="border-t border-border p-4">
@@ -208,14 +237,14 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={(e) => e.key === 'Enter' && !isTyping && handleSend()}
             placeholder={t('type_message')}
             className="flex-1"
-            disabled={isLoading}
+            disabled={isLoading || isTyping}
           />
           <Button
             onClick={handleSend}
-            disabled={isLoading || !input.trim()}
+            disabled={isLoading || !input.trim() || isTyping}
             variant="primary"
           >
             <SendIcon className="h-4 w-4" />

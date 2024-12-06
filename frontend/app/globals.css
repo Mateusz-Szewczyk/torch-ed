@@ -3,96 +3,95 @@
 @tailwind utilities;
 
 @layer base {
- :root {
-   --background: 45 20% 94%;
-   --foreground: 222.2 84% 4.9%;
+  :root {
+    --background: 45 20% 94%;
+    --foreground: 222.2 84% 4.9%;
 
-   --muted: 45 10% 90%;
-   --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 45 10% 90%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-   --popover: 45 30% 97%;
-   --popover-foreground: 222.2 84% 4.9%;
+    --popover: 45 30% 97%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-   --card: 45 20% 97.5%;
-   --card-foreground: 222.2 84% 4.9%;
+    --card: 45 20% 97.5%;
+    --card-foreground: 222.2 84% 4.9%;
 
-   --border: 45 20% 85%;
-   --input: 45 20% 80%;
+    --border: 45 20% 85%;
+    --input: 45 20% 80%;
 
-   --primary: 222.2 47.4% 11.2%;
-   --primary-foreground: 210 40% 98%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
 
-   --secondary: 45 25% 86%;
-   --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 45 25% 86%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-   --accent: 45 25% 90%;
-   --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 45 25% 90%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
-   --destructive: 0 84.2% 60.2%;
-   --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-   --ring: 215 20.2% 65.1%;
+    --ring: 215 20.2% 65.1%;
 
-   --radius: 0.5rem;
- }
+    --radius: 0.5rem;
+  }
 
- .dark {
-   --background: 220 10% 7%;
-   --foreground: 210 40% 94%;
+  .dark {
+    --background: 220 10% 7%;
+    --foreground: 210 40% 92%;
 
-   --muted: 220 10% 12%;
-   --muted-foreground: 215 20.2% 60%;
+    --muted: 220 10% 12%;
+    --muted-foreground: 215 20.2% 60%;
 
-   --popover: 220 10% 5%;
-   --popover-foreground: 210 40% 98%;
+    --popover: 220 10% 5%;
+    --popover-foreground: 210 40% 98%;
 
-   --card: 220 10% 5%;
-   --card-foreground: 210 40% 94%;
+    --card: 220 10% 5%;
+    --card-foreground: 210 40% 92%;
 
-   --border: 220 10% 15%;
-   --input: 220 10% 15%;
+    --border: 220 10% 15%;
+    --input: 220 10% 15%;
 
-   --primary: 210 10% 90%;
-   --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 210 10% 90%;
+    --primary-foreground: 222.2 47.4% 11.2%;
 
-   --secondary: 220 10% 12%;
-   --secondary-foreground: 210 40% 98%;
+    --secondary: 220 10% 12%;
+    --secondary-foreground: 210 40% 92%;
 
-   --accent: 220 10% 12%;
-   --accent-foreground: 210 40% 98%;
+    --accent: 220 10% 12%;
+    --accent-foreground: 210 40% 98%;
 
-   --destructive: 0 62.8% 30.6%;
-   --destructive-foreground: 0 85.7% 97.3%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 85.7% 97.3%;
 
-   --ring: 220 10% 15%;
- }
+    --ring: 220 10% 15%;
+  }
 }
 
 @layer base {
- * {
-   @apply border-border;
- }
- body {
-   @apply bg-background text-foreground;
- }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 
- .bg-background {
-   background-color: hsl(var(--background));
- }
+  .bg-background {
+    background-color: hsl(var(--background));
+  }
 
- .text-foreground {
-   color: hsl(var(--foreground));
- }
+  .text-foreground {
+    color: hsl(var(--foreground));
+  }
 
- .bg-muted {
-   background-color: hsl(var(--muted));
- }
+  .bg-muted {
+    background-color: hsl(var(--muted));
+  }
 
- .text-muted-foreground {
-   color: hsl(var(--muted-foreground));
- }
+  .text-muted-foreground {
+    color: hsl(var(--muted-foreground));
+  }
 }
-
 
 @layer utilities {
   @keyframes collapse-down {
@@ -126,3 +125,47 @@
   }
 }
 
+/* Animacja pulsującego przycisku */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  }
+}
+
+.animate-pulseButton {
+  animation: pulse 2s infinite;
+}
+
+/* Radix UI Dialog (jeśli używasz) */
+.radix-dialog-overlay {
+  @apply fixed inset-0 bg-black/50 z-50;
+}
+
+.radix-dialog-content {
+  @apply fixed top-1/2 left-1/2 max-w-lg w-full bg-card text-card-foreground rounded-md p-6 transform -translate-x-1/2 -translate-y-1/2 z-50 shadow-lg;
+}
+
+.radix-dialog-close {
+  @apply absolute top-4 right-4 text-muted-foreground hover:text-foreground;
+}
+
+
+/* Dialog Overlay */
+.dialog-overlay {
+  @apply fixed inset-0 bg-black/50 z-50;
+}
+
+/* Dialog Content */
+.dialog-content {
+  @apply fixed top-1/2 left-1/2 max-w-lg w-full bg-card text-card-foreground rounded-md p-6 transform -translate-x-1/2 -translate-y-1/2 z-50 shadow-lg;
+}
+
+/* Dialog Close Button */
+.dialog-close {
+  @apply absolute top-4 right-4 text-muted-foreground hover:text-foreground;
+}

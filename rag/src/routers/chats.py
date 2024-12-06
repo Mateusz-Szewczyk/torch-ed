@@ -10,6 +10,7 @@ from ..schemas import (
     ConversationCreate,
     ConversationRead,
     MessageCreate,
+    ConversationUpdate,
     MessageRead,
 )
 from ..dependencies import get_db
@@ -125,3 +126,32 @@ async def get_messages(conversation_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error fetching messages: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching messages: {str(e)}")
+
+@router.patch("/{conversation_id}", response_model=ConversationRead)
+async def update_conversation(
+    conversation_id: int,
+    conversation_update: ConversationUpdate = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Aktualizuj konwersację.
+    """
+    logger.info(f"Updating conversation {conversation_id}")
+    try:
+        conversation = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        if conversation_update.title is not None:
+            conversation.title = conversation_update.title
+
+        db.commit()
+        db.refresh(conversation)
+
+        logger.info(f"Updated conversation {conversation_id}")
+        return conversation
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating conversation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error updating conversation: {str(e)}")

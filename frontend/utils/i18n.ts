@@ -1,8 +1,9 @@
+// i18n.ts
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
-// Import lokalizacji
+// Import your locale files
 import en from '@/locales/en.json';
 import pl from '@/locales/pl.json';
 import es from '@/locales/es.json';
@@ -17,13 +18,14 @@ const resources = {
   fr: { translation: fr },
 };
 
-i18n.use(initReactI18next).use(LanguageDetector) // Automatyczne wykrywanie języka
-    .init({
-      resources,
-      lng: 'en',
-      fallbackLng: 'en',
-      interpolation: { escapeValue: false },
-      react: { useSuspense: false },
-});
+i18n
+  .use(LanguageDetector) // Automatically detect language
+  .use(initReactI18next)
+  .init({
+    resources,
+    fallbackLng: 'en',
+    interpolation: { escapeValue: false },
+    react: { useSuspense: false },
+  });
 
 export default i18n;
