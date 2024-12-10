@@ -21,7 +21,7 @@ const TypewriterText: React.FC<TypewriterTextProps> = ({ text, onTypingComplete 
           onTypingComplete();
         }
       }
-    }, 50); // Możesz dostosować prędkość tutaj
+    }, 5); // Możesz dostosować prędkość tutaj
 
     return () => clearInterval(interval);
   }, [text, onTypingComplete]);

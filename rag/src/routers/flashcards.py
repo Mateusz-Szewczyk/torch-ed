@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from ..models import Flashcard, Deck
-from ..schemas import FlashcardCreate, FlashcardRead
+from ..schemas import FlashcardCreate, FlashcardRead, DeckRead
 from ..dependencies import get_db
 
 import logging

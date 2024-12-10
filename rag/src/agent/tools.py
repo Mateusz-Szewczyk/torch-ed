@@ -1,15 +1,19 @@
 # tools.py
-from typing import List, Tuple
+
+from typing import List, Tuple, Any, Dict
 from langchain.tools import BaseTool
 from langchain_anthropic import ChatAnthropic
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage
-from langchain_core.prompts import HumanMessagePromptTemplate
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
 import logging
 import os
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 import json
+import uuid
+from datetime import datetime
+
+from sqlalchemy.exc import IntegrityError
 
 # Import your search engine function
 from ..search_engine import search_and_rerank
@@ -22,6 +26,13 @@ from ..models import Deck, Flashcard
 # Configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Dodaj handler tylko jeśli nie został dodany wcześniej
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 # Initialize the embedding model
 from sentence_transformers import SentenceTransformer
@@ -40,103 +51,94 @@ if not anthropic_api_key:
     raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
 
 
-
 class FlashcardGenerator(BaseTool):
-    name: str = "flashcard_generator"
-    description: str = """To narzędzie generuje fiszki na podstawie dostarczonych danych.
-    Jeżeli użytkownik podał konkretną ilość fiszek w zapytaniu, poproś o konkretną ilość fiszek.
-    Narzędzie generuje fiszki w formacie JSON, które zawierają pytanie i odpowiedź.
-    Narzędzie adaptuje się do języka użytkownika i dostarcza jak najlepszą odpowiedź.
-    Z tego narzędzia można skorzystać tylko raz, jeżeli to narzędzie było wcześniej użyte, proszę nie korzystaj z niego.
-    Przykładowe Wejścia:
-    -Proszę wygeneruj 18 fiszek do nauki pierwiastków układu okresowego
-    -Proszę wygeneruj fiszki do nauki najczęściej używanych stwierdzeń w języku hiszpańskim
-    """
+    name: str = "FlashcardGenerator"
+    description: str = """This tool generates flashcards based on provided data.
+                        The tool outputs flashcards in JSON format containing questions and answers.
+                        If you want to use this tool please us it as the last tool in the pipeline.
+                        This tool can only be used once; if it has been used before, please do not use it again.
+                        Keywords that trigger this tool include requests containing: "fiszki", "wygeneruj", "stwórz", "utwórz".
+                        """
 
-    model: ChatAnthropic = Field(default=None)
-    flashcard_prompt: ChatPromptTemplate = Field(default=None)
-    output_parser: JsonOutputParser = Field(default=None)
+    _model: ChatAnthropic = PrivateAttr()
+    _output_parser: JsonOutputParser = PrivateAttr()
 
     def __init__(self, model_name: str = "claude-3-haiku-20240307", anthropic_api_key: str = None):
         super().__init__()
         if not anthropic_api_key:
             raise ValueError("Anthropic API key is not set.")
-        self.model = ChatAnthropic(model_name=model_name, anthropic_api_key=anthropic_api_key)
-
-        # Define the prompt template for flashcard generation
-        self.flashcard_prompt = ChatPromptTemplate.from_messages([
-            SystemMessage(content="Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku!"),
-            HumanMessagePromptTemplate.from_template("""
-            Wygeneruj fiszki na temat {topic} na podstawie następującego opisu:
-            {description}
-
-            Wygenerowane fiszki powinny być w języku użytkownika, czyli w tym języku, w którym jest napisany opis i tytuł.
-            Jeśli użytkownik nie podał liczby fiszek do stworzenia, proszę zdecyduj, ile fiszek powinno zostać utworzonych.
-            Jeśli opis dotyczy tłumaczenia i język znajduje się na tej liście:
-            {{
-                "japanese": "romaji",
-                "chinese": "pinyin",
-                "korean": "romanization",
-                "russian": "transliteration",
-                "arabic": "transliteration",
-                "thai": "transliteration",
-                "hindi": "transliteration"
-            }},
-            uwzględnij podaną romanizację/transliterację w pytaniu.
-
-            Pomyśl o najlepszym sposobie sformatowania tych fiszek, jaka będzie najlepsza kombinacja pytań i odpowiedzi.
-            Proszę zastanów się również jaka powinna być nazwa zestawu fiszek, oraz jego opis.
-            
-            Zwróć fiszki w dokładnie takim formacie JSON:
-            [
-                {{
-                    "question": "string", 
-                    "answer": "string"    
-                }}
-            ]
-            
-            Ostateczna odpowiedź powinna mieć taki format:
-            {{
-                topic: "string", #nazwa zestawu fiszek,
-                description: "string", #opis zestawu fiszek,
-                flashcards:[{{fiszki}}]
-            }}
-            """)
-
-        ])
-        self.output_parser = JsonOutputParser()
+        self._model = ChatAnthropic(model_name=model_name, anthropic_api_key=anthropic_api_key)
+        self._output_parser = JsonOutputParser()
 
     def _run(self, input_str: str) -> str:
         """
         Generate flashcards based on the input string and save them to the database.
 
         Args:
-            input_str: A string containing the topic and/or description.
+            input_str: A JSON-formatted string containing 'description' and 'query'.
 
         Returns:
-            A string confirming the operation.
+            A string confirming the operation in JSON format or an error message.
         """
-
-        # Extract topic and description from input_str
-        # Możesz dodać logikę parsowania, jeśli potrzebujesz
-        topic = ""  # Możesz zmodyfikować to, aby wyodrębnić temat z input_str, jeśli jest dostępny
-        description = input_str
-
-        # Generate flashcards
-        prompt_with_context = self.flashcard_prompt | self.model | self.output_parser
-
         try:
-            response = prompt_with_context.invoke({
-                "description": description,
-                "topic": topic
-            })
+            # Parsowanie wejścia JSON
+            input_data = json.loads(input_str)
+            description = input_data.get('description', 'Serial Arcane').strip()
+            query = input_data.get('query', 'Stwórz fiszki o serialu Arcane').strip()
 
-            # Access dictionary keys using indexing
-            flashcards = response.get('flashcards', [])
-            topic = response.get('topic', 'Default Topic')  # Provide a default if not present
-            description = response.get('description', 'No description provided.')
+            # Konstruowanie prompta bezpośrednio w metodzie _run
+            system_prompt = "Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku!"
+            user_prompt = f"""
+    Wygeneruj fiszki na podstawie następującego kontekstu:
+    {description}
 
-            # Konwersja odpowiedzi do stringa JSON do zwrócenia
+    I wykonaj polecenie zadane przez użytkownika: {query}
+
+    Wygenerowane fiszki powinny być w języku użytkownika, czyli w tym języku, w którym jest napisany opis i tytuł.
+    Jeśli użytkownik nie podał liczby fiszek do stworzenia, proszę zdecyduj ile fiszek powinno zostać utworzonych.
+
+    Pomyśl o najlepszym sposobie sformatowania tych fiszek, jaka będzie najlepsza kombinacja pytań i odpowiedzi.
+    Proszę zastanów się również jaka powinna być nazwa zestawu fiszek oraz jego opis.
+
+    Zwróć fiszki w dokładnie takim formacie JSON:
+    {{
+        "topic": "Your Deck Name",
+        "description": "Description of the Deck",
+        "flashcards": [
+            {{"question": "Question 1", "answer": "Answer 1"}},
+            {{"question": "Question 2", "answer": "Answer 2"}}
+        ]
+    }}
+    """
+            # Formatowanie wiadomości
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            logger.debug(f"Formatted Messages:\n{messages}")
+
+            # Inwokacja modelu z sformatowanymi wiadomościami
+            response = self._model.invoke(messages)
+
+            # Ekstrakcja tekstu odpowiedzi
+            if isinstance(response, list):
+                response_text = response[-1].content if response else ""
+            elif hasattr(response, 'content'):
+                response_text = response.content
+            else:
+                response_text = str(response)
+
+            logger.debug(f"Model Response: {response_text}")
+
+            # Parsowanie odpowiedzi JSON
+            parsed_response = self._output_parser.parse(response_text)
+
+            # Walidacja struktury fiszek
+            flashcards = parsed_response.get('flashcards', [])
+            topic = parsed_response.get('topic', f'deck_{uuid.uuid4().hex[:8]}')
+            description = parsed_response.get('description', 'Brak opisu')
+
+            # Konwersja odpowiedzi do stringa JSON
             flashcards_json = json.dumps({
                 "topic": topic,
                 "description": description,
@@ -146,59 +148,76 @@ class FlashcardGenerator(BaseTool):
             # Zapis fiszek do bazy danych
             db: Session = SessionLocal()
             try:
-                # Utworzenie nowego zestawu
+                # Tworzenie nowego zestawu
                 new_deck = Deck(name=topic, description=description)
                 db.add(new_deck)
                 db.commit()
                 db.refresh(new_deck)
 
-                # Utworzenie fiszek z unikalnymi ID powiązanymi z zestawem
+                # Tworzenie fiszek związanych z zestawem
                 for card in flashcards:
                     new_flashcard = Flashcard(
-                        question=card.get('question', ''),
-                        answer=card.get('answer', ''),
+                        question=card.get('question', '').strip(),
+                        answer=card.get('answer', '').strip(),
                         deck_id=new_deck.id
                     )
                     db.add(new_flashcard)
 
                 db.commit()
-
                 logger.info(f"Successfully created deck with ID {new_deck.id} and saved {len(flashcards)} flashcards.")
-                return flashcards_json
+
+                formatted_response = f"""Topic: "{topic}"
+                                    Description: "{description}"
+                                    Flashcards:
+                                    """
+                for idx, card in enumerate(flashcards, start=1):
+                    formatted_response += f'{idx}. Q: "{card.get("question", "")}" A: "{card.get("answer", "")}"\n'
+
+                return formatted_response
 
             except Exception as e:
                 db.rollback()
-                logger.error(f"An error occurred while saving flashcards to the database: {e}")
-                raise e
+                logger.error(f"Database error: {e}")
+                return json.dumps({
+                    "error": f"Błąd zapisu do bazy danych: {str(e)}"
+                }, ensure_ascii=False)
             finally:
                 db.close()
 
+        except json.JSONDecodeError as jde:
+            logger.error(f"JSON decode error: {jde}. Input string: {input_str}")
+            return json.dumps({
+                "error": "Nieprawidłowy format JSON w danych wejściowych."
+            }, ensure_ascii=False)
+        except ValueError as ve:
+            logger.error(f"ValueError: {ve}. Input string: {input_str}")
+            return json.dumps({
+                "error": "Nieprawidłowa odpowiedź modelu."
+            }, ensure_ascii=False)
         except Exception as e:
-            logger.error(f"An error occurred during flashcard generation: {e}")
-            raise e
+            logger.error(f"An unexpected error occurred: {e}")
+            return json.dumps({
+                "error": "Przepraszam, wystąpił problem z generowaniem fiszek."
+            }, ensure_ascii=False)
 
     async def _arun(self, input_str: str) -> str:
         """Asynchronous version of the run method."""
-        # Dla uproszczenia używamy synchronicznej metody _run w kontekście asynchronicznym
-        # W rzeczywistości rozważ użycie asynchronicznych sesji bazy danych
         return self._run(input_str)
 
 
 class RAGTool(BaseTool):
-    name: str = "rag_tool"
-    description: str = (
-        "Uses the Retrieval-Augmented Generation pipeline to answer queries using internal and external knowledge.",
-        "The tool will recognize the user's language and will adapt to it"
-    )
+    name: str = "RAGTool"
+    description: str = """Uses the Retrieval-Augmented Generation pipeline to answer queries using internal and external knowledge.
+The tool will recognize the user's language and will adapt to it."""
     user_id: str = Field(default=None)
-    model: ChatAnthropic = Field(default=None)
+    _model: ChatAnthropic = PrivateAttr()
 
     def __init__(self, user_id: str, model_name: str = "claude-3-haiku-20240307", anthropic_api_key: str = None):
         super().__init__()
         self.user_id = user_id
         if not anthropic_api_key:
             raise ValueError("Anthropic API key is not set.")
-        self.model = ChatAnthropic(model_name=model_name, anthropic_api_key=anthropic_api_key)
+        self._model = ChatAnthropic(model_name=model_name, anthropic_api_key=anthropic_api_key)
 
     def _run(self, query: str) -> str:
         return self.generate_answer_rag(query)
@@ -239,7 +258,7 @@ class RAGTool(BaseTool):
 
         if not internal_passages and not external_passages:
             logger.warning(f"No relevant information found for query: '{query}'")
-            return "No relevant information found."
+            return "Przepraszam, nie znalazłem informacji na ten temat."
 
         # Step 2 & 3: Combine Internal and External Passages and Assign Sources
         combined_passages = external_passages + internal_passages
@@ -259,6 +278,45 @@ class RAGTool(BaseTool):
         logger.info(f"Generated RAG answer.")
         return answer
 
+    def retrieve(self, query: str, steps: int = 1) -> List[str]:
+        """
+        Retrieves relevant passages based on the query.
+
+        Args:
+            query (str): The user's query.
+            steps (int): Number of retrieval steps.
+
+        Returns:
+            List[str]: A list of retrieved passages.
+        """
+        logger.info(f"Retrieving passages for query: '{query}' with steps: {steps}")
+
+        # Step 1: Generate internal passages
+        try:
+            internal_passages = self.generate_internal_passages(query, max_generated_passages=steps)
+            logger.info(f"Retrieved {len(internal_passages)} internal passages.")
+        except Exception as e:
+            logger.error(f"Error generating internal passages during retrieval: {e}", exc_info=True)
+            internal_passages = []
+
+        # Step 2: Retrieve external passages
+        try:
+            results = search_and_rerank(query, embedding_model, user_id=self.user_id, n_results=5)
+            external_passages = [result.get('content', '') for result in results]
+            logger.info(f"Retrieved {len(external_passages)} external passages.")
+        except Exception as e:
+            logger.error(f"Error during search and rerank during retrieval: {e}", exc_info=True)
+            external_passages = []
+
+        # Combine passages
+        combined_passages = external_passages + internal_passages
+
+        if not combined_passages:
+            logger.warning(f"No passages retrieved for query: '{query}'")
+            return []
+
+        return combined_passages
+
     def generate_internal_passages(self, query: str, max_generated_passages: int) -> List[str]:
         """
         Generates internal passages from the LLM's internal knowledge based on the query.
@@ -272,10 +330,9 @@ class RAGTool(BaseTool):
         """
         # Prompt template for generating internal passages
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(
-                content="You are a knowledgeable assistant helping to generate relevant information for a query. You will recognize query and passages language and adapt to it."),
-            HumanMessagePromptTemplate.from_template("""
-Based on your internal knowledge, generate up to {max_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
+            SystemMessage(content="You are a knowledgeable assistant helping to generate relevant information for a query. You will recognize query and passages language and adapt to it."),
+            HumanMessage(content=f"""
+Based on your internal knowledge, generate up to {max_generated_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
 
 Question:
 {query}
@@ -284,27 +341,25 @@ Passages:
 """)
         ])
 
-        response = prompt_template | self.model
-
         try:
-            output = response.invoke({
-                "query": query,
-                "max_passages": max_generated_passages
-            })
+            response = self._model.invoke(prompt_template.format(query=query))
 
-            # Access the content of the AIMessage
-            output_text = output.content
+            # Sprawdzenie typu odpowiedzi i ekstrakcja treści
+            if isinstance(response, list):
+                response_text = response[-1].content if response else ""
+            elif hasattr(response, 'content'):
+                response_text = response.content
+            else:
+                response_text = str(response)
 
             # Split the output into individual passages
-            passages = [p.strip() for p in output_text.strip().split('\n\n') if p.strip()]
+            passages = [p.strip() for p in response_text.strip().split('\n\n') if p.strip()]
             return passages
-
         except Exception as e:
             logger.error(f"Error generating internal passages: {e}", exc_info=True)
             return []
 
-    def iterative_consolidation(self, query: str, passages: List[str], sources: List[str], max_iterations: int) -> \
-    Tuple[List[str], List[str]]:
+    def iterative_consolidation(self, query: str, passages: List[str], sources: List[str], max_iterations: int) -> Tuple[List[str], List[str]]:
         """
         Iteratively consolidates the knowledge from passages considering their sources.
 
@@ -321,41 +376,34 @@ Passages:
             logger.info(f"Consolidation iteration {iteration + 1}")
             prompt_template = ChatPromptTemplate.from_messages([
                 SystemMessage(content="You are an assistant that consolidates information from different sources. You will recognize query and passages language and adapt to it."),
-                HumanMessagePromptTemplate.from_template("""
+                HumanMessage(content=f"""
 Given the following passages and their sources, consolidate the information by identifying consistent details, resolving conflicts, and removing irrelevant content.
 
 Question:
 {query}
 
 Passages and Sources:
-{passages_and_sources}
+{''.join([f"Source: {source}\nPassage: {passage}\n\n" for passage, source in zip(passages, sources)])}
 
 Consolidated Passages:
 """)
             ])
 
-            # Prepare passages and sources for the prompt
-            passages_and_sources = ""
-            for passage, source in zip(passages, sources):
-                passages_and_sources += f"Source: {source}\nPassage: {passage}\n\n"
-
-            response = prompt_template | self.model
-
             try:
-                output = response.invoke({
-                    "query": query,
-                    "passages_and_sources": passages_and_sources
-                })
+                response = self._model.invoke(prompt_template.format(query=query))
 
-                # Access the content of the AIMessage
-                output_text = output.content
+                # Sprawdzenie typu odpowiedzi i ekstrakcja treści
+                if isinstance(response, list):
+                    response_text = response[-1].content if response else ""
+                elif hasattr(response, 'content'):
+                    response_text = response.content
+                else:
+                    response_text = str(response)
 
                 # Parse the consolidated passages and sources from the output
-                # Assuming the output is formatted as:
-                # "Passage: ... \nSource: ... \n\n"
                 new_passages = []
                 new_sources = []
-                entries = output_text.strip().split('\n\n')
+                entries = response_text.strip().split('\n\n')
                 for entry in entries:
                     lines = entry.strip().split('\n')
                     passage_text = ''
@@ -390,35 +438,32 @@ Consolidated Passages:
             str: The final answer.
         """
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(
-                content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information. You will recognize query and passages language and adapt to it."),
-            HumanMessagePromptTemplate.from_template("""
+            SystemMessage(content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information. You will recognize query and passages language and adapt to it."),
+            HumanMessage(content=f"""
 Based on the following consolidated passages and their sources, generate the most accurate and reliable answer to the question. Consider the reliability of each source, cross-confirmation between sources, and the thoroughness of the information.
 
 Question:
 {query}
 
 Consolidated Passages and Sources:
-{passages_and_sources}
+{''.join([f"Source: {source}\nPassage: {passage}\n\n" for passage, source in zip(passages, sources)])}
 
 Final Answer:
 """)
         ])
 
-        # Prepare passages and sources for the prompt
-        passages_and_sources = ""
-        for passage, source in zip(passages, sources):
-            passages_and_sources += f"Source: {source}\nPassage: {passage}\n\n"
-
-        response = prompt_template | self.model
-
         try:
-            answer = response.invoke({
-                "query": query,
-                "passages_and_sources": passages_and_sources
-            })
-            return answer.content.strip()
+            response = self._model.invoke(prompt_template.format(query=query))
 
+            # Sprawdzenie typu odpowiedzi i ekstrakcja treści
+            if isinstance(response, list):
+                answer = response[-1].content if response else ""
+            elif hasattr(response, 'content'):
+                answer = response.content
+            else:
+                answer = str(response)
+
+            return answer.strip()
         except Exception as e:
             logger.error(f"Error during answer finalization: {e}", exc_info=True)
-            return "An error occurred while generating the final answer."
+            return "Przepraszam, wystąpił problem podczas generowania końcowej odpowiedzi."

@@ -19,6 +19,8 @@ class FlashcardCreate(FlashcardBase):
 
 class FlashcardRead(FlashcardBase):
     id: int
+    question: str
+    answer: str
     deck_id: int
 
     class Config:
@@ -39,6 +41,7 @@ class DeckCreate(DeckBase):
 
 class DeckRead(DeckBase):
     id: int
+    name: str
     flashcards: List[FlashcardRead]
 
     class Config:

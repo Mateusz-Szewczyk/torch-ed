@@ -13,7 +13,16 @@ import asyncio
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Załaduj klucze API
+# Configure logging format (optional but recommended)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Load API keys
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 if not ANTHROPIC_API_KEY:
     raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
@@ -31,11 +40,12 @@ async def query_knowledge(request: QueryRequest):
     logger.info(f"Received query from user_id: {user_id} - '{query}'")
 
     try:
-        # Generowanie odpowiedzi
+        # Generate response
         answer = await asyncio.to_thread(
             agent_response,
             user_id,
             query,
+            conversation_id=conversation_id,
             model_name="claude-3-haiku-20240307",
             anthropic_api_key=ANTHROPIC_API_KEY,
             tavily_api_key=TAVILY_API_KEY
