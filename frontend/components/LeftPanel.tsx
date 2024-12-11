@@ -53,10 +53,14 @@ interface LeftPanelProps {
   setCurrentConversationId: React.Dispatch<React.SetStateAction<number | null>>;
 }
 
-export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
+export function LeftPanel({
+  setCurrentConversationId,
+  currentConversationId,
+}: LeftPanelProps) {
   const [isPanelVisible, setIsPanelVisible] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const router = useRouter();
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { t, i18n } = useTranslation();
@@ -66,8 +70,6 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
 
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
-
-  const router = useRouter();
 
   useEffect(() => {
     const handleLanguageChange = () => setCurrentLanguage(i18n.language);
@@ -86,9 +88,7 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
   useEffect(() => {
     const fetchConversations = async () => {
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/chats/?user_id=${userId}`
-        );
+        const response = await fetch(`${API_BASE_URL}/chats/?user_id=${userId}`);
         if (response.ok) {
           const data = await response.json();
           setConversations(data);
@@ -134,10 +134,13 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
         method: 'DELETE',
       });
       if (response.ok || response.status === 204) {
-        setConversations((prev) =>
-          prev.filter((conv) => conv.id !== conversationId)
-        );
-        setCurrentConversationId(null);
+        setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
+
+        // Jeśli usuwamy aktualnie oglądaną konwersację, przekieruj na stronę główną
+        if (conversationId === currentConversationId) {
+          setCurrentConversationId(null);
+          router.push('/');
+        }
       } else {
         console.error('Failed to delete conversation:', response.statusText);
       }
@@ -225,25 +228,30 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
 
   return (
     <div
-      className={`bg-card text-foreground border-r border-border transition-all duration-300 ${
-        isPanelVisible ? 'w-64' : 'w-20'
-      } flex flex-col`}
+      className={`bg-card text-foreground border-r border-border transition-all duration-300 z-50 flex flex-col ${
+        isPanelVisible ? 'w-64' : 'w-20 items-center'
+      }`}
     >
-      <div className="p-4 flex-grow">
+      <div className="p-4 flex-grow flex flex-col">
         {/* Header with Menu and Home Button */}
-        <div className="flex items-center justify-between mb-4">
-          <h2
-            className={`text-xl font-semibold ${
-              isPanelVisible ? '' : 'sr-only'
-            }`}
-          >
-            {t('menu')}
-          </h2>
+        <div
+          className={`flex items-center mb-4 ${
+            isPanelVisible ? 'justify-between' : 'justify-center'
+          }`}
+        >
+          {!isPanelVisible ? (
+            // Ikonka menu, gdy panel jest zamknięty - niewidoczna nazwa
+            <h2 className="sr-only">{t('menu')}</h2>
+          ) : (
+            <h2 className="text-xl font-semibold">{t('menu')}</h2>
+          )}
           {/* Home Button */}
           <Button
             asChild
             variant="ghost"
-            className="p-2 rounded-full hover:bg-secondary/80 transition-colors duration-200"
+            className={`p-2 rounded-full hover:bg-secondary/80 transition-colors duration-200 ${
+              !isPanelVisible ? 'mx-auto' : ''
+            }`}
             aria-label={t('home')}
           >
             <Link href="/">
@@ -252,10 +260,14 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
           </Button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 flex flex-col">
           <ManageFileDialog userId={userId} isPanelVisible={isPanelVisible} />
 
-          <Button asChild variant="outline" className="w-full justify-start">
+          <Button
+            asChild
+            variant="outline"
+            className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center'}`}
+          >
             <Link href="/flashcards">
               <BookOpen className="h-4 w-4" />
               {isPanelVisible && <span className="ml-2">{t('flashcards')}</span>}
@@ -272,7 +284,9 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
               <CollapsibleTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-full justify-start group hover:bg-secondary/80 transition-colors duration-200"
+                  className={`w-full group hover:bg-secondary/80 transition-colors duration-200 ${
+                    isPanelVisible ? 'justify-start' : 'justify-center'
+                  }`}
                 >
                   <MessageSquare className="h-4 w-4" />
                   {isPanelVisible && (
@@ -289,98 +303,105 @@ export function LeftPanel({ setCurrentConversationId }: LeftPanelProps) {
                   )}
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2 bg-secondary/50 rounded-md overflow-hidden shadow-lg">
-                <div className="p-2 space-y-2">
-                  <Button
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
-                    onClick={handleNewConversation}
-                  >
-                    <Plus className="h-4 w-4" />
-                    {t('new_conversation')}
-                  </Button>
-                  {conversations.map((conv) => (
-                    <div key={conv.id} className="relative flex items-center">
-                      <Button
-                        variant="ghost"
-                        className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
-                        onClick={() => handleConversationClick(conv.id)}
-                      >
-                        {conv.title || `${t('conversation')} ${conv.id}`}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-gray-500 hover:bg-secondary/80 transition-colors duration-200"
-                        onClick={() => toggleMenuForConv(conv.id)}
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                      {menuOpenForConvId === conv.id && (
-                        <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-md shadow-lg z-10">
-                          <Button
-                            variant="ghost"
-                            className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
-                            onClick={() => {
-                              openEditDialog(conv);
-                              setMenuOpenForConvId(null);
-                            }}
-                          >
-                            <Edit2 className="h-4 w-4 mr-2" />
-                            {t('edit_title')}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200"
-                            onClick={() => {
-                              openDeleteDialog(conv);
-                              setMenuOpenForConvId(null);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            {t('delete_conversation')}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleContent>
+              {isPanelVisible && (
+                <CollapsibleContent className="mt-2 bg-secondary/50 rounded-md overflow-visible shadow-lg">
+                  <div className="p-2 space-y-2">
+                    <Button
+                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
+                      onClick={handleNewConversation}
+                    >
+                      <Plus className="h-4 w-4" />
+                      {t('new_conversation')}
+                    </Button>
+                    {conversations.map((conv) => (
+                      <div key={conv.id} className="relative flex items-center">
+                        <Button
+                          variant="ghost"
+                          className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
+                          onClick={() => handleConversationClick(conv.id)}
+                        >
+                          {conv.title || `${t('conversation')} ${conv.id}`}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="text-gray-500 hover:bg-secondary/80 transition-colors duration-200"
+                          onClick={() => toggleMenuForConv(conv.id)}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                        {menuOpenForConvId === conv.id && (
+                          <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-md shadow-lg z-50">
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
+                              onClick={() => {
+                                openEditDialog(conv);
+                                setMenuOpenForConvId(null);
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4 mr-2" />
+                              {t('edit_title')}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200"
+                              onClick={() => {
+                                openDeleteDialog(conv);
+                                setMenuOpenForConvId(null);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              {t('delete_conversation')}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              )}
             </Collapsible>
+          </div>
+
+          <div className="flex-1" />
+
+          <div className="space-y-2">
+            <LoginRegisterDialog>
+              <Button
+                variant="outline"
+                className={`w-full hover:bg-secondary/80 transition-colors duration-200 ${
+                  isPanelVisible ? 'justify-start' : 'justify-center'
+                }`}
+              >
+                <UserCircle className="h-4 w-4" />
+                {isPanelVisible && (
+                  <span className="ml-2">{t('login_register')}</span>
+                )}
+              </Button>
+            </LoginRegisterDialog>
+            <SettingsDialog>
+              <Button
+                variant="outline"
+                className={`w-full hover:bg-secondary/80 transition-colors duration-200 ${
+                  isPanelVisible ? 'justify-start' : 'justify-center'
+                }`}
+              >
+                <Settings className="h-4 w-4" />
+                {isPanelVisible && (
+                  <span className="ml-2">{t('settings')}</span>
+                )}
+              </Button>
+            </SettingsDialog>
           </div>
         </div>
       </div>
 
-      <div className="p-4 border-t border-border">
-        <div className="space-y-2">
-          <LoginRegisterDialog>
-            <Button
-              variant="outline"
-              className="w-full justify-start hover:bg-secondary/80 transition-colors duration-200"
-            >
-              <UserCircle className="h-4 w-4" />
-              {isPanelVisible && (
-                <span className="ml-2">{t('login_register')}</span>
-              )}
-            </Button>
-          </LoginRegisterDialog>
-          <SettingsDialog>
-            <Button
-              variant="outline"
-              className="w-full justify-start hover:bg-secondary/80 transition-colors duration-200"
-            >
-              <Settings className="h-4 w-4" />
-              {isPanelVisible && (
-                <span className="ml-2">{t('settings')}</span>
-              )}
-            </Button>
-          </SettingsDialog>
-        </div>
-      </div>
-
-      {/* Home button is already placed beside the Menu header */}
-
+      {/* Toggle panel button */}
       <Button
         variant="ghost"
-        className="self-end mb-4 mr-2 hover:bg-secondary/80 transition-colors duration-200"
+        className={`mb-4 hover:bg-secondary/80 transition-colors duration-200 ${
+          isPanelVisible ? 'self-end mr-2' : 'mx-auto'
+        }`}
         onClick={() => setIsPanelVisible(!isPanelVisible)}
         aria-label={isPanelVisible ? t('hide_panel') : t('show_panel')}
       >

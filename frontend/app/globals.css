@@ -169,3 +169,13 @@
 .dialog-close {
   @apply absolute top-4 right-4 text-muted-foreground hover:text-foreground;
 }
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-size: 1rem; /* Ustal jednolitą wielkość dla wszystkich nagłówków */
+  font-weight: bold;
+}

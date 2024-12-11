@@ -3,11 +3,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, RotateCcw } from 'lucide-react';
-import { useTranslation } from 'react-i18next'; // Importujemy hook useTranslation
+import { useTranslation } from 'react-i18next';
 
 interface Flashcard {
   id?: number;
@@ -33,7 +32,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   const [remainingCards, setRemainingCards] = useState<Flashcard[]>([]);
   const [visibleCard, setVisibleCard] = useState(deck.flashcards[0] || { question: '', answer: '' });
 
-  const { t } = useTranslation(); // Inicjalizacja hooka tłumaczeń
+  const { t } = useTranslation();
 
   useEffect(() => {
     setRemainingCards([...deck.flashcards]);
@@ -47,7 +46,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       }, 250); // Pół czasu trwania animacji flip
     }
     return () => clearTimeout(timeoutId);
-  }, [isFlipped, currentCardIndex, remainingCards, t]);
+  }, [isFlipped, currentCardIndex, remainingCards]);
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
@@ -131,16 +130,23 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
         </div>
         <div className="w-80 h-64 [perspective:1000px]">
           <Card
-            className={`w-full h-full cursor-pointer transition-all duration-500 [transform-style:preserve-3d] ${
+            className={`w-full h-full cursor-pointer transition-transform duration-700 [transform-style:preserve-3d] ${
               isFlipped ? '[transform:rotateY(180deg)]' : ''
             }`}
             onClick={handleFlip}
           >
-            <CardContent className="absolute w-full h-full flex items-center justify-center p-4 [backface-visibility:hidden]">
-              <p className="text-xl font-semibold">{visibleCard?.question}</p>
+            {/* Front Side */}
+            <CardContent className="absolute w-full h-full p-4 [backface-visibility:hidden] flex items-center justify-center">
+              <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
+                <p className="text-xl font-semibold text-center">{visibleCard?.question}</p>
+              </div>
             </CardContent>
-            <CardContent className="absolute w-full h-full flex items-center justify-center p-4 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-              <p className="text-xl font-semibold">{visibleCard?.answer}</p>
+
+            {/* Back Side */}
+            <CardContent className="absolute w-full h-full p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] flex items-center justify-center">
+              <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
+                <p className="text-xl font-semibold text-center">{visibleCard?.answer}</p>
+              </div>
             </CardContent>
           </Card>
         </div>

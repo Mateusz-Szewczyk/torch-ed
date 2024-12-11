@@ -10,7 +10,7 @@ import { PlusCircle, BookOpen, Loader2, Info, ChevronRight } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CustomTooltip } from '@/components/CustomTooltip'
 import { StudyDeck } from '@/components/StudyDeck'
-import { useTranslation } from 'react-i18next'; // Importujemy hook useTranslation
+import { useTranslation } from 'react-i18next';
 import React from 'react'
 
 interface Flashcard {
@@ -32,13 +32,16 @@ export default function FlashcardsPage() {
   const [error, setError] = useState<string | null>(null)
   const [studyingDeck, setStudyingDeck] = useState<Deck | null>(null)
 
-  const { t } = useTranslation(); // Inicjalizacja hooka tłumaczeń
+  const { t } = useTranslation();
+
+  // Define a base URL to maintain consistency
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/'
 
   const fetchDecks = async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.get<Deck[]>('http://localhost:8043/api/decks/')
+      const response = await axios.get<Deck[]>(API_BASE_URL)
       setDecks(response.data)
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response) {
@@ -59,8 +62,8 @@ export default function FlashcardsPage() {
   const handleSave = async (updatedDeck: Deck) => {
     try {
       if (updatedDeck.id === 0) {
-        // Tworzenie nowego zestawu (deck)
-        const createDeckResponse = await axios.post<Deck>('http://localhost:8043/decks/', {
+        // Creating a new deck
+        const createDeckResponse = await axios.post<Deck>(API_BASE_URL, {
           name: updatedDeck.name,
           description: updatedDeck.description,
           flashcards: updatedDeck.flashcards.map(fc => ({
@@ -71,8 +74,8 @@ export default function FlashcardsPage() {
         const newDeck = createDeckResponse.data;
         setDecks(prevDecks => [...prevDecks, newDeck]);
       } else {
-        // Aktualizacja istniejącego zestawu (deck)
-        const updateDeckResponse = await axios.put<Deck>(`http://localhost:8043/decks/${updatedDeck.id}/`, {
+        // Updating an existing deck
+        const updateDeckResponse = await axios.put<Deck>(`${API_BASE_URL}${updatedDeck.id}/`, {
           name: updatedDeck.name,
           description: updatedDeck.description,
           flashcards: updatedDeck.flashcards.map(fc => {
@@ -108,11 +111,16 @@ export default function FlashcardsPage() {
 
   const handleDelete = async (deckId: number) => {
     try {
-      await axios.delete(`http://localhost:8043/decks/${deckId}/`)
+      await axios.delete(`${API_BASE_URL}${deckId}/`)
       setDecks(decks.filter(deck => deck.id !== deckId))
     } catch (err: unknown) {
-      console.error(err)
-      setError(t('error_deleting_deck'))
+      if (axios.isAxiosError(err) && err.response) {
+        console.error("Error deleting deck:", err.response.data);
+        setError(`${t('error_deleting_deck')}: ${err.response.data.detail || err.response.statusText}`);
+      } else {
+        console.error(err)
+        setError(t('error_unexpected_deleting_deck'))
+      }
     }
   }
 

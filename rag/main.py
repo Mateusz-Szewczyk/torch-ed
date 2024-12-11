@@ -66,7 +66,7 @@ app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(decks.router, prefix="/api/decks", tags=["Decks"])
 app.include_router(flashcards.router, prefix="/api/flashcards", tags=["Flashcards"])
 app.include_router(query.router, prefix="/api/query", tags=["Query"])
-app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])  # Dodano chats.router
+app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])
 
 # Uruchomienie aplikacji
 if __name__ == "__main__":

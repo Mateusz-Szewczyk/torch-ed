@@ -3,7 +3,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: 'class', // Ustawienie trybu ciemnego na klasę
+  darkMode: 'class', // Use class-based dark mode
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -61,7 +61,7 @@ const config: Config = {
       zIndex: {
         '40': 40,
         '50': 50,
-        '60': 60, // Opcjonalnie, jeśli potrzebujesz jeszcze wyższego z-index
+        '60': 60,
       },
       keyframes: {
         pulseButton: {
@@ -72,9 +72,22 @@ const config: Config = {
       animation: {
         pulseButton: 'pulseButton 2s infinite',
       },
+      typography: {
+      DEFAULT: {
+        css: {
+          'h1, h2, h3, h4, h5, h6': {
+            fontSize: '1rem', // Ustal jednolitą wielkość czcionki
+            fontWeight: 'normal',
+          },
+        },
+      },
+    },
     }
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    require('@tailwindcss/typography')
+  ],
 };
 
 export default config;
