@@ -2,19 +2,19 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios, { AxiosError } from 'axios';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload, X, Loader2 } from 'lucide-react';
+import { Upload, X, Loader2, File as FileIcon, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next'; // Importujemy hook useTranslation
 
-// Import Pydantic Schemas from Backend
 interface UploadedFileRead {
   id: number;
   name: string;
-  description?: string; // Dodane pole description jako opcjonalne
+  description?: string;
+  category: string;
 }
 
 interface UploadResponse {
@@ -37,10 +37,6 @@ interface DeleteKnowledgeRequest {
   file_name: string;
 }
 
-interface ListFilesRequest {
-  user_id: string;
-}
-
 interface ManageFileDialogProps {
   userId: string;
   isPanelVisible: boolean;
@@ -60,21 +56,18 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const { t, i18n } = useTranslation(); // Inicjalizacja hooka tłumaczeń
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Funkcja pobierająca listę plików z backendu
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { t } = useTranslation();
+
   const fetchUploadedFiles = useCallback(async () => {
     try {
       const response = await axios.post<UploadedFileRead[]>(
         `${API_BASE_URL}/files/list/`,
-        {
-          user_id: userId
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
+        { user_id: userId },
+        { headers: { 'Content-Type': 'application/json' } }
       );
       setUploadedFiles(response.data);
     } catch (err) {
@@ -90,13 +83,27 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     }
   }, [isPanelVisible, fetchUploadedFiles]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChooseFile = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files || files.length === 0) return;
+    if (files && files.length > 0) {
+      setSelectedFile(files[0]);
+      setSuccessMessage(null);
+      setError(null);
+    }
+  };
 
-    const file = files[0]; // Upload one file at a time
+  const handleUploadFile = async () => {
+    if (!selectedFile) {
+      setError(t('error_no_file_selected'));
+      return;
+    }
 
-    // Dodaj walidację
     if (!fileDescription.trim()) {
       setError(t('error_file_description_required'));
       return;
@@ -117,7 +124,7 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     if (endPage !== undefined) {
       formData.append('end_page', endPage.toString());
     }
-    formData.append('file', file);
+    formData.append('file', selectedFile);
 
     setUploading(true);
     setError(null);
@@ -125,9 +132,7 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
 
     try {
       const response = await axios.post<UploadResponse>(`${API_BASE_URL}/files/upload/`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
       console.log('Upload response:', response.data);
@@ -136,19 +141,21 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
         throw new Error(t('error_upload_file'));
       }
 
-      const newUploadedFiles: UploadedFileRead[] = response.data.uploaded_files.map(file => ({
-        id: file.id,
-        name: file.name,
-        description: file.description // Dodanie opisu pliku
+      const newUploadedFiles: UploadedFileRead[] = response.data.uploaded_files.map(f => ({
+        id: f.id,
+        name: f.name,
+        description: f.description,
+        category: f.category,
       }));
 
       setUploadedFiles(prev => [...prev, ...newUploadedFiles]);
 
-      // Reset form fields after successful upload
+      // Reset after successful upload
       setFileDescription('');
       setCategory('');
       setStartPage(undefined);
       setEndPage(undefined);
+      setSelectedFile(null);
       setSuccessMessage(t('settings_saved_successfully'));
     } catch (err) {
       const error = err as AxiosError;
@@ -156,10 +163,6 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
       setError(error.response?.data?.detail || t('error_upload_file'));
     } finally {
       setUploading(false);
-      // Reset the file input
-      if (event.target) {
-        event.target.value = '';
-      }
     }
   };
 
@@ -169,16 +172,11 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     setSuccessMessage(null);
 
     try {
-      const deleteRequest: DeleteKnowledgeRequest = {
-        user_id: userId,
-        file_name: fileName
-      };
+      const deleteRequest: DeleteKnowledgeRequest = { user_id: userId, file_name: fileName };
 
       const response = await axios.delete<DeleteKnowledgeResponse>(`${API_BASE_URL}/files/delete-file/`, {
         data: deleteRequest,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'application/json' }
       });
 
       console.log('Delete response:', response.data);
@@ -188,9 +186,8 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
       }
 
       if (response.data.deleted_from_vector_store || response.data.deleted_from_graph) {
-        // Remove the file from the state
         setUploadedFiles(prev => prev.filter(file => file.id !== id));
-        setSuccessMessage(t('settings_saved_successfully'));
+        setSuccessMessage(t('file_deleted_successfully'));
       } else {
         throw new Error(t('error_deletion_failed'));
       }
@@ -203,121 +200,145 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     }
   };
 
+  const canSaveFile = selectedFile && fileDescription.trim() && category.trim() && !uploading;
+
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          className="w-full justify-start bg-background text-foreground border-border"
-        >
+        <Button variant="outline" className="w-full justify-start bg-background text-foreground border-border hover:bg-secondary/80 transition-colors">
           <Upload className="h-4 w-4" />
           {isPanelVisible && <span className="ml-2">{t('manage_files')}</span>}
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-background border-border text-foreground p-6 rounded-lg max-w-3xl w-full">
+      <DialogContent className="bg-background border border-border text-foreground p-6 rounded-lg max-w-3xl w-full">
         <DialogHeader>
-          <DialogTitle className="text-foreground">{t('manage_uploaded_files')}</DialogTitle>
+          <DialogTitle className="text-foreground text-lg font-bold">{t('manage_uploaded_files')}</DialogTitle>
         </DialogHeader>
 
-        {/* Success Message */}
+        {/* Success / Error Messages */}
         {successMessage && (
           <p className="mt-2 text-sm text-green-600">
             {successMessage}
           </p>
         )}
-
-        {/* File Upload Form */}
-        <div className="space-y-4 mt-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground">{t('file_description')}</label>
-            <input
-              type="text"
-              value={fileDescription}
-              onChange={(e) => setFileDescription(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
-              placeholder={t('enter_file_description')}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground">{t('category')}</label>
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
-              placeholder={t('enter_category')}
-            />
-          </div>
-          <div className="flex space-x-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground">{t('start_page')}</label>
-              <input
-                type="number"
-                min={0}
-                value={startPage !== undefined ? startPage : ''}
-                onChange={(e) => setStartPage(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="mt-1 block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
-                placeholder={t('optional')}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground">{t('end_page')}</label>
-              <input
-                type="number"
-                min={0}
-                value={endPage !== undefined ? endPage : ''}
-                onChange={(e) => setEndPage(e.target.value ? parseInt(e.target.value) : undefined)}
-                className="mt-1 block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
-                placeholder={t('optional')}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Error Handling */}
         {(error || deleteError) && (
           <p className="mt-2 text-sm text-destructive">
             {error || deleteError}
           </p>
         )}
 
-        {/* Upload Button */}
-        <Button
-          asChild
-          className="w-full mt-4 bg-primary text-primary-foreground"
-          disabled={uploading}
-        >
-          <label className="flex items-center justify-center cursor-pointer w-full">
-            {uploading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t('uploading')}
-              </>
-            ) : (
-              <>
-                <Upload className="mr-2 h-4 w-4" />
-                {t('upload_new_file')}
-              </>
-            )}
-            <input type="file" className="hidden" onChange={handleFileUpload} />
-          </label>
-        </Button>
+        {/* File Upload Form */}
+        <div className="space-y-4 mt-6 bg-secondary/10 p-4 rounded-md">
+          <p className="text-sm text-muted-foreground">{t('upload_instructions')}</p>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('file_description')}</label>
+            <input
+              type="text"
+              value={fileDescription}
+              onChange={(e) => setFileDescription(e.target.value)}
+              className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
+              placeholder={t('enter_file_description')}
+            />
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
+              placeholder={t('enter_category')}
+            />
+          </div>
+
+          {/* Pages */}
+          <div className="flex space-x-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-foreground mb-1">{t('start_page')} ({t('optional')})</label>
+              <input
+                type="number"
+                min={0}
+                value={startPage !== undefined ? startPage : ''}
+                onChange={(e) => setStartPage(e.target.value ? parseInt(e.target.value) : undefined)}
+                className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-foreground mb-1">{t('end_page')} ({t('optional')})</label>
+              <input
+                type="number"
+                min={0}
+                value={endPage !== undefined ? endPage : ''}
+                onChange={(e) => setEndPage(e.target.value ? parseInt(e.target.value) : undefined)}
+                className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
+              />
+            </div>
+          </div>
+
+          {/* File selection */}
+          <div className="flex items-center space-x-2 mt-4">
+            <input
+              type="file"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleFileSelection}
+            />
+            <Button
+              variant="outline"
+              className="flex items-center justify-center space-x-2 bg-background hover:bg-secondary/80 transition-colors"
+              onClick={handleChooseFile}
+              disabled={uploading}
+            >
+              <FileIcon className="h-4 w-4" />
+              <span>{t('choose_file')}</span>
+            </Button>
+
+            <Button
+              variant="primary"
+              className="flex items-center justify-center space-x-2 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              onClick={handleUploadFile}
+              disabled={!canSaveFile}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <span>{t('uploading')}</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  <span>{t('save_file')}</span>
+                </>
+              )}
+            </Button>
+          </div>
+
+          {selectedFile && (
+            <p className="text-sm text-foreground mt-2">
+              {t('selected_file')}: <span className="font-medium">{selectedFile.name}</span>
+            </p>
+          )}
+        </div>
 
         {/* Uploaded Files List */}
-        <div className="mt-6">
+        <div className="mt-8">
           <h3 className="text-lg font-semibold mb-2">{t('uploaded_files')}</h3>
-          <ScrollArea className="h-64 w-full pr-4 bg-background">
+          <ScrollArea className="h-64 w-full pr-4 bg-background border border-border rounded-md">
             {uploadedFiles.length === 0 ? (
-              <p className="text-center text-muted-foreground">{t('no_files_uploaded_yet')}</p>
+              <p className="text-center text-muted-foreground m-4">{t('no_files_uploaded_yet')}</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-2 p-2">
                 {uploadedFiles.map(file => (
                   <li
                     key={file.id}
-                    className="flex flex-col bg-background p-4 rounded-md shadow-sm border border-border"
+                    className="flex flex-col bg-card p-4 rounded-md shadow-sm border border-border"
                   >
                     <div className="flex justify-between items-center">
-                      <span className="font-medium text-foreground">{file.name}</span>
+                      <span className="font-medium text-foreground">{file.category}</span>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -347,6 +368,6 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
       </DialogContent>
     </Dialog>
   );
-}
+};
 
 export default ManageFileDialog;

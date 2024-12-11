@@ -69,6 +69,7 @@ class UploadedFileRead(BaseModel):
     id: int
     name: str
     description: Optional[str] = None  # Opcjonalne pole
+    category: str
 
     class Config:
         orm_mode = True

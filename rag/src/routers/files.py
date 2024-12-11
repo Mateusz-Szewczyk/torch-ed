@@ -224,7 +224,7 @@ async def list_uploaded_files(request: ListFilesRequest, db: Session = Depends(g
     try:
         files = db.query(ORMFile).filter(ORMFile.user_id == user_id).all()
         uploaded_files = [
-            UploadedFileRead(id=file.id, name=file.name, description=file.description)
+            UploadedFileRead(id=file.id, name=file.name, description=file.description, category=file.category)
             for file in files
         ]
         return uploaded_files

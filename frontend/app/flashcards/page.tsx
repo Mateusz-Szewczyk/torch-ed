@@ -1,17 +1,21 @@
 // components/FlashcardsPage.tsx
-
 'use client'
 
 import { useState, useEffect } from 'react'
 import { EditDeckDialog } from '@/components/EditDeckDialog'
 import axios from 'axios'
 import { Button } from "@/components/ui/button"
-import { PlusCircle, BookOpen, Loader2, Info, ChevronRight } from 'lucide-react'
+import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CustomTooltip } from '@/components/CustomTooltip'
 import { StudyDeck } from '@/components/StudyDeck'
 import { useTranslation } from 'react-i18next';
 import React from 'react'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 interface Flashcard {
   id?: number;
@@ -34,7 +38,6 @@ export default function FlashcardsPage() {
 
   const { t } = useTranslation();
 
-  // Define a base URL to maintain consistency
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/'
 
   const fetchDecks = async () => {
@@ -62,7 +65,7 @@ export default function FlashcardsPage() {
   const handleSave = async (updatedDeck: Deck) => {
     try {
       if (updatedDeck.id === 0) {
-        // Creating a new deck
+        // Create new deck
         const createDeckResponse = await axios.post<Deck>(API_BASE_URL, {
           name: updatedDeck.name,
           description: updatedDeck.description,
@@ -74,7 +77,7 @@ export default function FlashcardsPage() {
         const newDeck = createDeckResponse.data;
         setDecks(prevDecks => [...prevDecks, newDeck]);
       } else {
-        // Updating an existing deck
+        // Update existing deck
         const updateDeckResponse = await axios.put<Deck>(`${API_BASE_URL}${updatedDeck.id}/`, {
           name: updatedDeck.name,
           description: updatedDeck.description,
@@ -143,8 +146,8 @@ export default function FlashcardsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Card className="w-[350px]">
+      <div className="flex items-center justify-center h-screen p-4">
+        <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle className="text-destructive">{t('error')}</CardTitle>
           </CardHeader>
@@ -164,76 +167,125 @@ export default function FlashcardsPage() {
   }
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <div className="text-center mb-6 flex items-center justify-center">
-        <h1 className="text-3xl font-bold">{t('flashcards')}</h1>
-          <CustomTooltip
-            content={t('flashcards_tooltip')}
-          >
-            <Button variant="ghost" size="icon" className="ml-2">
-              <Info className="h-4 w-4" />
+    <div className="p-4 max-w-full mx-auto">
+      {/* Header Section */}
+      <div className="text-center mb-6 flex flex-col items-center justify-center space-y-2">
+        <h1 className="text-5xl font-extrabold text-primary">{t('flashcards')}</h1>
+        <div className="flex items-center space-x-2">
+          <CustomTooltip content={t('flashcards_tooltip')}>
+            <Button variant="ghost" size="icon">
+              <Info className="h-6 w-6" />
               <span className="sr-only">{t('more_information')}</span>
             </Button>
           </CustomTooltip>
+        </div>
       </div>
+
+      {/* No Decks Available */}
       {decks.length === 0 ? (
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle>{t('welcome_flashcards')}</CardTitle>
-            <CardDescription>{t('get_started_create_deck')}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center space-y-4 py-8">
-            <BookOpen className="h-24 w-24 text-muted-foreground" />
-            <p className="text-center text-muted-foreground">
-              {t('no_flashcard_decks')}
-            </p>
-          </CardContent>
-          <CardFooter className="flex justify-center">
-            <EditDeckDialog
-              deck={{ id: 0, name: '', description: '', flashcards: [] }}
-              onSave={handleSave}
-              trigger={
-                <Button>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  {t('create_your_first_deck')}
-                </Button>
-              }
-            />
-          </CardFooter>
-        </Card>
+        <div className="flex flex-col items-center justify-center">
+          <Card className="w-full max-w-2xl shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-3xl font-bold">{t('welcome_flashcards')}</CardTitle>
+              <CardDescription className="text-xl">{t('get_started_create_deck')}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center space-y-6 py-12">
+              <BookOpen className="h-40 w-40 text-muted-foreground" />
+              <p className="text-center text-muted-foreground text-xl">
+                {t('no_flashcard_decks')}
+              </p>
+            </CardContent>
+            <CardFooter className="flex justify-center space-x-4">
+              <EditDeckDialog
+                deck={{ id: 0, name: '', description: '', flashcards: [] }}
+                onSave={handleSave}
+                trigger={
+                  <Button className="flex items-center space-x-2 px-6 py-3">
+                    <PlusCircle className="h-6 w-6" />
+                    <span>{t('create_your_first_deck')}</span>
+                  </Button>
+                }
+              />
+            </CardFooter>
+          </Card>
+        </div>
       ) : (
         <>
-          <div className="mb-4 flex justify-end">
+          {/* Create New Deck Button */}
+          <div className="mb-8 flex justify-end">
             <EditDeckDialog
               deck={{ id: 0, name: '', description: '', flashcards: [] }}
               onSave={handleSave}
               trigger={
-                <Button>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  {t('create_new_deck')}
+                <Button className="flex items-center space-x-2 px-6 py-3">
+                  <PlusCircle className="h-6 w-6" />
+                  <span>{t('create_new_deck')}</span>
                 </Button>
               }
             />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          {/* Decks Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {decks.map(deck => (
-              <Card key={deck.id} className="flex flex-col">
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>{deck.name}</CardTitle>
-                    <div className="flex space-x-2">
-                      <EditDeckDialog deck={deck} onSave={handleSave} trigger={<Button variant="outline" size="sm">{t('edit')}</Button>} />
-                      <Button variant="destructive" size="sm" onClick={() => handleDelete(deck.id)}>{t('delete')}</Button>
-                    </div>
+              <Card key={deck.id} className="flex flex-col min-h-[350px] shadow-lg">
+                <CardHeader className="flex flex-col">
+                  <div className="flex justify-between items-center space-x-4">
+                    <CardTitle className="text-2xl font-bold truncate">{deck.name}</CardTitle>
+                    {/* Collapsible Menu for Edit/Delete */}
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="p-1">
+                          <MoreVertical className="h-5 w-5" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50">
+                        <div className="flex flex-col">
+                          <EditDeckDialog
+                            deck={deck}
+                            onSave={handleSave}
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80"
+                              >
+                                <Edit2 className="h-4 w-4 mr-2" />
+                                {t('edit')}
+                              </Button>
+                            }
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex items-center justify-start w-full px-4 py-2 text-destructive hover:bg-secondary/80"
+                            onClick={() => handleDelete(deck.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            {t('delete')}
+                          </Button>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
-                  <CardDescription>{deck.description}</CardDescription>
+                  <CardDescription className="mt-3 text-lg break-words">
+                    {deck.description || t('no_description')}
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{deck.flashcards.length} {t('flashcards_lowercase')}</p>
+                <CardContent className="flex-grow">
+                  <p className="text-lg text-muted-foreground">
+                    {deck.flashcards.length} {t('flashcards_lowercase')}
+                  </p>
                 </CardContent>
-                <CardFooter className="mt-auto">
-                  <Button variant="ghost" size="sm" className="ml-2" onClick={() => handleStudy(deck)}>
-                    {t('study')} <ChevronRight className="ml-2 h-4 w-4" />
+                <CardFooter className="mt-auto flex justify-end space-x-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleStudy(deck)}
+                    className="flex items-center space-x-2 px-4 py-2"
+                  >
+                    <span>{t('study')}</span>
+                    <ChevronRight className="h-5 w-5" />
                   </Button>
                 </CardFooter>
               </Card>

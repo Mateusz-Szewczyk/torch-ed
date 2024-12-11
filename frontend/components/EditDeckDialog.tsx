@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Trash2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next'; // Importujemy hook useTranslation
+import { useTranslation } from 'react-i18next';
 
 interface Flashcard {
   id: number;
@@ -36,7 +36,7 @@ export const EditDeckDialog = ({ deck, onSave, trigger }: EditDeckDialogProps) =
   const [description, setDescription] = useState(deck.description || '');
   const [flashcards, setFlashcards] = useState<Flashcard[]>(deck.flashcards);
 
-  const { t } = useTranslation(); // Inicjalizacja hooka tłumaczeń
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (isOpen) {
@@ -47,7 +47,8 @@ export const EditDeckDialog = ({ deck, onSave, trigger }: EditDeckDialogProps) =
   }, [isOpen, deck]);
 
   const handleAddFlashcard = () => {
-    setFlashcards([...flashcards, { id: Date.now(), question: '', answer: '' }]);
+    // Dodanie nowej fiszki na górę listy
+    setFlashcards([{ id: Date.now(), question: '', answer: '' }, ...flashcards]);
   };
 
   const handleFlashcardChange = (index: number, field: 'question' | 'answer', value: string) => {
@@ -66,7 +67,7 @@ export const EditDeckDialog = ({ deck, onSave, trigger }: EditDeckDialogProps) =
     e.preventDefault();
 
     if (name.trim() === '' || flashcards.some(fc => fc.question.trim() === '' || fc.answer.trim() === '')) {
-      alert(t('error_provide_deck_and_flashcards')); // Tłumaczenie alertu
+      alert(t('error_provide_deck_and_flashcards'));
       return;
     }
 
@@ -87,73 +88,83 @@ export const EditDeckDialog = ({ deck, onSave, trigger }: EditDeckDialogProps) =
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-background text-foreground p-6 rounded-lg">
+      <DialogContent className="sm:max-w-[600px] bg-background text-foreground p-6 rounded-lg flex flex-col">
         <DialogHeader>
           <DialogTitle>{deck.id === 0 ? t('create_new_deck') : t('edit_deck')}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSaveClick} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="deck-name">{t('deck_name')}</Label>
-            <Input
-              id="deck-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('enter_deck_name')}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="deck-description">{t('deck_description')}</Label>
-            <Textarea
-              id="deck-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t('enter_deck_description')}
-            />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold mb-2">{t('flashcards')}:</h3>
-            {flashcards.map((fc, index) => (
-              <div key={fc.id} className="border rounded-md p-4 mb-4 space-y-2 bg-background">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-medium">{t('flashcard_number', { number: index + 1 })}</span>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDeleteFlashcard(index)}
-                    aria-label={t('delete_flashcard', { number: index + 1 })}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+        <form onSubmit={handleSaveClick} className="flex flex-col flex-grow">
+          <div className="space-y-4 flex-grow overflow-y-auto">
+            <div className="space-y-2">
+              <Label htmlFor="deck-name">{t('deck_name')}</Label>
+              <Input
+                id="deck-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('enter_deck_name')}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deck-description">{t('deck_description')}</Label>
+              <Textarea
+                id="deck-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t('enter_deck_description')}
+              />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-2">{t('flashcards')}:</h3>
+              {/* Przycisk dodawania fiszki na górze */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAddFlashcard}
+                className="w-full mb-4 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {t('add_flashcard')}
+              </Button>
+              {/* Lista fiszek */}
+              {flashcards.map((fc, index) => (
+                <div key={fc.id} className="border rounded-md p-4 mb-4 space-y-2 bg-background">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-medium">{t('flashcard_number', { number: index + 1 })}</span>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteFlashcard(index)}
+                      aria-label={t('delete_flashcard', { number: index + 1 })}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`flashcard-question-${fc.id}`}>{t('question')}</Label>
+                    <Input
+                      id={`flashcard-question-${fc.id}`}
+                      value={fc.question}
+                      onChange={(e) => handleFlashcardChange(index, 'question', e.target.value)}
+                      placeholder={t('enter_question')}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`flashcard-answer-${fc.id}`}>{t('answer')}</Label>
+                    <Textarea
+                      id={`flashcard-answer-${fc.id}`}
+                      value={fc.answer}
+                      onChange={(e) => handleFlashcardChange(index, 'answer', e.target.value)}
+                      placeholder={t('enter_answer')}
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`flashcard-question-${fc.id}`}>{t('question')}</Label>
-                  <Input
-                    id={`flashcard-question-${fc.id}`}
-                    value={fc.question}
-                    onChange={(e) => handleFlashcardChange(index, 'question', e.target.value)}
-                    placeholder={t('enter_question')}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor={`flashcard-answer-${fc.id}`}>{t('answer')}</Label>
-                  <Textarea
-                    id={`flashcard-answer-${fc.id}`}
-                    value={fc.answer}
-                    onChange={(e) => handleFlashcardChange(index, 'answer', e.target.value)}
-                    placeholder={t('enter_answer')}
-                    required
-                  />
-                </div>
-              </div>
-            ))}
-            <Button type="button" variant="outline" onClick={handleAddFlashcard} className="w-full mt-2 bg-primary text-primary-foreground hover:bg-primary/90">
-              {t('add_flashcard')}
-            </Button>
+              ))}
+            </div>
           </div>
-          <div className="flex justify-end space-x-2">
+          {/* Przycisk Zapisz i Anuluj przyklejony do dołu */}
+          <div className="mt-4 flex justify-end space-x-2">
             <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>
               {t('cancel')}
             </Button>

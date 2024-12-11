@@ -15,6 +15,7 @@ from langchain_community.tools.tavily_search.tool import TavilySearchResults
 from dotenv import load_dotenv
 from pathlib import Path
 
+from .utils import set_conversation_title_if_needed
 from ..models import Conversation
 from .tools import FlashcardGenerator, RAGTool
 from .agent_memory import (
@@ -23,22 +24,12 @@ from .agent_memory import (
     get_conversation_history,
 )
 from langchain.tools import BaseTool
-# ------------------------------
-# 0. Load Environment Variables
-# ------------------------------
+
+logger = logging.getLogger(__name__)
 
 env_path = Path(__file__).resolve().parents[2] / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# ------------------------------
-# 1. Configure Logging
-# ------------------------------
-
-logger = logging.getLogger(__name__)
-
-# ------------------------------
-# 2. Define Routing Model
-# ------------------------------
 
 class RouteQuery(BaseModel):
     """Route a user query to the most relevant datasources."""
@@ -54,9 +45,6 @@ class RouteQuery(BaseModel):
             return [v]
         return v
 
-# ------------------------------
-# 3. Define Tools with Descriptions
-# ------------------------------
 
 class DirectAnswer(BaseTool):
     name: str = "DirectAnswer"
@@ -102,26 +90,19 @@ class DirectAnswer(BaseTool):
     async def _arun(self, query: str) -> str:
         raise NotImplementedError("DirectAnswer does not support async operations.")
 
-# ------------------------------
-# 4. Implement Classification Chain
-# ------------------------------
 
 def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> Callable[[str], RouteQuery]:
-    """
-    Creates a classification chain that routes user questions to appropriate datasources.
-    """
-
     tools_descriptions = "\n\n".join([
         f"{idx + 1}. {tool.name}\n   Description: {tool.description}"
         for idx, tool in enumerate(tools)
     ])
 
     system_prompt = f"""You are an expert router selecting tools based on the user's question. Consider conversation context, requested tasks, and available tools.
-                
+
                 Tools: {tools_descriptions}
-                
+
                 Rules:
-                
+
                 If user requests simple context-based info: use "DirectAnswer".
                 If user wants flashcards, always pair "FlashcardGenerator" with a retrieval tool first (e.g., "RAGTool") if external knowledge is needed.
                 If user references previously stored knowledge: use "RAGTool".
@@ -130,20 +111,21 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
                 Return only a JSON object with "datasources": [ ... ].
                 No explanations outside JSON.
                 Examples:
-                
+
                 "Create flashcards about OOP from provided knowledge": {{{{"datasources": ["RAGTool", "FlashcardGenerator"]}}}}
-                
+
                 "What's my name?": {{{{"datasources": ["DirectAnswer"]}}}}
-                
+
                 "Explain abstraction mentioned before": {{{{"datasources": ["RAGTool"]}}}}
-                
+
                 "Create flashcards about Python decorators": {{{{"datasources": ["RAGTool", "FlashcardGenerator"]}}}}
-                
+
                 "Explain Python generators": {{{{"datasources": ["DirectAnswer"]}}}}
-                
+
                 "Top trending JS framework now?": {{{{"datasources": ["TavilySearchResults"]}}}}
-                
-                "Create flashcards on latest web frameworks (need new info)": {{{{"datasources": ["TavilySearchResults", "FlashcardGenerator"]}}}} """
+
+                "Create flashcards on latest web frameworks (need new info)": {{{{"datasources": ["TavilySearchResults", "FlashcardGenerator"]}}}}
+                """
 
     human_prompt = "{question}"
 
@@ -155,9 +137,9 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
     parser = JsonOutputParser()
 
     chain = (
-        prompt
-        | model
-        | parser
+            prompt
+            | model
+            | parser
     )
 
     def classify(question: str) -> RouteQuery:
@@ -193,9 +175,6 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
 
     return classify
 
-# ------------------------------
-# 5. Implement Tool Chains
-# ------------------------------
 
 def create_tool_chains(flashcard_tool: FlashcardGenerator, rag_tool: RAGTool, tavily_tool: TavilySearchResults,
                        model: ChatAnthropic) -> Dict[str, Callable[[str], str]]:
@@ -232,9 +211,6 @@ def create_tool_chains(flashcard_tool: FlashcardGenerator, rag_tool: RAGTool, ta
 
     return tool_chains
 
-# ------------------------------
-# 6. Implement Router Chain
-# ------------------------------
 
 def create_router_chain(tool_chains: Dict[str, Callable[[str], str]]) -> Callable[[RouteQuery, str, str], str]:
     def routing_function(classification: RouteQuery, query: str, description: str) -> str:
@@ -269,17 +245,9 @@ def create_router_chain(tool_chains: Dict[str, Callable[[str], str]]) -> Callabl
 
     return routing_function
 
-# ------------------------------
-# 7. Implement Final Answer Function
-# ------------------------------
 
 def final_answer(context: str, query: str, model: ChatAnthropic) -> str:
-    """
-    Finalizes the response using an OpenAI model (gpt-4o-mini-2024-07-18) in Markdown.
-    """
-
     try:
-        # Now using an OpenAI model for the final answer
         final_model = ChatOpenAI(
             model_name="gpt-4o-mini-2024-07-18",
             temperature=0.0
@@ -310,9 +278,33 @@ def final_answer(context: str, query: str, model: ChatAnthropic) -> str:
         logger.error(f"Error generating final answer: {e}")
         return "Przepraszam, wystąpił problem z generowaniem końcowej odpowiedzi."
 
-# ------------------------------
-# 8. Implement ChatAgent Class
-# ------------------------------
+
+def produce_conversation_name(query: str, model: ChatAnthropic) -> str:
+    """
+    Produce a concise conversation name based on the user's first query.
+    The name should be a short phrase describing the topic.
+    """
+    system_prompt = (
+        "You are an assistant that creates short, descriptive conversation titles based on the user's first query. "
+        "Do not mention that you are generating a title. Just provide a concise title (up to 5 words) that summarizes what the user might want to talk about."
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{question}")
+    ])
+
+    messages = prompt.format_messages(question=query)
+    logger.debug(f"Generating conversation title with messages: {messages}")
+    try:
+        response = model.invoke(messages).content
+        title = response.strip()
+        logger.info(f"Generated conversation title: {title}")
+        return title
+    except Exception as e:
+        logger.error(f"Error generating conversation title: {e}", exc_info=True)
+        return "New Conversation"
+
 
 class ChatAgent:
     MAX_HISTORY_LENGTH = 4
@@ -379,9 +371,12 @@ class ChatAgent:
             logger.error(f"Error retrieving latest conversation: {e}")
             return "Przepraszam, wystąpił problem z przetworzeniem Twojego zapytania."
 
+        # If conversation just started
+        if len(conversation_history) < 2:  # np. < 2 oznacza, że jeszcze nie ma pełnych wymian
+            set_conversation_title_if_needed(conversation, query, self.model)
+
         context = "\n".join(conversation_history) if conversation_history else ""
 
-        # Classification
         try:
             classification = self.classify(query)
             logger.info(f"Classification result: {classification}")
@@ -425,9 +420,6 @@ class ChatAgent:
 
         return final_response
 
-# ------------------------------
-# 8. Implement ChatAgent Function
-# ------------------------------
 
 def agent_response(
         user_id: str,

@@ -40,14 +40,14 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
 
-  // Automatyczne przewijanie do dołu przy dodaniu wiadomości
+  // Automatycznie przewijaj do ostatniej wiadomości
   useEffect(() => {
     if (endRef.current) {
       endRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, isTyping]);
 
-  // Pobieranie wiadomości
+  // Pobierz wiadomości
   useEffect(() => {
     const fetchMessages = async () => {
       try {
@@ -170,9 +170,9 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center">
-      {/* Kontener wiadomości */}
-      <div className="w-3/5 pt-4 pb-32 space-y-4">
+    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
+      {/* Sekcja wiadomości z własnym scrollbarem */}
+      <div className="flex-1 overflow-auto w-5/6 mx-auto p-4 pb-32 scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
         {messages.map((message) => {
           const alignmentClass =
             message.sender === 'user'
@@ -227,8 +227,8 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
         <div ref={endRef} />
       </div>
 
-      {/* Pasek wpisywania wiadomości – wyśrodkowany i dopasowany */}
-      <div className="fixed bottom-0 w-full bg-background border-t border-border p-4">
+      {/* Pole do wpisywania wiadomości na dole */}
+      <div className="border-t border-border p-4 w-full bg-background">
         <div className="max-w-3xl mx-auto flex space-x-2">
           <Input
             type="text"

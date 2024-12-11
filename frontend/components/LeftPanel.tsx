@@ -304,7 +304,7 @@ export function LeftPanel({
                 </Button>
               </CollapsibleTrigger>
               {isPanelVisible && (
-                <CollapsibleContent className="mt-2 bg-secondary/50 rounded-md overflow-visible shadow-lg">
+                <CollapsibleContent className="mt-2 bg-secondary/50 rounded-md shadow-lg overflow-auto">
                   <div className="p-2 space-y-2">
                     <Button
                       className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
@@ -314,13 +314,14 @@ export function LeftPanel({
                       {t('new_conversation')}
                     </Button>
                     {conversations.map((conv) => (
-                      <div key={conv.id} className="relative flex items-center">
+                      <div key={conv.id} className="relative flex items-center w-full overflow-hidden">
                         <Button
                           variant="ghost"
-                          className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
+                          className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200 overflow-hidden text-ellipsis whitespace-nowrap truncate"
                           onClick={() => handleConversationClick(conv.id)}
+                          title={conv.title || t('conversation')} // Tooltip z pełną nazwą
                         >
-                          {conv.title || `${t('conversation')} ${conv.id}`}
+                          {conv.title || `${t('conversation')}`}
                         </Button>
                         <Button
                           variant="ghost"

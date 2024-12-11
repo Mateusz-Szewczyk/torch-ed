@@ -50,7 +50,7 @@
     --card-foreground: 210 40% 92%;
 
     --border: 220 10% 15%;
-    --input: 220 10% 15%;
+    --input: 220 10% 17%;
 
     --primary: 210 10% 90%;
     --primary-foreground: 222.2 47.4% 11.2%;
@@ -74,6 +74,11 @@
   }
   body {
     @apply bg-background text-foreground;
+
+    /* Use theme colors for scrollbar */
+    --sb-track-color: hsl(var(--muted));
+    --sb-thumb-color: hsl(var(--border));
+    --sb-size: 11px;
   }
 
   .bg-background {
@@ -141,7 +146,7 @@
   animation: pulse 2s infinite;
 }
 
-/* Radix UI Dialog (jeśli używasz) */
+/* Radix UI Dialog (if used) */
 .radix-dialog-overlay {
   @apply fixed inset-0 bg-black/50 z-50;
 }
@@ -176,6 +181,58 @@
 .prose h4,
 .prose h5,
 .prose h6 {
-  font-size: 1rem; /* Ustal jednolitą wielkość dla wszystkich nagłówków */
+  font-size: 1rem;
   font-weight: bold;
+}
+
+/* Updated scrollbar styling using logic from the provided code */
+
+/* Base Scrollbar Styles */
+::-webkit-scrollbar {
+  width: var(--sb-size);
+  height: var(--sb-size);
+}
+
+::-webkit-scrollbar-button {
+  width: 0px;
+  height: 0px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb-color);
+  border-radius: 16px; /* Round thumb ends fully */
+  border: 0px none #ffffff;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: hsl(var(--input));
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sb-track-color);
+  border: 0px none #A0A077;
+  border-radius: 11px;
+}
+
+::-webkit-scrollbar-track:hover {
+  background: var(--sb-track-color);
+}
+
+::-webkit-scrollbar-track:active {
+  background: var(--sb-track-color);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* For browsers that do not support ::-webkit-scrollbar */
+@supports not selector(::-webkit-scrollbar) {
+  body {
+    scrollbar-color: var(--sb-thumb-color) var(--sb-track-color);
+  }
 }
