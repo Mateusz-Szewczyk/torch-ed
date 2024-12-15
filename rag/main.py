@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Importuj modele i bazę danych
 from src.models import Base, ORMFile, Deck, Flashcard, Conversation, Message  # Dodano Conversation i Message
-from src.routers import files, decks, flashcards, query, chats  # Dodano 'chats'
+from src.routers import files, decks, flashcards, query, chats, exams  # Dodano 'chats'
 from src.database import engine
 
 # Inicjalizacja logowania
@@ -67,6 +67,7 @@ app.include_router(decks.router, prefix="/api/decks", tags=["Decks"])
 app.include_router(flashcards.router, prefix="/api/flashcards", tags=["Flashcards"])
 app.include_router(query.router, prefix="/api/query", tags=["Query"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])
+app.include_router(exams.router, prefix="/api/exams", tags=["Exams"])
 
 # Uruchomienie aplikacji
 if __name__ == "__main__":

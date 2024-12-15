@@ -122,3 +122,69 @@ class ConversationUpdate(BaseModel):
         if v is not None and not v.strip():
             raise ValueError('Title cannot be empty')
         return v
+
+
+
+class ExamAnswerCreate(BaseModel):
+    text: str = Field(..., example="3.14")
+    is_correct: bool = Field(..., example=True)
+
+class ExamAnswerRead(ExamAnswerCreate):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+class ExamQuestionCreate(BaseModel):
+    text: str = Field(..., example="Jaka jest wartość liczby pi?")
+    answers: List[ExamAnswerCreate]
+
+    @validator('answers')
+    def validate_answers(cls, v):
+        if len(v) != 4:
+            raise ValueError("Każde pytanie musi mieć dokładnie 4 odpowiedzi.")
+        correct_answers = [answer for answer in v if answer.is_correct]
+        if len(correct_answers) != 1:
+            raise ValueError("Każde pytanie musi mieć dokładnie jedną poprawną odpowiedź.")
+        return v
+
+class ExamQuestionRead(BaseModel):
+    id: int
+    text: str
+    answers: List[ExamAnswerRead]
+
+    class Config:
+        orm_mode = True
+
+class ExamCreate(BaseModel):
+    name: str = Field(..., example="Egzamin z Matematyki")
+    description: Optional[str] = Field(None, example="Egzamin końcowy z matematyki.")
+    questions: List[ExamQuestionCreate]
+
+    @validator('questions')
+    def validate_questions(cls, v):
+        if len(v) == 0:
+            raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
+        return v
+
+class ExamRead(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    created_at: datetime
+    questions: List[ExamQuestionRead]
+
+    class Config:
+        orm_mode = True
+
+class ExamUpdate(BaseModel):
+    name: Optional[str] = Field(None, example="Nowa Nazwa Egzaminu")
+    description: Optional[str] = Field(None, example="Nowy opis egzaminu.")
+    questions: Optional[List[ExamQuestionCreate]] = None
+
+    @validator('questions')
+    def validate_questions(cls, v):
+        if v is not None:
+            if len(v) == 0:
+                raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
+        return v

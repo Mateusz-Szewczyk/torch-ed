@@ -1,12 +1,11 @@
 // components/LeftPanel.tsx
 'use client';
 
-import { Home } from 'lucide-react';
+import { Home, BookOpen, TestTube } from 'lucide-react'; // Dodano TestTube jako ikonę dla Tests
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   MessageSquare,
-  BookOpen,
   ChevronLeft,
   ChevronRight,
   UserCircle,
@@ -81,6 +80,7 @@ export function LeftPanel({
 
   useEffect(() => {
     router.prefetch('/flashcards');
+    router.prefetch('/tests'); // Prefetch tests route
     router.prefetch('/'); // Prefetch home route as well
   }, [router]);
 
@@ -136,7 +136,7 @@ export function LeftPanel({
       if (response.ok || response.status === 204) {
         setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
 
-        // Jeśli usuwamy aktualnie oglądaną konwersację, przekieruj na stronę główną
+        // If deleting the current conversation, redirect to home
         if (conversationId === currentConversationId) {
           setCurrentConversationId(null);
           router.push('/');
@@ -240,7 +240,7 @@ export function LeftPanel({
           }`}
         >
           {!isPanelVisible ? (
-            // Ikonka menu, gdy panel jest zamknięty - niewidoczna nazwa
+            // Menu icon when panel is closed - screen reader only
             <h2 className="sr-only">{t('menu')}</h2>
           ) : (
             <h2 className="text-xl font-semibold">{t('menu')}</h2>
@@ -271,6 +271,18 @@ export function LeftPanel({
             <Link href="/flashcards">
               <BookOpen className="h-4 w-4" />
               {isPanelVisible && <span className="ml-2">{t('flashcards')}</span>}
+            </Link>
+          </Button>
+
+          {/* New Tests Button */}
+          <Button
+            asChild
+            variant="outline"
+            className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center'}`}
+          >
+            <Link href="/tests">
+              <TestTube className="h-4 w-4" /> {/* Użyj odpowiedniej ikony */}
+              {isPanelVisible && <span className="ml-2">{t('tests')}</span>}
             </Link>
           </Button>
 
@@ -319,7 +331,7 @@ export function LeftPanel({
                           variant="ghost"
                           className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200 overflow-hidden text-ellipsis whitespace-nowrap truncate"
                           onClick={() => handleConversationClick(conv.id)}
-                          title={conv.title || t('conversation')} // Tooltip z pełną nazwą
+                          title={conv.title || t('conversation')} // Tooltip with full name
                         >
                           {conv.title || `${t('conversation')}`}
                         </Button>
