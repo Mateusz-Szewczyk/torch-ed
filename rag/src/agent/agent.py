@@ -4,6 +4,7 @@ import os
 import logging
 from typing import Callable, Dict, List, Optional
 import json
+import uuid
 
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -25,6 +26,9 @@ from .agent_memory import (
 )
 from langchain.tools import BaseTool
 
+# Importowanie klas ExamGenerator i modeli związanych z egzaminami
+from .tools import ExamGenerator
+
 logger = logging.getLogger(__name__)
 
 env_path = Path(__file__).resolve().parents[2] / '.env'
@@ -34,7 +38,7 @@ load_dotenv(dotenv_path=env_path)
 class RouteQuery(BaseModel):
     """Route a user query to the most relevant datasources."""
 
-    datasources: List[Literal["FlashcardGenerator", "RAGTool", "TavilySearchResults", "DirectAnswer"]] = Field(
+    datasources: List[Literal["FlashcardGenerator", "RAGTool", "TavilySearchResults", "DirectAnswer", "ExamGenerator"]] = Field(
         ...,
         description="Given a user question, choose which datasources would be most relevant."
     )
@@ -107,6 +111,7 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
                 If user wants flashcards, always pair "FlashcardGenerator" with a retrieval tool first (e.g., "RAGTool") if external knowledge is needed.
                 If user references previously stored knowledge: use "RAGTool".
                 If user wants new, broad, or current info: use "TavilySearchResults".
+                If user wants to create an exam or sample test: use "ExamGenerator".
                 If unsure: use "DirectAnswer".
                 Return only a JSON object with "datasources": [ ... ].
                 No explanations outside JSON.
@@ -125,6 +130,10 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
                 "Top trending JS framework now?": {{{{"datasources": ["TavilySearchResults"]}}}}
 
                 "Create flashcards on latest web frameworks (need new info)": {{{{"datasources": ["TavilySearchResults", "FlashcardGenerator"]}}}}
+
+                "Create an exam on calculus for high school students": {{{{"datasources": ["ExamGenerator"]}}}}
+
+                "Generate a sample test on physics": {{{{"datasources": ["ExamGenerator"]}}}}
                 """
 
     human_prompt = "{question}"
@@ -159,7 +168,7 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
             datasources = response['datasources']
             logger.debug(f"Extracted datasources: {datasources}")
 
-            allowed_datasources = {"FlashcardGenerator", "RAGTool", "TavilySearchResults", "DirectAnswer"}
+            allowed_datasources = {"FlashcardGenerator", "RAGTool", "TavilySearchResults", "DirectAnswer", "ExamGenerator"}
             invalid_datasources = set(datasources) - allowed_datasources
             if invalid_datasources:
                 logger.error(f"Invalid datasource(s): {invalid_datasources}")
@@ -177,9 +186,10 @@ def create_classification_chain(model: ChatAnthropic, tools: List[BaseTool]) -> 
 
 
 def create_tool_chains(flashcard_tool: FlashcardGenerator, rag_tool: RAGTool, tavily_tool: TavilySearchResults,
-                       model: ChatAnthropic) -> Dict[str, Callable[[str], str]]:
+                       exam_tool: ExamGenerator, model: ChatAnthropic) -> Dict[str, Callable[[str], str]]:
     flashcard_chain = lambda input_text: flashcard_tool.run(input_text)
     rag_chain = lambda input_text: rag_tool.run(input_text)
+    exam_chain = lambda input_text: exam_tool.run(input_text)
 
     direct_answer_tool = DirectAnswer(model=model)
     direct_answer_chain = lambda input_text: direct_answer_tool.run(input_text)
@@ -206,6 +216,7 @@ def create_tool_chains(flashcard_tool: FlashcardGenerator, rag_tool: RAGTool, ta
         "FlashcardGenerator": flashcard_chain,
         "RAGTool": rag_chain,
         "TavilySearchResults": tavily_chain,
+        "ExamGenerator": exam_chain,
         "DirectAnswer": direct_answer_chain
     }
 
@@ -229,6 +240,9 @@ def create_router_chain(tool_chains: Dict[str, Callable[[str], str]]) -> Callabl
                 elif datasource == "FlashcardGenerator":
                     input_data = json.dumps({"description": description, "query": query}, ensure_ascii=False)
                     response = tool_function(input_data)
+                elif datasource == "ExamGenerator":
+                    input_data = json.dumps({"description": description, "query": query}, ensure_ascii=False)
+                    response = tool_function(input_data)
                 else:
                     current_query = f"{context}\nQuestion: {query}" if context else query
                     response = tool_function(current_query)
@@ -246,7 +260,7 @@ def create_router_chain(tool_chains: Dict[str, Callable[[str], str]]) -> Callabl
     return routing_function
 
 
-def final_answer(context: str, query: str, model: ChatAnthropic) -> str:
+def final_answer(context: str, query: str) -> str:
     try:
         final_model = ChatOpenAI(
             model_name="gpt-4o-mini-2024-07-18",
@@ -315,6 +329,7 @@ class ChatAgent:
             model: ChatAnthropic,
             tavily_api_key: str,
             anthropic_api_key: str,
+            openai_api_key: str,
             memory: Callable[[], Conversation],
             conversation_id: Optional[int] = None
     ):
@@ -325,9 +340,10 @@ class ChatAgent:
         self.memory = memory
         self.conversation_id = conversation_id
 
-        self.flashcard_tool = FlashcardGenerator(
-            model_name="claude-3-haiku-20240307",
-            anthropic_api_key=anthropic_api_key
+        flashcard_tool_openai = FlashcardGenerator(
+            model_type="OpenAI",
+            model_name="gpt-4o-mini-2024-07-18",  # Przykładowa nazwa modelu OpenAI
+            api_key=openai_api_key
         )
         self.rag_tool = RAGTool(
             model_name="claude-3-haiku-20240307",
@@ -343,15 +359,20 @@ class ChatAgent:
             include_raw_content=True,
             include_images=True
         )
+        self.exam_tool = ExamGenerator(  # Inicjalizacja ExamGenerator
+            model_name="gpt-4o-mini-2024-07-18",
+            openai_api_key=openai_api_key
+        )
         self.direct_answer_tool = DirectAnswer(model=self.model)
 
-        self.tools = [self.flashcard_tool, self.rag_tool, self.tavily_tool, self.direct_answer_tool]
+        self.tools = [self.flashcard_tool, self.rag_tool, self.tavily_tool, self.exam_tool, self.direct_answer_tool]
 
         self.classify = create_classification_chain(self.model, tools=self.tools)
         self.tool_chains = create_tool_chains(
             flashcard_tool=self.flashcard_tool,
             rag_tool=self.rag_tool,
             tavily_tool=self.tavily_tool,
+            exam_tool=self.exam_tool,
             model=self.model
         )
         self.router = create_router_chain(self.tool_chains)
@@ -399,6 +420,9 @@ class ChatAgent:
                     elif datasource == "FlashcardGenerator":
                         input_data = json.dumps({"description": context, "query": query}, ensure_ascii=False)
                         response = tool_function(input_data)
+                    elif datasource == "ExamGenerator":
+                        input_data = json.dumps({"description": context, "query": query}, ensure_ascii=False)
+                        response = tool_function(input_data)
                     else:
                         aggregated_context = context
                         current_query = f"Context:\n{aggregated_context}\nQuestion: {query}" if aggregated_context else query
@@ -411,7 +435,8 @@ class ChatAgent:
                     logger.error(f"Error using tool {datasource}: {e}")
                     responses.append(f"Przepraszam, wystąpił problem z narzędziem {datasource}.")
 
-            final_response = final_answer(aggregated_context, query, self.model)
+                # Poprawione wywołanie final_answer z dwoma argumentami
+            final_response = final_answer(aggregated_context, query)
             logger.info(f"Finalized response: '{final_response}'")
 
         except Exception as e:
@@ -427,7 +452,8 @@ def agent_response(
         model_name: str = "claude-3-haiku-20240307",
         anthropic_api_key: str = None,
         tavily_api_key: str = None,
-        conversation_id: int = None
+        conversation_id: int = None,
+        openai_api_key: str = None
 ) -> str:
     logger.info(f"Generating response for user_id: {user_id} with query: '{query}'")
 
@@ -435,6 +461,13 @@ def agent_response(
         anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
         if not anthropic_api_key:
             raise ValueError("Anthropic API key is not set.")
+
+
+    if not openai_api_key:
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            raise ValueError("OpenAI API key is not set.")
+
 
     if not tavily_api_key:
         tavily_api_key = os.getenv('TAVILY_API_KEY')
@@ -454,7 +487,8 @@ def agent_response(
             tavily_api_key=tavily_api_key,
             anthropic_api_key=anthropic_api_key,
             memory=create_memory,
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            openai_api_key=openai_api_key
         )
 
         response = agent.handle_query(query)

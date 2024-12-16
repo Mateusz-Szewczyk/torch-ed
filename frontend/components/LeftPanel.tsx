@@ -1,7 +1,7 @@
 // components/LeftPanel.tsx
 'use client';
 
-import { Home, BookOpen, TestTube } from 'lucide-react'; // Dodano TestTube jako ikonę dla Tests
+import { Home, BookOpen, TestTube, Mail } from 'lucide-react'; // Dodano Mail jako ikonę dla Feedback
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,6 +37,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import FeedbackModal from '@/components/FeedbackModal'; // Importuj FeedbackModal
 
 interface Conversation {
   id: number;
@@ -65,7 +66,7 @@ export function LeftPanel({
   const { t, i18n } = useTranslation();
   const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
 
-  const userId = 'user-123'; // Replace with actual user ID from authentication
+  const userId = 'user-123'; // Zastąp rzeczywistym ID użytkownika z uwierzytelniania
 
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
@@ -226,6 +227,9 @@ export function LeftPanel({
     setMenuOpenForConvId(null);
   };
 
+  // Stan do zarządzania modalem feedbacku
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+
   return (
     <div
       className={`bg-card text-foreground border-r border-border transition-all duration-300 z-50 flex flex-col ${
@@ -376,9 +380,21 @@ export function LeftPanel({
             </Collapsible>
           </div>
 
+          {/* Spacer */}
           <div className="flex-1" />
 
-          <div className="space-y-2">
+          {/* Dodany Przycisk Feedbacku - Umieszczony niżej */}
+          <Button
+            onClick={() => setIsFeedbackOpen(true)}
+            variant="outline"
+            className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center'}`}
+          >
+            <Mail className="h-4 w-4" />
+            {isPanelVisible && <span className="ml-2">{t('send_feedback')}</span>}
+          </Button>
+
+          {/* Sekcja Logowania/Rejestracji i Ustawień */}
+          <div className="space-y-2 mt-4">
             <LoginRegisterDialog>
               <Button
                 variant="outline"
@@ -407,73 +423,76 @@ export function LeftPanel({
             </SettingsDialog>
           </div>
         </div>
+
+        {/* Toggle panel button */}
+        <Button
+          variant="ghost"
+          className={`mb-4 hover:bg-secondary/80 transition-colors duration-200 ${
+            isPanelVisible ? 'self-end mr-2' : 'mx-auto'
+          }`}
+          onClick={() => setIsPanelVisible(!isPanelVisible)}
+          aria-label={isPanelVisible ? t('hide_panel') : t('show_panel')}
+        >
+          {isPanelVisible ? (
+            <ChevronLeft className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+        </Button>
+
+        {/* Edit Conversation Title Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('edit_conversation_title')}</DialogTitle>
+            </DialogHeader>
+            <Input
+              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder={t('enter_new_title')}
+              className="mt-2"
+            />
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                {t('cancel')}
+              </Button>
+              <Button variant="primary" onClick={handleSaveNewTitle}>
+                {t('save')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Conversation Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('confirm_delete_title')}</DialogTitle>
+              <DialogDescription>
+                {t('confirm_delete_description')}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="secondary"
+                onClick={() => setIsDeleteDialogOpen(false)}
+              >
+                {t('cancel')}
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmDelete}>
+                {t('delete')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Feedback Modal */}
+        <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
       </div>
-
-      {/* Toggle panel button */}
-      <Button
-        variant="ghost"
-        className={`mb-4 hover:bg-secondary/80 transition-colors duration-200 ${
-          isPanelVisible ? 'self-end mr-2' : 'mx-auto'
-        }`}
-        onClick={() => setIsPanelVisible(!isPanelVisible)}
-        aria-label={isPanelVisible ? t('hide_panel') : t('show_panel')}
-      >
-        {isPanelVisible ? (
-          <ChevronLeft className="h-4 w-4" />
-        ) : (
-          <ChevronRight className="h-4 w-4" />
-        )}
-      </Button>
-
-      {/* Edit Conversation Title Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('edit_conversation_title')}</DialogTitle>
-          </DialogHeader>
-          <Input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder={t('enter_new_title')}
-            className="mt-2"
-          />
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setIsEditDialogOpen(false)}
-            >
-              {t('cancel')}
-            </Button>
-            <Button variant="primary" onClick={handleSaveNewTitle}>
-              {t('save')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Conversation Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('confirm_delete_title')}</DialogTitle>
-            <DialogDescription>
-              {t('confirm_delete_description')}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="secondary"
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              {t('cancel')}
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmDelete}>
-              {t('delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

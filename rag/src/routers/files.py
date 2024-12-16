@@ -175,7 +175,7 @@ async def upload_file(
         db.refresh(new_file)
         logger.info(f"Saved file record to database: {new_file}")
 
-        uploaded_files = [UploadedFileRead(id=new_file.id, name=new_file.name)]
+        uploaded_files = [UploadedFileRead(id=new_file.id, name=new_file.name, category=new_file.category)]
 
         # Zwrot komunikatu sukcesu
         return UploadResponse(
