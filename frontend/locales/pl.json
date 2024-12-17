@@ -185,5 +185,8 @@
         "Community Support": "Wsparcie Społeczności"
       },
     "features_improvement_suggestions": "Czy masz sugestie dotyczące ulepszenia wybranych funkcji?",
-    "suggestion_placeholder": "Proszę podaj swoje sugestie dotyczące ulepszenia wybranych funkcji"
+    "suggestion_placeholder": "Proszę podaj swoje sugestie dotyczące ulepszenia wybranych funkcji",
+    "select_number_of_questions": "Wybierz Liczbę Pytań",
+    "number_of_questions": "Liczba pytań",
+    "start_exam": "Rozpocznij Egzamin"
 }

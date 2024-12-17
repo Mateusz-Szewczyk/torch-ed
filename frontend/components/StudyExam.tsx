@@ -4,23 +4,78 @@
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from 'react-i18next'
-import { Exam, ExamQuestion, ExamAnswer } from '../schemas'
 import { ChevronRight, ChevronLeft, CheckCircle, XCircle } from 'lucide-react'
+import * as Slider from '@radix-ui/react-slider' // Namespace import Radix UI Slider
+
+interface Answer {
+  id: number
+  text: string
+  is_correct: boolean
+}
+
+interface Question {
+  id: number
+  text: string
+  answers: Answer[]
+}
+
+interface Exam {
+  name: string
+  description: string
+  questions: Question[]
+}
 
 interface StudyExamProps {
-  exam: Exam;
-  onExit: () => void;
+  exam: Exam
+  onExit: () => void
 }
 
 export function StudyExam({ exam, onExit }: StudyExamProps) {
   const { t } = useTranslation()
+
+  // Stan dla wyboru liczby pytań
+  const [numQuestions, setNumQuestions] = useState<number>(10)
+  const [isSelectionStep, setIsSelectionStep] = useState<boolean>(true)
+
+  // Stan dla egzaminu
+  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
   const [score, setScore] = useState<number>(0)
-  const [userAnswers, setUserAnswers] = useState<(number | null)[]>(Array(exam.questions.length).fill(null))
+  const [userAnswers, setUserAnswers] = useState<(number | null)[]>([])
   const [isExamCompleted, setIsExamCompleted] = useState<boolean>(false)
 
+  // Funkcja do losowego wyboru pytań
+  const selectRandomQuestions = (allQuestions: Question[], count: number): Question[] => {
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random())
+    return shuffled.slice(0, count)
+  }
+
+  // Obsługa zmiany liczby pytań za pomocą suwaka
+  const handleSliderChange = (values: number[]) => {
+    setNumQuestions(values[0])
+  }
+
+  // Obsługa zmiany liczby pytań za pomocą pola tekstowego
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value, 10)
+    if (!isNaN(value)) {
+      // Upewnij się, że wartość jest w dopuszczalnym zakresie
+      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length)
+      setNumQuestions(clampedValue)
+    }
+  }
+
+  // Inicjalizacja wybranych pytań po zakończeniu wyboru
+  const startExam = () => {
+    const questions = selectRandomQuestions(exam.questions, numQuestions)
+    setSelectedQuestions(questions)
+    setUserAnswers(Array(questions.length).fill(null))
+    setIsSelectionStep(false)
+  }
+
+  // Obsługa odpowiedzi na pytanie
   const handleAnswerSelect = (answerId: number) => {
-    const currentQuestion = exam.questions[currentQuestionIndex]
+    const currentQuestion = selectedQuestions[currentQuestionIndex]
     const selectedAnswer = currentQuestion.answers.find(a => a.id === answerId)
 
     // Aktualizacja odpowiedzi użytkownika
@@ -34,7 +89,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     }
 
     // Przejście do następnego pytania lub zakończenie egzaminu
-    if (currentQuestionIndex < exam.questions.length - 1) {
+    if (currentQuestionIndex < selectedQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1)
     } else {
       setIsExamCompleted(true)
@@ -44,8 +99,71 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
   const handleRestart = () => {
     setCurrentQuestionIndex(0)
     setScore(0)
-    setUserAnswers(Array(exam.questions.length).fill(null))
+    setUserAnswers(Array(selectedQuestions.length).fill(null))
     setIsExamCompleted(false)
+    setIsSelectionStep(true)
+  }
+
+  if (isSelectionStep) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+        <div className="bg-card p-8 rounded-lg shadow-md w-full max-w-md">
+          {/* Przycisk Powrotu */}
+          <div className="flex justify-end mb-4">
+            <Button
+              onClick={onExit}
+              variant="ghost"
+              color="destructive"
+              className="flex items-center space-x-2"
+            >
+              <ChevronLeft className="h-5 w-5" />
+              <span>{t('back')}</span>
+            </Button>
+          </div>
+          <h2 className="text-2xl font-bold mb-4 text-primary text-center">{t('select_number_of_questions')}</h2>
+          <div className="flex flex-col items-center">
+            {/* Suwak */}
+            <div className="w-full mb-4">
+              <Slider.Root
+                className="relative flex items-center select-none touch-none w-full h-6"
+                value={[numQuestions]}
+                min={1}
+                max={Math.min(exam.questions.length, 50)} // Maksymalna liczba pytań (np. 50)
+                step={1}
+                onValueChange={handleSliderChange}
+                aria-label="Number of questions"
+              >
+                <Slider.Track className="bg-muted relative grow rounded-full h-1">
+                  <Slider.Range className="bg-primary absolute rounded-full h-full" />
+                </Slider.Track>
+                <Slider.Thumb className="block w-4 h-4 bg-primary rounded-full shadow focus:outline-none focus:ring" />
+              </Slider.Root>
+            </div>
+            {/* Pole tekstowe */}
+            <div className="flex items-center space-x-2 mb-6">
+              <span className="text-sm text-muted-foreground">{t('number_of_questions')}:</span>
+              <input
+                type="number"
+                min={1}
+                max={Math.min(exam.questions.length, 50)}
+                value={numQuestions}
+                onChange={handleInputChange}
+                className="w-16 p-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            {/* Przycisk rozpoczęcia egzaminu */}
+            <Button
+              onClick={startExam}
+              variant="primary"
+              className="w-full flex items-center justify-center space-x-2"
+            >
+              <span>{t('start_exam')}</span>
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (isExamCompleted) {
@@ -53,7 +171,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
       <div className="p-8 flex flex-col items-center justify-center min-h-screen bg-background">
         <div className="bg-card p-8 rounded-lg shadow-md w-full max-w-2xl text-center">
           <h2 className="text-3xl font-bold mb-4 text-primary">{t('exam_summary')}</h2>
-          <p className="text-xl mb-6 text-secondary">{t('you_scored')} {score} {t('out_of')} {exam.questions.length}</p>
+          <p className="text-xl mb-6 text-secondary">{t('you_scored')} {score} {t('out_of')} {selectedQuestions.length}</p>
           <div className="flex justify-center space-x-4">
             <Button
               onClick={handleRestart}
@@ -79,7 +197,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     )
   }
 
-  const currentQuestion = exam.questions[currentQuestionIndex]
+  const currentQuestion = selectedQuestions[currentQuestionIndex]
 
   return (
     <div className="p-8 flex flex-col items-center justify-center min-h-screen bg-background">
@@ -91,7 +209,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             {t('question')}: {currentQuestion.text}
           </h3>
           <div className="grid grid-cols-1 gap-4">
-            {currentQuestion.answers.map((answer: ExamAnswer) => {
+            {currentQuestion.answers.map((answer: Answer) => {
               const isSelected = userAnswers[currentQuestionIndex] === answer.id
               const isCorrect = answer.is_correct
 
@@ -129,14 +247,17 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             onClick={() => {
               // Przejście do następnego pytania tylko jeśli użytkownik już odpowiedział
               if (userAnswers[currentQuestionIndex] !== null) {
-                // Funkcja handleNext nie jest zdefiniowana, dlatego możemy użyć setCurrentQuestionIndex
-                setCurrentQuestionIndex(currentQuestionIndex + 1)
+                if (currentQuestionIndex < selectedQuestions.length - 1) {
+                  setCurrentQuestionIndex(currentQuestionIndex + 1)
+                } else {
+                  setIsExamCompleted(true)
+                }
               }
             }}
             disabled={userAnswers[currentQuestionIndex] === null}
             className="flex items-center space-x-2"
           >
-            <span>{currentQuestionIndex < exam.questions.length - 1 ? t('next') : t('finish')}</span>
+            <span>{currentQuestionIndex < selectedQuestions.length - 1 ? t('next') : t('finish')}</span>
             <ChevronRight className="h-5 w-5" />
           </Button>
         </div>

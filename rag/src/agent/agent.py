@@ -340,7 +340,7 @@ class ChatAgent:
         self.memory = memory
         self.conversation_id = conversation_id
 
-        flashcard_tool_openai = FlashcardGenerator(
+        self.flashcard_tool = FlashcardGenerator(
             model_type="OpenAI",
             model_name="gpt-4o-mini-2024-07-18",  # Przykładowa nazwa modelu OpenAI
             api_key=openai_api_key
