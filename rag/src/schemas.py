@@ -1,6 +1,6 @@
 # src/schemas.py
 
-from pydantic import BaseModel, validator, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -10,8 +10,9 @@ class FlashcardBase(BaseModel):
 
 class FlashcardCreate(FlashcardBase):
     id: Optional[int] = None
+    media_url: Optional[str] = None  # Dodane pole media_url
 
-    @validator('question', 'answer')
+    @field_validator('question', 'answer')
     def not_empty(cls, v):
         if not v.strip():
             raise ValueError('Cannot be empty')
@@ -22,6 +23,7 @@ class FlashcardRead(FlashcardBase):
     question: str
     answer: str
     deck_id: int
+    media_url: Optional[str] = None  # Dodane pole media_url
 
     class Config:
         orm_mode = True
@@ -33,7 +35,7 @@ class DeckBase(BaseModel):
 class DeckCreate(DeckBase):
     flashcards: List[FlashcardCreate]
 
-    @validator('name')
+    @field_validator('name')
     def name_not_empty(cls, v):
         if not v.strip():
             raise ValueError('Deck name cannot be empty')
@@ -47,6 +49,23 @@ class DeckRead(DeckBase):
     class Config:
         orm_mode = True
 
+class UploadedFileRead(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None  # Opcjonalne pole
+    category: str
+
+    class Config:
+        orm_mode = True
+
+class UploadResponse(BaseModel):
+    message: str
+    uploaded_files: List[UploadedFileRead]  # Poprawnie zdefiniowany UploadedFileRead
+    user_id: str
+    file_name: str
+    file_description: Optional[str]
+    category: Optional[str]
+
 class QueryRequest(BaseModel):
     user_id: str
     query: str
@@ -56,23 +75,6 @@ class QueryResponse(BaseModel):
     user_id: str
     query: str
     answer: str
-
-class UploadResponse(BaseModel):
-    message: str
-    uploaded_files: List['UploadedFileRead']  # Upewnij się, że UploadedFileRead jest poprawnie zdefiniowany
-    user_id: str
-    file_name: str
-    file_description: Optional[str]
-    category: Optional[str]
-
-class UploadedFileRead(BaseModel):
-    id: int
-    name: str
-    description: Optional[str] = None  # Opcjonalne pole
-    category: str
-
-    class Config:
-        orm_mode = True
 
 class DeleteKnowledgeRequest(BaseModel):
     user_id: str
@@ -88,7 +90,7 @@ class ListFilesRequest(BaseModel):
 
 class ConversationBase(BaseModel):
     user_id: str
-    title: Optional[str] = None  # Add this line
+    title: Optional[str] = None  # Dodane pole title
 
 class ConversationCreate(ConversationBase):
     pass
@@ -109,7 +111,7 @@ class MessageRead(BaseModel):
     conversation_id: int
     sender: str
     text: str
-    created_at: datetime = datetime.now()
+    created_at: datetime = Field(default_factory=datetime.now)
 
     class Config:
         orm_mode = True
@@ -122,8 +124,6 @@ class ConversationUpdate(BaseModel):
         if v is not None and not v.strip():
             raise ValueError('Title cannot be empty')
         return v
-
-
 
 class ExamAnswerCreate(BaseModel):
     text: str = Field(..., example="3.14")
@@ -139,7 +139,7 @@ class ExamQuestionCreate(BaseModel):
     text: str = Field(..., example="Jaka jest wartość liczby pi?")
     answers: List[ExamAnswerCreate]
 
-    @validator('answers')
+    @field_validator('answers')
     def validate_answers(cls, v):
         if len(v) != 4:
             raise ValueError("Każde pytanie musi mieć dokładnie 4 odpowiedzi.")
@@ -161,7 +161,7 @@ class ExamCreate(BaseModel):
     description: Optional[str] = Field(None, example="Egzamin końcowy z matematyki.")
     questions: List[ExamQuestionCreate]
 
-    @validator('questions')
+    @field_validator('questions')
     def validate_questions(cls, v):
         if len(v) == 0:
             raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
@@ -182,7 +182,7 @@ class ExamUpdate(BaseModel):
     description: Optional[str] = Field(None, example="Nowy opis egzaminu.")
     questions: Optional[List[ExamQuestionCreate]] = None
 
-    @validator('questions')
+    @field_validator('questions')
     def validate_questions(cls, v):
         if v is not None:
             if len(v) == 0:

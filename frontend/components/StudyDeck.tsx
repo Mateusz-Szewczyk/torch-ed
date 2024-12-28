@@ -12,6 +12,7 @@ interface Flashcard {
   id?: number;
   question: string;
   answer: string;
+  media_url?: string; // Dodane pole media_url
 }
 
 interface Deck {
@@ -30,7 +31,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [remainingCards, setRemainingCards] = useState<Flashcard[]>([]);
-  const [visibleCard, setVisibleCard] = useState(deck.flashcards[0] || { question: '', answer: '' });
+  const [visibleCard, setVisibleCard] = useState<Flashcard>(deck.flashcards[0] || { question: '', answer: '' });
 
   const { t } = useTranslation();
 
@@ -84,12 +85,18 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   if (remainingCards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
-        <h2 className="text-2xl font-bold mb-4">{t('no_flashcards_available')}</h2>
-        <p className="mb-4">{t('deck_has_no_flashcards')}</p>
-        <Button onClick={onExit} variant="outline">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          {t('back_to_decks')}
-        </Button>
+        <h2 className="text-2xl font-bold mb-4">{t('congratulations')}</h2>
+        <p className="mb-4">{t('completed_flashcards')}</p>
+        <div className="flex space-x-4">
+          <Button onClick={resetDeck}>
+            <RotateCcw className="mr-2 h-4 w-4" />
+            {t('reset_deck')}
+          </Button>
+          <Button onClick={onExit} variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            {t('back_to_decks')}
+          </Button>
+        </div>
       </div>
     );
   }
@@ -139,6 +146,13 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
             <CardContent className="absolute w-full h-full p-4 [backface-visibility:hidden] flex items-center justify-center">
               <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
                 <p className="text-xl font-semibold text-center">{visibleCard?.question}</p>
+                {visibleCard?.media_url && (
+                  <img
+                    src={visibleCard.media_url}
+                    alt="Flashcard Media"
+                    className="mt-4 max-w-full h-auto rounded shadow"
+                  />
+                )}
               </div>
             </CardContent>
 
@@ -146,6 +160,13 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
             <CardContent className="absolute w-full h-full p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] flex items-center justify-center">
               <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
                 <p className="text-xl font-semibold text-center">{visibleCard?.answer}</p>
+                {visibleCard?.media_url && (
+                  <img
+                    src={visibleCard.media_url}
+                    alt="Flashcard Media"
+                    className="mt-4 max-w-full h-auto rounded shadow"
+                  />
+                )}
               </div>
             </CardContent>
           </Card>

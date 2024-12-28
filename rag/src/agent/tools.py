@@ -34,14 +34,12 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 # Initialize the embedding model
-from sentence_transformers import SentenceTransformer
+from langchain_openai import OpenAIEmbeddings
 
-EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'all-MiniLM-L6-v2')
+
 try:
-    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    logger.info(f"Initialized embedding model: {EMBEDDING_MODEL_NAME}")
+    embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 except Exception as e:
-    logger.error(f"Failed to initialize embedding model '{EMBEDDING_MODEL_NAME}': {e}")
     raise
 
 # Initialize Anthropic API key
@@ -224,17 +222,37 @@ Flashcards:
 
 class RAGTool(BaseTool):
     name: str = "RAGTool"
-    description: str = """Uses the Retrieval-Augmented Generation pipeline to answer queries using internal and external knowledge.
-The tool will recognize the user's language and will adapt to it."""
+    description: str = """Uses the Retrieval-Augmented Generation pipeline to extract key information from internal and external knowledge sources.
+The tool will recognize the user's language and will adapt to it. Its purpose is to extract facts and information relevant to the user's query, often to help with exam preparation or creating flashcards. It should focus strictly on the given passages and avoid fabrication."""
     user_id: str = Field(default=None)
-    _model: ChatAnthropic = PrivateAttr()
+    _model: Any = PrivateAttr()
 
-    def __init__(self, user_id: str, model_name: str = "claude-3-haiku-20240307", anthropic_api_key: str = None):
+    def __init__(self,
+                 user_id: str,
+                 model_type: str = "OpenAI",
+                 model_name: str = "gpt-4o-mini-2024-07-18",
+                 api_key: str = None):
+        """
+        Initialize the RAGTool with a chosen model (Anthropic or OpenAI).
+
+        Args:
+            user_id (str): ID of the user.
+            model_type (str): 'Anthropic' or 'OpenAI'.
+            model_name (str): Name of the model to use.
+            api_key (str): The API key for the chosen model.
+        """
         super().__init__()
         self.user_id = user_id
-        if not anthropic_api_key:
-            raise ValueError("Anthropic API key is not set.")
-        self._model = ChatAnthropic(model_name=model_name, anthropic_api_key=anthropic_api_key)
+        if model_type == "Anthropic":
+            if not api_key:
+                raise ValueError("Anthropic API key is not set.")
+            self._model = ChatAnthropic(model_name=model_name, anthropic_api_key=api_key)
+        elif model_type == "OpenAI":
+            if not api_key:
+                raise ValueError("OpenAI API key is not set.")
+            self._model = ChatOpenAI(model_name=model_name, openai_api_key=api_key)
+        else:
+            raise ValueError("Unsupported model_type. Choose 'Anthropic' or 'OpenAI'.")
 
     def _run(self, query: str) -> str:
         return self.generate_answer_rag(query)
@@ -244,19 +262,25 @@ The tool will recognize the user's language and will adapt to it."""
 
     def generate_answer_rag(self, query: str, max_iterations: int = 2, max_generated_passages: int = 5) -> str:
         """
-        Generates an answer using the RAG pipeline for the given query.
+        Generates factual information relevant to the query using the RAG pipeline.
+
+        Steps:
+        1. Generate internal passages from the model's internal knowledge.
+        2. Retrieve external passages from the vector store.
+        3. Combine them and run iterative consolidation to extract only relevant facts.
+        4. Finalize the answer focusing on correctness and relevancy.
 
         Args:
             query (str): The user's query.
-            max_iterations (int): Number of iterations for knowledge consolidation.
-            max_generated_passages (int): Maximum number of passages to generate from internal knowledge.
+            max_iterations (int): Number of consolidation iterations.
+            max_generated_passages (int): Max number of passages to generate from internal knowledge.
 
         Returns:
-            str: Generated answer.
+            str: The final extracted factual information.
         """
         logger.info(f"Generating RAG answer for query: '{query}'")
 
-        # Step 1: Adaptive Generation of Internal Knowledge
+        # Step 1: Generate internal passages
         try:
             internal_passages = self.generate_internal_passages(query, max_generated_passages)
             logger.info(f"Generated {len(internal_passages)} internal passages.")
@@ -264,7 +288,7 @@ The tool will recognize the user's language and will adapt to it."""
             logger.error(f"Error generating internal passages: {e}", exc_info=True)
             internal_passages = []
 
-        # Step 2: Retrieve relevant external chunks
+        # Step 2: Retrieve external passages
         try:
             results = search_and_rerank(query, embedding_model, user_id=self.user_id, n_results=5)
             external_passages = [result.get('content', '') for result in results]
@@ -273,11 +297,13 @@ The tool will recognize the user's language and will adapt to it."""
             logger.error(f"Error during search and rerank: {e}", exc_info=True)
             external_passages = []
 
+        logger.info(f"External passages: {external_passages}")
+
         if not internal_passages and not external_passages:
             logger.warning(f"No relevant information found for query: '{query}'")
             return "Przepraszam, nie znalazłem informacji na ten temat."
 
-        # Step 2 & 3: Combine Internal and External Passages and Assign Sources
+        # Combine passages
         combined_passages = external_passages + internal_passages
         source_indicators = ['external'] * len(external_passages) + ['internal'] * len(internal_passages)
 
@@ -292,64 +318,58 @@ The tool will recognize the user's language and will adapt to it."""
         # Step 5: Answer Finalization
         answer = self.finalize_answer(query, consolidated_passages, consolidated_sources)
 
-        logger.info(f"Generated RAG answer.")
+        logger.info("Generated RAG answer.")
         return answer
 
     def retrieve(self, query: str, steps: int = 1) -> List[str]:
         """
         Retrieves relevant passages based on the query.
-
-        Args:
-            query (str): The user's query.
-            steps (int): Number of retrieval steps.
-
-        Returns:
-            List[str]: A list of retrieved passages.
         """
         logger.info(f"Retrieving passages for query: '{query}' with steps: {steps}")
 
-        # Step 1: Generate internal passages
+        # Step 1: Internal
         try:
             internal_passages = self.generate_internal_passages(query, max_generated_passages=steps)
             logger.info(f"Retrieved {len(internal_passages)} internal passages.")
         except Exception as e:
-            logger.error(f"Error generating internal passages during retrieval: {e}", exc_info=True)
+            logger.error(f"Error generating internal passages during retrieval: {e}")
             internal_passages = []
 
-        # Step 2: Retrieve external passages
+        # Step 2: External
         try:
             results = search_and_rerank(query, embedding_model, user_id=self.user_id, n_results=5)
             external_passages = [result.get('content', '') for result in results]
-            logger.info(f"Retrieved {len(external_passages)} external passages.")
+            logger.info(f"Retrieved {len(external_passages)} external passages.\n {external_passages}")
+            logger.info(10*"jakis tekst")
         except Exception as e:
-            logger.error(f"Error during search and rerank during retrieval: {e}", exc_info=True)
+            logger.error(f"Error during search and rerank during retrieval: {e}")
             external_passages = []
 
-        # Combine passages
         combined_passages = external_passages + internal_passages
 
         if not combined_passages:
             logger.warning(f"No passages retrieved for query: '{query}'")
             return []
 
+        logger.info(f"Combined passages: {combined_passages}")
         return combined_passages
 
     def generate_internal_passages(self, query: str, max_generated_passages: int) -> List[str]:
         """
         Generates internal passages from the LLM's internal knowledge based on the query.
-
-        Args:
-            query (str): The user's query.
-            max_generated_passages (int): Maximum number of passages to generate.
-
-        Returns:
-            List[str]: A list of generated internal passages.
+        They should be factual, concise, and relevant.
+        If no reliable information is available, returns fewer or no passages.
         """
-        # Prompt template for generating internal passages
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="You are a knowledgeable assistant helping to generate relevant information for a query. You will recognize query and passages language and adapt to it."),
+            SystemMessage(content=(
+                "You are a knowledgeable assistant focused on extracting relevant factual information. "
+                "Adapt to the query language."
+            )),
             HumanMessage(content=f"""
-Based on your internal knowledge, generate up to {max_generated_passages} accurate, relevant, and concise passages that answer the following question. Do not include any hallucinations or fabricated information. If you don't have enough reliable information, generate fewer passages or none.
+You have internal knowledge. Generate up to {max_generated_passages} concise, accurate, and factual passages related to the question below.
+These passages should be directly useful for answering the question, often used for exam preparation or creating flashcards.
+If you lack reliable info, return fewer or no passages.
+Do not fabricate information.
 
 Question:
 {query}
@@ -360,8 +380,7 @@ Passages:
 
         try:
             response = self._model.invoke(prompt_template.format(query=query))
-
-            # Sprawdzenie typu odpowiedzi i ekstrakcja treści
+            logger.info(f"Odpowiedź rag tool: \n{response}")
             if isinstance(response, list):
                 response_text = response[-1].content if response else ""
             elif hasattr(response, 'content'):
@@ -369,7 +388,6 @@ Passages:
             else:
                 response_text = str(response)
 
-            # Split the output into individual passages
             passages = [p.strip() for p in response_text.strip().split('\n\n') if p.strip()]
             return passages
         except Exception as e:
@@ -378,26 +396,28 @@ Passages:
 
     def iterative_consolidation(self, query: str, passages: List[str], sources: List[str], max_iterations: int) -> Tuple[List[str], List[str]]:
         """
-        Iteratively consolidates the knowledge from passages considering their sources.
-
-        Args:
-            query (str): The user's query.
-            passages (List[str]): List of passages.
-            sources (List[str]): Corresponding list of sources ('internal' or 'external').
-            max_iterations (int): Number of consolidation iterations.
-
-        Returns:
-            Tuple[List[str], List[str]]: Consolidated passages and their sources.
+        Iteratively consolidates the information from passages.
+        The goal: Identify and extract only relevant factual details that help answer the given question.
+        Avoid adding or inventing info. Keep key details.
         """
         for iteration in range(max_iterations):
             logger.info(f"Consolidation iteration {iteration + 1}")
             prompt_template = ChatPromptTemplate.from_messages([
-                SystemMessage(content="You are an assistant that consolidates information from different sources. You will recognize query and passages language and adapt to it."),
+                SystemMessage(content=(
+                    "You are an assistant that consolidates facts from different sources. "
+                    "Focus solely on providing information directly related to answering the given question. "
+                    "No hallucinations. If any passages contain critical details (like definitions, properties, data) that answer the question, retain them. "
+                    "If some passages are irrelevant or repetitive, remove them. Ensure the final set of passages is as informative and factual as possible, "
+                    "helpful for creating exam questions or flashcards."
+                )),
                 HumanMessage(content=f"""
-Given the following passages and their sources, consolidate the information by identifying consistent details, resolving conflicts, and removing irrelevant content.
-
 Question:
 {query}
+
+Below are passages with their sources. Consolidate them by:
+- Keeping only the information that helps answer the question.
+- Removing irrelevant, repetitive, or conflicting parts.
+- Ensuring not to lose key facts.
 
 Passages and Sources:
 {''.join([f"Source: {source}\nPassage: {passage}\n\n" for passage, source in zip(passages, sources)])}
@@ -408,8 +428,6 @@ Consolidated Passages:
 
             try:
                 response = self._model.invoke(prompt_template.format(query=query))
-
-                # Sprawdzenie typu odpowiedzi i ekstrakcja treści
                 if isinstance(response, list):
                     response_text = response[-1].content if response else ""
                 elif hasattr(response, 'content'):
@@ -417,7 +435,6 @@ Consolidated Passages:
                 else:
                     response_text = str(response)
 
-                # Parse the consolidated passages and sources from the output
                 new_passages = []
                 new_sources = []
                 entries = response_text.strip().split('\n\n')
@@ -438,41 +455,36 @@ Consolidated Passages:
 
             except Exception as e:
                 logger.error(f"Error during consolidation iteration {iteration + 1}: {e}", exc_info=True)
-                break  # Exit the loop if consolidation fails
+                break
 
         return passages, sources
 
     def finalize_answer(self, query: str, passages: List[str], sources: List[str]) -> str:
         """
-        Generates the final answer based on the consolidated passages and their sources.
-
-        Args:
-            query (str): The user's query.
-            passages (List[str]): Consolidated passages.
-            sources (List[str]): Corresponding sources.
-
-        Returns:
-            str: The final answer.
+        Generates the final factual extraction result.
+        It should directly address the question without adding extraneous info.
+        Useful for creating exam questions and flashcards. Do not fabricate unknown info.
         """
         prompt_template = ChatPromptTemplate.from_messages([
-            SystemMessage(content="You are an AI assistant tasked with generating the most reliable answer based on consolidated information. You will recognize query and passages language and adapt to it."),
+            SystemMessage(content=(
+                "You are an AI assistant tasked with extracting the most factual and relevant information to answer the question. "
+                "Do not add details not present in the passages. "
+                "Focus on providing concise, accurate facts that help answer the query, suitable for exam preparation or flashcards. "
+                "If a particular detail like a definition, property, date, color, name, etc. is relevant, include it."
+            )),
             HumanMessage(content=f"""
-Based on the following consolidated passages and their sources, generate the most accurate and reliable answer to the question. Consider the reliability of each source, cross-confirmation between sources, and the thoroughness of the information.
-
 Question:
 {query}
 
 Consolidated Passages and Sources:
 {''.join([f"Source: {source}\nPassage: {passage}\n\n" for passage, source in zip(passages, sources)])}
 
-Final Answer:
+Final Extracted Facts:
 """)
         ])
 
         try:
             response = self._model.invoke(prompt_template.format(query=query))
-
-            # Sprawdzenie typu odpowiedzi i ekstrakcja treści
             if isinstance(response, list):
                 answer = response[-1].content if response else ""
             elif hasattr(response, 'content'):
@@ -484,6 +496,7 @@ Final Answer:
         except Exception as e:
             logger.error(f"Error during answer finalization: {e}", exc_info=True)
             return "Przepraszam, wystąpił problem podczas generowania końcowej odpowiedzi."
+
 
 
 class ExamGenerator(BaseTool):

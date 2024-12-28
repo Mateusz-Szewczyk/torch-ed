@@ -31,6 +31,10 @@ TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
 if not TAVILY_API_KEY:
     raise ValueError("Tavily API key is not set. Please set the TAVILY_API_KEY environment variable.")
 
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+if not OPENAI_API_KEY:
+    raise ValueError("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.")
+
 @router.post("/", response_model=QueryResponse)
 async def query_knowledge(request: QueryRequest):
     user_id = request.user_id

@@ -1,6 +1,7 @@
 # routers/files.py
 
 from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile
+from gitdb.fun import chunk_size
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -34,13 +35,10 @@ pdf_processor = PDFProcessor()
 document_processor = DocumentProcessor()
 
 # Inicjalizacja modelu embedującego
-from sentence_transformers import SentenceTransformer
-EMBEDDING_MODEL_NAME = os.getenv('EMBEDDING_MODEL_NAME', 'all-MiniLM-L6-v2')
+from langchain_openai import OpenAIEmbeddings
 try:
-    embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    logger.info(f"Initialized embedding model: {EMBEDDING_MODEL_NAME}")
+    embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 except Exception as e:
-    logger.error(f"Failed to initialize embedding model '{EMBEDDING_MODEL_NAME}': {e}")
     raise
 
 @router.post("/upload/", response_model=UploadResponse)
@@ -132,7 +130,7 @@ async def upload_file(
         logger.info(f"Created {len(chunks)} chunks from file: {safe_filename}")
 
         # Generowanie embeddingów przy użyciu batch encoding
-        embeddings = await asyncio.to_thread(embedding_model.encode, chunks, batch_size=32, show_progress_bar=False)
+        embeddings = await asyncio.to_thread(embedding_model.embed_documents, chunks, chunk_size=512)
         if len(embeddings) != len(chunks):
             logger.warning(f"Number of embeddings ({len(embeddings)}) does not match number of chunks ({len(chunks)})")
         logger.info(f"Generated embeddings for chunks from file: {safe_filename}")
@@ -150,7 +148,6 @@ async def upload_file(
         await asyncio.to_thread(
             create_vector_store,
             chunks,
-            embeddings,
             user_id,
             file_description,
             category,

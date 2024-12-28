@@ -276,7 +276,7 @@ def final_answer(context: str, query: str) -> str:
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
-            ("user", "{context}"),
+            ("user", "Using this context: {context}\nAnswer the query."),
             ("human", "Pytanie: {question}")
         ])
 
@@ -346,9 +346,10 @@ class ChatAgent:
             api_key=openai_api_key
         )
         self.rag_tool = RAGTool(
-            model_name="claude-3-haiku-20240307",
+            model_name="gpt-4o-mini-2024-07-18",
             user_id=self.user_id,
-            anthropic_api_key=anthropic_api_key
+            model_type="OpenAI",
+            api_key=openai_api_key
         )
         self.tavily_tool = TavilySearchResults(
             name="TavilySearchResults",
@@ -434,7 +435,7 @@ class ChatAgent:
                 except Exception as e:
                     logger.error(f"Error using tool {datasource}: {e}")
                     responses.append(f"Przepraszam, wystąpił problem z narzędziem {datasource}.")
-
+            logger.info(f"Aggregated context: {aggregated_context}")
                 # Poprawione wywołanie final_answer z dwoma argumentami
             final_response = final_answer(aggregated_context, query)
             logger.info(f"Finalized response: '{final_response}'")

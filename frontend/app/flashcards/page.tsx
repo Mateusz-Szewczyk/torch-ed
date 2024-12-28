@@ -1,11 +1,11 @@
 // components/FlashcardsPage.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { EditDeckDialog } from '@/components/EditDeckDialog'
 import axios from 'axios'
 import { Button } from "@/components/ui/button"
-import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2 } from 'lucide-react'
+import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2, Upload } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CustomTooltip } from '@/components/CustomTooltip'
 import { StudyDeck } from '@/components/StudyDeck'
@@ -16,11 +16,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 
 interface Flashcard {
   id?: number;
   question: string;
   answer: string;
+  media_url?: string; // Nowe pole
 }
 
 interface Deck {
@@ -35,6 +37,9 @@ export default function FlashcardsPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [studyingDeck, setStudyingDeck] = useState<Deck | null>(null)
+  const [importing, setImporting] = useState<boolean>(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSuccess, setImportSuccess] = useState<string | null>(null)
 
   const { t } = useTranslation();
 
@@ -71,7 +76,8 @@ export default function FlashcardsPage() {
           description: updatedDeck.description,
           flashcards: updatedDeck.flashcards.map(fc => ({
             question: fc.question,
-            answer: fc.answer
+            answer: fc.answer,
+            media_url: fc.media_url // Nowe pole
           })),
         });
         const newDeck = createDeckResponse.data;
@@ -86,12 +92,14 @@ export default function FlashcardsPage() {
               return {
                 id: fc.id,
                 question: fc.question,
-                answer: fc.answer
+                answer: fc.answer,
+                media_url: fc.media_url // Nowe pole
               };
             } else {
               return {
                 question: fc.question,
-                answer: fc.answer
+                answer: fc.answer,
+                media_url: fc.media_url // Nowe pole
               };
             }
           }),
@@ -133,6 +141,40 @@ export default function FlashcardsPage() {
 
   const handleExitStudy = () => {
     setStudyingDeck(null);
+  }
+
+  const handleImport = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const file = formData.get('file') as File
+
+    if (!file) {
+      setImportError(t('no_file_selected'))
+      return
+    }
+
+    setImporting(true)
+    setImportError(null)
+    setImportSuccess(null)
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}import/`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      setImportSuccess(t('import_success'))
+      fetchDecks()
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response) {
+        setImportError(err.response.data.detail || t('import_failed'))
+      } else {
+        setImportError(t('import_failed'))
+      }
+      console.error(err)
+    } finally {
+      setImporting(false)
+    }
   }
 
   if (loading) {
@@ -195,7 +237,46 @@ export default function FlashcardsPage() {
                 {t('no_flashcard_decks')}
               </p>
             </CardContent>
-            <CardFooter className="flex justify-center space-x-4">
+            <CardFooter className="flex flex-col space-y-4">
+              {/* Przycisk Importu Fiszek */}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="flex items-center space-x-2 px-6 py-3">
+                    <Upload className="h-6 w-6" />
+                    <span>{t('import_flashcards')}</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <form onSubmit={handleImport} className="flex flex-col space-y-4">
+                    <DialogHeader>
+                      <DialogTitle>{t('import_flashcards')}</DialogTitle>
+                      <DialogDescription>
+                        {t('select_flashcards_file')}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <input
+                      type="file"
+                      name="file"
+                      accept=".csv,.apkg"
+                      required
+                      className="border border-input rounded-md p-2"
+                    />
+                    {importError && <p className="text-red-500">{importError}</p>}
+                    {importSuccess && <p className="text-green-500">{importSuccess}</p>}
+                    <DialogFooter className="flex justify-end space-x-2">
+                      <Button type="button" variant="ghost" onClick={() => { setImportError(null); setImportSuccess(null); }}>
+                        {t('cancel')}
+                      </Button>
+                      <Button type="submit" disabled={importing}>
+                        {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {t('import')}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Przycisk Tworzenia Nowego Zestawu */}
               <EditDeckDialog
                 deck={{ id: 0, name: '', description: '', flashcards: [] }}
                 onSave={handleSave}
@@ -211,8 +292,47 @@ export default function FlashcardsPage() {
         </div>
       ) : (
         <>
-          {/* Create New Deck Button */}
-          <div className="mb-8 flex justify-end">
+          {/* Create New Deck and Import Flashcards Buttons */}
+          <div className="mb-8 flex justify-end space-x-4">
+            {/* Przycisk Importu Fiszek */}
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="flex items-center space-x-2 px-6 py-3">
+                  <Upload className="h-6 w-6" />
+                  <span>{t('import_flashcards')}</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <form onSubmit={handleImport} className="flex flex-col space-y-4">
+                  <DialogHeader>
+                    <DialogTitle>{t('import_flashcards')}</DialogTitle>
+                    <DialogDescription>
+                      {t('select_flashcards_file')}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <input
+                    type="file"
+                    name="file"
+                    accept=".csv,.apkg"
+                    required
+                    className="border border-input rounded-md p-2"
+                  />
+                  {importError && <p className="text-red-500">{importError}</p>}
+                  {importSuccess && <p className="text-green-500">{importSuccess}</p>}
+                  <DialogFooter className="flex justify-end space-x-2">
+                    <Button type="button" variant="ghost" onClick={() => { setImportError(null); setImportSuccess(null); }}>
+                      {t('cancel')}
+                    </Button>
+                    <Button type="submit" disabled={importing}>
+                      {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      {t('import')}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            {/* Przycisk Tworzenia Nowego Zestawu */}
             <EditDeckDialog
               deck={{ id: 0, name: '', description: '', flashcards: [] }}
               onSave={handleSave}

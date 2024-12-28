@@ -188,5 +188,11 @@
     "suggestion_placeholder": "Proszę podaj swoje sugestie dotyczące ulepszenia wybranych funkcji",
     "select_number_of_questions": "Wybierz Liczbę Pytań",
     "number_of_questions": "Liczba pytań",
-    "start_exam": "Rozpocznij Egzamin"
+    "start_exam": "Rozpocznij Egzamin",
+      "import_flashcards": "Importuj Fiszki",
+  "select_flashcards_file": "Wybierz plik CSV lub APKG z fiszkami",
+  "import": "Importuj",
+  "no_file_selected": "Nie wybrano pliku",
+  "import_success": "Fiszki zostały pomyślnie zaimportowane.",
+  "import_failed": "Import fiszek nie powiódł się."
 }
