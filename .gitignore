@@ -44,3 +44,7 @@ frontend/dist/
 
 token_log.txt
 *debug*.txt
+.mypy.ini
+.venv/
+.vscode
+*.pem
