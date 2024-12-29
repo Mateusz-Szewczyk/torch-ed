@@ -1,14 +1,16 @@
+import os
 from authlib.jose import jwt, JWTClaims
 from authlib.jose.errors import ExpiredTokenError, InvalidTokenError
 from datetime import datetime, timedelta, timezone
 
 
-def get_token(user_id: int, role: str, iss: str, path: str) -> bytes:
+def generate_token(user_id: int, role: str, iss: str, path: str) -> bytes:
     header: dict[str, str] = {'alg': 'RS512'}
     payload: dict[str, str | int] = {
         'iss': iss,
         'iat': int(datetime.now(timezone.utc).timestamp()),
         'exp': int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp()),
+        # 'exp': int((datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()),
         'aud': user_id,
         'pre': role,
         }
@@ -29,19 +31,21 @@ def decode_token(token: bytes, path: str) -> dict | None:
         public_key: str = key.read()
     try:
         data = jwt.decode(token, public_key)
-        # TODO: check if this is validating
         data.validate()
+        # data.validate_exp(int(datetime.now(timezone.utc).timestamp()), 0)
     except ExpiredTokenError as e:
         print('Token verification failed: ', e)
     except InvalidTokenError:
         print('Invalid token')
-    
-    return data
-
+    else:
+        return data
+    return None
     
 # test
 if __name__ == '__main__':
-    token: bytes = get_token(1, 'admin', 'me', path='/home/adam/Vronst/Programming/TORCHed/private_key.pem')
+    from dotenv import load_dotenv
+    load_dotenv()
+    token: bytes =generate_token(1, 'admin', 'me', path=os.getenv('PUP_PATH', ''))
     print(token)
-    data: dict | None = decode_token(token, path='/home/adam/Vronst/Programming/TORCHed/private_key.pem')
+    data: dict | None = decode_token(token, path=os.getenv('PRP_PATH', ''))
     print(data)
