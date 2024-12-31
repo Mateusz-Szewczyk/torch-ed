@@ -8,55 +8,89 @@ from sklearn.metrics.pairwise import cosine_similarity
 from langchain.schema import Document
 from langchain_community.retrievers import BM25Retriever
 
-from rag.src.graph_store import search_graph_store
-from rag.src.vector_store import search_vector_store
+from .vector_store import search_vector_store  # Import z pliku vector_store.py
 
 logger = logging.getLogger(__name__)
 
-def search_and_rerank(query: str, model: Any, user_id: str, n_results: int = 5) -> List[Dict[str, Any]]:
-    # Use embed_query instead of encode
-    query_embedding = model.embed_query(query)
 
-    vector_results = search_vector_store(query=query, n_results=n_results, user_id=user_id)
-    vector_reranked_results = process_vector_results(vector_results, query_embedding)
+def search_and_rerank(query: str,
+                      user_id: str,
+                      n_results: int = 5) -> List[Dict[str, Any]]:
+    """
+    Wyszukiwanie wektorowe + BM25 + reranking wyników.
+    Zwraca listę słowników z kluczami:
+    - content
+    - metadata
+    - similarity_score
+    - bm25_score
+    - final_score
+    - _id
+    """
+    # 1. Wyszukanie w wektorach
+    vector_results = search_vector_store(query=query, user_id=user_id, n_results=n_results)
 
-    graph_results = search_graph_store(query, user_id)
-    graph_reranked_results = process_graph_results(graph_results)
-
-    combined_results = vector_reranked_results + graph_reranked_results
-    if not combined_results:
-        logger.warning("Brak wyników do rerankowania.")
+    if not vector_results:
+        logger.info("Brak wyników z wyszukiwania wektorowego.")
         return []
 
-    for res in combined_results:
-        if '_id' not in res:
-            res['_id'] = str(uuid.uuid4())
+    # 2. Nadanie unikalnych _id jeśli nie istnieją
+    for res in vector_results:
+        if "metadata" not in res:
+            res["metadata"] = {}
+        if "_id" not in res["metadata"]:
+            new_id = str(uuid.uuid4())
+            res["metadata"]["_id"] = new_id
+        else:
+            new_id = res["metadata"]["_id"]
 
-    documents = [Document(page_content=res['content'], metadata={**res['metadata'], '_id': res['_id']}) for res in combined_results]
+        # Zmieniamy klucz, by łatwiej się odwoływać w doc
+        res["_id"] = new_id
+
+    # 3. BM25 Reranking
+    # Zamieniamy wyniki wektorowe w listę Document
+    documents = []
+    for res in vector_results:
+        doc = Document(
+            page_content=res["content"],
+            metadata=res["metadata"]
+        )
+        documents.append(doc)
+
+    # Tworzymy BM25Retriever
     retriever = BM25Retriever.from_documents(documents)
     bm25_docs = retriever.invoke(query)
 
+    # Mapa doc_id -> rank
     bm25_mapping = {}
     for rank, doc in enumerate(bm25_docs, start=1):
-        doc_id = doc.metadata.get('_id')
+        doc_id = doc.metadata.get("_id")
         if doc_id:
             bm25_mapping[doc_id] = rank
 
+    # 4. Hybrydowe łączenie wyników: sim_score + bm25_score
     final_results = []
-    for res in combined_results:
-        sim_score = res['similarity_score']
-        bm25_rank = bm25_mapping.get(res['_id'], None)
-
-        if bm25_rank is not None:
+    for res in vector_results:
+        sim_score = res.get("score", 0.0)  # z wektora
+        doc_id = res["_id"]
+        bm25_rank = bm25_mapping.get(doc_id)
+        if bm25_rank:
             bm25_score = 1 / (bm25_rank + 1e-9)
         else:
-            bm25_score = 0.1
+            bm25_score = 0.1  # default
 
         final_score = sim_score + bm25_score
-        res['final_score'] = final_score
-        final_results.append(res)
+        new_res = {
+            "content": res["content"],
+            "metadata": res["metadata"],
+            "similarity_score": sim_score,
+            "bm25_score": bm25_score,
+            "final_score": final_score,
+            "_id": doc_id
+        }
+        final_results.append(new_res)
 
-    final_results = sorted(final_results, key=lambda x: x['final_score'], reverse=True)
+    # Sortowanie malejąco po final_score
+    final_results.sort(key=lambda x: x["final_score"], reverse=True)
     final_docs = final_results[:n_results]
 
     if not final_docs:
@@ -66,20 +100,26 @@ def search_and_rerank(query: str, model: Any, user_id: str, n_results: int = 5) 
 
     return final_docs
 
+
 def process_vector_results(vector_results: Dict[str, Any], query_embedding: np.ndarray) -> List[Dict[str, Any]]:
+    """
+    Przetwarza wyniki z vector_store i oblicza cosinus similarity z query_embedding.
+    """
     if not vector_results or 'embeddings' not in vector_results or not vector_results['embeddings']:
         logger.warning("No embeddings returned from vector store.")
         return []
 
-    doc_embeddings = np.array(vector_results['embeddings'][0])
-    documents = vector_results['documents'][0]
-    metadatas = vector_results['metadatas'][0]
+    doc_embeddings = np.array(vector_results['embeddings'][0])     # (k, 384) np.
+    documents = vector_results['documents'][0]                     # (k) list str
+    metadatas = vector_results['metadatas'][0]                     # (k) list dict
 
     if len(doc_embeddings) == 0:
         logger.warning("Document embeddings are empty.")
         return []
 
+    # Upewniamy się, że doc_embeddings jest 2D
     if doc_embeddings.ndim == 3:
+        # Bywa, że Chroma zwraca [1, k, dim]
         doc_embeddings = doc_embeddings.reshape(-1, doc_embeddings.shape[-1])
 
     if query_embedding.ndim == 1:
@@ -89,53 +129,76 @@ def process_vector_results(vector_results: Dict[str, Any], query_embedding: np.n
         logger.warning("No document embeddings available for similarity calculation.")
         return []
 
+    # Liczymy cosinus similarity
     try:
         similarities = cosine_similarity(query_embedding, doc_embeddings)[0]
     except ValueError as ve:
         logger.error(f"Error computing cosine similarity: {ve}")
         return []
 
-    results = [
-        {
+    # Tworzymy listę wyników
+    results = []
+    for doc, meta, score in zip(documents, metadatas, similarities):
+        results.append({
             'content': doc,
-            'metadata': metadata,
+            'metadata': meta,
             'similarity_score': float(score),
             'source': 'vector'
-        }
-        for doc, metadata, score in zip(documents, metadatas, similarities)
-    ]
+        })
 
-    results = sorted(results, key=lambda x: x['similarity_score'], reverse=True)
-    logger.info(f"Uzyskano {len(results)} wyników z wektorów. Najwyższy similarity_score: {results[0]['similarity_score'] if results else 'Brak'}")
+    # Sortujemy malejąco po similarity_score
+    results.sort(key=lambda x: x['similarity_score'], reverse=True)
+
+    if results:
+        logger.info(f"Uzyskano {len(results)} wyników z wektorów. Najwyższy similarity_score: {results[0]['similarity_score']}")
+    else:
+        logger.info("Brak wyników z wektorów.")
+
     return results
 
-def process_graph_results(graph_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    filtered = [
-        {
-            'content': result['content'],
-            'metadata': result.get('metadata', {}),
-            'similarity_score': float(result.get('similarity_score', 0.6)),
-            'source': result.get('source', 'graph')
-        }
-        for result in graph_results
-        if 'content' in result
-    ]
 
-    if filtered:
-        filtered = sorted(filtered, key=lambda x: x['similarity_score'], reverse=True)
-        logger.info(f"Uzyskano {len(filtered)} wyników z grafu. Najwyższy similarity_score: {filtered[0]['similarity_score']}")
-    else:
-        logger.info("Brak wyników z grafu.")
 
-    return filtered
-
-if __name__ == "__main__":
+def retrieve(query: str):
     logging.basicConfig(level=logging.INFO)
     embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
     user_id = "user-123"
-    query = "Jakiego koloru jest kot Jędrek?"
-    results = search_and_rerank(query, embedding_model, user_id, n_results=8)
+    results = search_and_rerank(query, user_id, n_results=3)
     print("Wyniki:")
     for r in results:
         print(r.get('content', 'Brak treści'))
+
+from .chunking import create_chunks
+from .vector_store import create_vector_store
+
+def upload():
+    # Parametry testowe
+    test_file_path = '../data/amos_pulapki.txt'  # Ścieżka do pliku
+    test_user_id = 'user-123'
+    test_file_description = 'Testowy plik Jedrek'
+    test_category = 'test-category'
+
+    # Otwieranie i czytanie pliku
+
+    with open(test_file_path, 'r', encoding='utf-8') as f:
+        text = f.read()
+    logger.info(f"Pobrano tekst z pliku: {test_file_path}")
+
+    # Tworzenie chunków za pomocą funkcji create_chunks
+    chunks = create_chunks(text)
+
+    # Dodawanie chunków do vector store
+    try:
+        create_vector_store(
+            chunks=chunks,
+            user_id=test_user_id,
+            file_description=test_file_description,
+            category=test_category
+        )
+        logger.info("Chunku zostały pomyślnie dodane do vector store.")
+    except Exception as e:
+        logger.error(f"Error adding chunks to vector store: {e}", exc_info=True)
+
+if __name__ == "__main__":
+    # upload()
+    retrieve("Kim jest amos tversky?")
