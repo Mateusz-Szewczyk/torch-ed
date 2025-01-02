@@ -197,15 +197,15 @@ async def import_flashcards(
     """
     Import Flashcards
     -----------------
-    Imports flashcards from a CSV or APKG file.
+    Imports flashcards from a CSV, APKG or TXT file.
     """
     logger.info(f"Importing flashcards from file: {file.filename}")
-    allowed_extensions = ['.csv', '.apkg']
+    allowed_extensions = ['.csv', '.apkg', '.txt']
     file_ext = os.path.splitext(file.filename)[1].lower()
 
     if file_ext not in allowed_extensions:
         logger.error(f"Unsupported file format: {file_ext}")
-        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload a CSV or APKG file.")
+        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload a CSV, APKG or TXT file.")
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
@@ -228,6 +228,37 @@ async def import_flashcards(
                     if question and answer:
                         flashcards.append({'question': question, 'answer': answer})
             logger.info(f"Parsed {len(flashcards)} flashcards from CSV.")
+
+        elif file_ext == '.txt':
+            # Parsowanie plików TXT (Anki)
+            logger.info("Parsing TXT file.")
+            with open(tmp_path, 'r', encoding='utf-8') as txtfile:
+                # Zmienne pomocnicze
+                separator = "\t"  # Default
+                for line in txtfile:
+                    line = line.strip()
+                    # Pomijamy komentarze i puste wiersze
+                    if not line or line.startswith('#'):
+                        # Możemy też wyłuskać tu separator, np. #separator:tab
+                        if line.lower().startswith('#separator:'):
+                            # Przykład: #separator:tab
+                            sep_value = line.split(':', 1)[1].strip()
+                            # Jeśli mamy #separator:tab, to separator = "\t"
+                            if sep_value.lower() == 'tab':
+                                separator = "\t"
+                            # W razie potrzeby możesz dodać inne separatory
+                        continue
+
+                    # Rozbijamy wiersz po aktualnym separatorze
+                    parts = line.split(separator)
+                    # Oczekujemy, że co najmniej 2 kolumny (question, answer)
+                    if len(parts) >= 2:
+                        question = parts[0].strip()
+                        answer = parts[1].strip()
+                        if question and answer:
+                            flashcards.append({'question': question, 'answer': answer})
+            logger.info(f"Parsed {len(flashcards)} flashcards from TXT.")
+
         elif file_ext == '.apkg':
             # Parsowanie APKG
             logger.info("Parsing APKG file.")
@@ -295,22 +326,18 @@ async def import_flashcards(
                     media_url_map = {}
                     for key, data in media_files.items():
                         original_name = f"media_{key}"
-                        # Zapisz plik
                         file_path = os.path.join(media_storage_dir, original_name)
                         with open(file_path, 'wb') as f:
                             f.write(data)
-                        # Utwórz URL (przykład, dostosuj do swojej konfiguracji)
                         media_url = f"/media/{original_name}"
                         media_url_map[key] = media_url
                         logger.debug(f"Saved media {original_name} to {file_path} with URL {media_url}")
                 elif media_files:
                     # Jeśli media.json jest dostępne, załaduj media_url_map z istniejących danych
-                    # Zakładając, że media_files zawiera mapowanie numeru na oryginalne nazwy
                     media_storage_dir = os.path.join('public', 'media')
                     os.makedirs(media_storage_dir, exist_ok=True)
                     media_url_map = {}
                     for key, original_name in media_files.items():
-                        # Skopiuj plik mediów do katalogu mediów
                         media_file_path = os.path.join(extract_dir, key)
                         if os.path.exists(media_file_path):
                             destination_path = os.path.join(media_storage_dir, original_name)
@@ -357,10 +384,11 @@ async def import_flashcards(
                     flds = note['fields']
                     fields_def = model.get('flds', [])
                     if len(flds) < len(fields_def):
-                        logger.warning(f"Note ID {nid} has insufficient fields. Expected {len(fields_def)}, got {len(flds)}. Skipping.")
+                        logger.warning(
+                            f"Note ID {nid} has insufficient fields. Expected {len(fields_def)}, got {len(flds)}. Skipping."
+                        )
                         continue
 
-                    # Pobranie szablonu na podstawie ord
                     tmpls = model.get('tmpls', [])
                     if ord_ >= len(tmpls):
                         logger.warning(f"Card ord {ord_} out of range for model ID {model_id}. Skipping.")
@@ -371,7 +399,6 @@ async def import_flashcards(
                     qfmt = tmpl.get('qfmt', '')
                     afmt = tmpl.get('afmt', '')
 
-                    # Zastępowanie {{FieldName}} z wartościami pól
                     for idx, field in enumerate(fields_def):
                         field_name = field.get('name')
                         if idx >= len(flds):

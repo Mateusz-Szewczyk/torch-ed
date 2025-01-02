@@ -43,7 +43,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
     <RadixDialog.Portal>
       <RadixDialog.Overlay
         className={cn(
-          "fixed inset-0 bg-black/50 dark:bg-black/70 z-50" // Dodano z-50
+          "fixed inset-0 bg-black/50 dark:bg-black/70 z-100" // Dodano z-50
         )}
       />
       <RadixDialog.Content
@@ -53,7 +53,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
           "dark:bg-background dark:text-foreground",
           "p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto",
           "shadow-lg",
-          "z-50", // Dodano z-50
+          "z-100", // Dodano z-50
           className
         )}
       >

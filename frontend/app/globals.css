@@ -78,7 +78,7 @@
     /* Use theme colors for scrollbar */
     --sb-track-color: hsl(var(--muted));
     --sb-thumb-color: hsl(var(--border));
-    --sb-size: 11px;
+    --sb-size: 6px;
   }
 
   .bg-background {

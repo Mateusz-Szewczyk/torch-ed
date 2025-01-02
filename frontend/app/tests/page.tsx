@@ -200,7 +200,7 @@ export default function ExamsPage() {
       <div className="text-center mb-6 flex flex-col items-center justify-center space-y-2">
         <h1 className="text-5xl font-extrabold text-primary">{t('tests')}</h1>
         <div className="flex items-center space-x-2">
-          <CustomTooltip content={t('tests_tooltip')}>
+          <CustomTooltip className="" content={t('tests_tooltip')}>
             <Button variant="ghost" size="icon" className="text-secondary hover:text-primary">
               <Info className="h-6 w-6" />
               <span className="sr-only">{t('more_information')}</span>
