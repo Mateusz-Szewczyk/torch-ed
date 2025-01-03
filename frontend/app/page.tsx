@@ -1,175 +1,230 @@
-// components/HomePage.tsx
-
 'use client';
 
-import { useTranslation } from 'react-i18next';
-import { useRouter } from 'next/navigation';
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { BookOpen, MessageSquare, Bell, ArrowRight} from 'lucide-react';
-import FeedbackModal from '@/components/FeedbackModal'; // Importuj FeedbackModal
+import { useTranslation, Trans } from 'react-i18next';
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  CardContent
+} from "@/components/ui/card";
+
+import {
+  Sparkles,
+  Cpu,
+  Wand2,
+  LayoutDashboard
+} from 'lucide-react';
+
+// Import ikon z react-icons
+import { FaGithub, FaLinkedin, FaRegLightbulb } from 'react-icons/fa'; // Dodana ikona FaRegLightbulb
+
+// Definicja typu dla planów
+interface FuturePlan {
+  title: string;
+  description: string;
+}
 
 export default function HomePage() {
   const { t } = useTranslation();
-  const router = useRouter();
 
-  const examplePrompts = [
-    t('example_prompt_1'),
-    t('example_prompt_2'),
-    t('example_prompt_3'),
+  // Przykładowe sekcje do kart
+  const sections = [
+    {
+      icon: Sparkles,
+      title: t('homepage_modern_section_title1'),
+      description: t('homepage_modern_section_text1'),
+    },
+    {
+      icon: Cpu,
+      title: t('homepage_modern_section_title2'),
+      description: t('homepage_modern_section_text2'),
+    },
+    {
+      icon: Wand2,
+      title: t('homepage_modern_section_title3'),
+      description: t('homepage_modern_section_text3'),
+    },
   ];
 
-  const newsItems = [
-    { title: t('news_item_1_title'), description: t('news_item_1_description') },
-    { title: t('news_item_2_title'), description: t('news_item_2_description') },
-    { title: t('news_item_3_title'), description: t('news_item_3_description') },
+  const highlights = [
+    t('homepage_modern_highlight1'),
+    t('homepage_modern_highlight2'),
+    t('homepage_modern_highlight3'),
   ];
+
+  // Pobieranie planów jako tablicy obiektów
+  const futurePlans: FuturePlan[] = t('future_plans.items', { returnObjects: true }) as FuturePlan[];
+
+  // Debugging: Sprawdzenie zawartości futurePlans
+  console.log('Future Plans:', futurePlans);
 
   return (
-    <div
-      className="min-h-screen bg-[radial-gradient(ellipse_farthest-corner_at_top,_hsl(var(--border)),_hsl(var(--background)),_hsl(var(--border)))] text-[hsl(var(--foreground))] relative overflow-hidden"
-    >
-      {/* Hero Section */}
-      <section className="py-20 px-4 text-center relative z-10">
-        <div className="container mx-auto flex flex-col items-center justify-center">
-          <div className="mb-8">
-            <h1 className="text-5xl font-extrabold mb-4">{t('welcome_title')}</h1>
-            <p className="text-xl mb-8">{t('welcome_subtitle')}</p>
-            <div className="flex space-x-4 justify-center">
-              <Button
-                onClick={() => router.push('/flashcards')}
-                size="lg"
-                className="flex items-center bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:bg-[hsl(var(--primary))] transition-colors duration-300 animate-pulseButton mx-auto"
+    <div className="relative flex flex-col min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]">
+
+      {/* Bąbelki w tle - pozycjonowanie, żeby były widoczne */}
+      <div className="absolute inset-0 -z-1 overflow-hidden">
+        {/* Każdy bąbelek ma top/left określone inline, + klasa animująca */}
+        <div
+          className="absolute w-72 h-72 bg-pink-300/50 rounded-full animate-randomBallOne"
+          style={{ top: '20%', left: '10%' }}
+        />
+        <div
+          className="absolute w-80 h-80 bg-blue-300/50 rounded-full animate-randomBallTwo"
+          style={{ top: '50%', left: '60%' }}
+        />
+        <div
+          className="absolute w-96 h-96 bg-green-300/40 rounded-full animate-randomBallThree"
+          style={{ top: '10%', left: '70%' }}
+        />
+        <div
+          className="absolute w-64 h-64 bg-purple-300/40 rounded-full animate-randomBallFour"
+          style={{ top: '70%', left: '20%' }}
+        />
+      </div>
+
+      {/* Hero / Intro */}
+      <section className="py-20 px-4 flex flex-col items-center text-center z-10">
+        <div className="max-w-3xl mx-auto space-y-6">
+          {/* Użycie komponentu Trans do wstawienia animowanego słowa */}
+          <h1 className="text-6xl font-extrabold drop-shadow-md">
+            <Trans i18nKey="modern_homepage_title">
+              Tutaj zaczyna i kończy się Twoja nauka
+            </Trans>
+          </h1>
+          <p className="text-xl text-muted-foreground">
+            {t('modern_homepage_subtitle')}
+          </p>
+          <p className="text-lg text-foreground animate-fadeIn">
+            {t('modern_homepage_intro_text')}
+          </p>
+        </div>
+      </section>
+
+      {/* Sekcja Feature Cards */}
+      <section className="py-16 px-4">
+        <div className="container mx-auto grid md:grid-cols-3 gap-8">
+          {sections.map((sec, idx) => (
+            <Card
+              key={idx}
+              className="bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]
+                         transform hover:-translate-y-2 hover:shadow-2xl
+                         transition-all duration-500 animate-fadeInUp"
+            >
+              <CardHeader className="flex items-center space-x-3">
+                <sec.icon className="h-8 w-8 text-[hsl(var(--primary))]" />
+                <CardTitle className="text-xl">{sec.title}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="text-foreground/90 text-sm mt-4">
+                  {sec.description}
+                </CardDescription>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Sekcja Highlights */}
+      <section className="px-4 py-16 bg-[hsl(var(--background))]/80 z-5 shadow-custom">
+        <div className="container mx-auto text-center space-y-8">
+          <h2 className="text-4xl font-bold">{t('modern_homepage_highlights_title')}</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            {t('modern_homepage_highlights_subtitle')}
+          </p>
+          <ul className="mt-10 space-y-6 max-w-lg mx-auto text-left animate-fadeIn">
+            {highlights.map((hl, i) => (
+              <li key={i} className="flex space-x-2 items-start">
+                <LayoutDashboard className="mt-1 text-[hsl(var(--primary))]" />
+                <span className="text-lg">{hl}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* Sekcja Plany na Przyszłość */}
+      <section className="py-16 px-4 text-[hsl(var(--card-foreground))]">
+        <div className="container mx-auto text-center space-y-8">
+          {/* Nagłówek z ikoną */}
+          <div className="flex justify-center items-center space-x-4">
+            <FaRegLightbulb className="h-8 w-8 text-[hsl(var(--primary))]" />
+            <h2 className="text-4xl font-bold">{t('future_plans.title')}</h2>
+          </div>
+          {/* Opis sekcji z dodatkowym paddingiem */}
+          <p className="text-muted-foreground max-w-2xl mx-auto px-4">
+            {t('future_plans.description')}
+          </p>
+          {/* Karty z planami */}
+          <div className="mt-10 grid sm:grid-cols-1 md:grid-cols-2 gap-8">
+            {futurePlans.map((plan, index) => (
+              <Card
+                key={index}
+                className="bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]
+                           p-8 rounded-lg shadow-md transform hover:scale-105
+                           transition-transform duration-300"
               >
-                {t('get_started')}
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </div>
+                <CardTitle className="text-xl font-semibold mb-2">
+                  {plan.title}
+                </CardTitle>
+                <CardDescription className="text-sm text-muted-foreground">
+                  {plan.description}
+                </CardDescription>
+              </Card>
+            ))}
           </div>
         </div>
       </section>
 
-      <div className="container mx-auto px-4 py-16 space-y-20 relative z-10">
-        {/* Purpose Section */}
-        <section>
-          <h2 className="text-4xl font-bold mb-12 text-center">{t('purpose_title')}</h2>
-          <div className="grid md:grid-cols-3 gap-12">
-            <Card
-              className="transform transition-transform duration-300 hover:scale-105 hover:-translate-y-2 hover:shadow-lg bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]"
-            >
-              <CardHeader className="flex items-center">
-                <BookOpen className="h-8 w-8 text-[hsl(var(--primary))] mr-4" />
-                <CardTitle className="text-xl">{t('purpose_feature_1_title')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>{t('purpose_feature_1_description')}</p>
-              </CardContent>
-            </Card>
-            <Card
-              className="transform transition-transform duration-300 hover:scale-105 hover:-translate-y-2 hover:shadow-lg bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]"
-            >
-              <CardHeader className="flex items-center">
-                <MessageSquare className="h-8 w-8 text-[hsl(var(--primary))] mr-4" />
-                <CardTitle className="text-xl">{t('purpose_feature_2_title')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>{t('purpose_feature_2_description')}</p>
-              </CardContent>
-            </Card>
-            <Card
-              className="transform transition-transform duration-300 hover:scale-105 hover:-translate-y-2 hover:shadow-lg bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]"
-            >
-              <CardHeader className="flex items-center">
-                <Bell className="h-8 w-8 text-[hsl(var(--primary))] mr-4" />
-                <CardTitle className="text-xl">{t('purpose_feature_3_title')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p>{t('purpose_feature_3_description')}</p>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        {/* Example Prompts Section */}
-        <section>
-          <h2 className="text-4xl font-bold mb-12 text-center">{t('example_prompts_title')}</h2>
-          <div className="bg-[hsl(var(--card))] shadow-md rounded-lg p-8">
-            <ul className="space-y-6">
-              {examplePrompts.map((prompt, index) => (
-                <li key={index} className="flex items-start">
-                  <span className="font-bold text-[hsl(var(--primary))] mr-4 text-lg">{index + 1}.</span>
-                  <span className="text-[hsl(var(--foreground))]">{prompt}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        {/* News Section */}
-        <section>
-          <h2 className="text-4xl font-bold mb-12 text-center">{t('news_title')}</h2>
-          <div className="grid md:grid-cols-3 gap-12">
-            {newsItems.map((item, index) => (
-              <Card key={index}
-                className="transform transition-transform duration-300 hover:scale-105 hover:-translate-y-2 hover:shadow-lg bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]"
-              >
-                <CardHeader className="flex items-center">
-                  <MessageSquare className="h-8 w-8 text-[hsl(var(--primary))] mr-4" />
-                  <CardTitle className="text-xl">{item.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-[hsl(var(--foreground))]">{item.description}</CardDescription>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))] py-6 relative z-10">
+      {/* Stopka */}
+      <footer className="bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))] py-6 mt-auto">
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between">
-          <p className="text-sm">&copy; {new Date().getFullYear()} Mateusz Szewczyk & Adam Sarga. All rights
-            reserved.</p>
+          <p className="text-sm">
+            &copy; {new Date().getFullYear()} Mateusz Szewczyk &amp; Adam Sarga. {t('all_rights_reserved')}
+          </p>
           <div className="flex space-x-4 mt-4 md:mt-0">
             {/* GitHub - Mateusz */}
-            <a href="https://github.com/Mateusz-Szewczyk" target="_blank" rel="noopener noreferrer"
-               className="hover:text-[hsl(var(--primary))] transition-colors duration-200">
-              {/* GitHub Icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
-                <path
-                    d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-              </svg>
+            <a
+              href="https://github.com/Mateusz-Szewczyk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[hsl(var(--primary))] transition-colors duration-200"
+              aria-label="GitHub Mateusz Szewczyk"
+            >
+              <FaGithub className="h-6 w-6" />
             </a>
 
             {/* LinkedIn - Mateusz */}
-            <a href="https://www.linkedin.com/in/mateusz-szewczyk-09073220b/" target="_blank"
-               rel="noopener noreferrer" className="hover:text-[hsl(var(--primary))] transition-colors duration-200">
-              {/* LinkedIn Icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
-                <path
-                    d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.784 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-              </svg>
+            <a
+              href="https://www.linkedin.com/in/mateusz-szewczyk-09073220b/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[hsl(var(--primary))] transition-colors duration-200"
+              aria-label="LinkedIn Mateusz Szewczyk"
+            >
+              <FaLinkedin className="h-6 w-6" />
             </a>
 
             {/* GitHub - Adam */}
-            <a href="https://github.com/Vronst" target="_blank" rel="noopener noreferrer"
-               className="hover:text-[hsl(var(--primary))] transition-colors duration-200">
-              {/* GitHub Icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
-                <path
-                    d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-              </svg>
+            <a
+              href="https://github.com/Vronst"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[hsl(var(--primary))] transition-colors duration-200"
+              aria-label="GitHub Adam Sarga"
+            >
+              <FaGithub className="h-6 w-6" />
             </a>
 
             {/* LinkedIn - Adam */}
-            <a href="https://www.linkedin.com/in/adam-sarga-613863272/" target="_blank"
-               rel="noopener noreferrer" className="hover:text-[hsl(var(--primary))] transition-colors duration-200">
-              {/* LinkedIn Icon */}
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
-                <path
-                    d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.784 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-              </svg>
+            <a
+              href="https://www.linkedin.com/in/adam-sarga-613863272/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[hsl(var(--primary))] transition-colors duration-200"
+              aria-label="LinkedIn Adam Sarga"
+            >
+              <FaLinkedin className="h-6 w-6" />
             </a>
           </div>
         </div>

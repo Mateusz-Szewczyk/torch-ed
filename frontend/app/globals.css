@@ -122,28 +122,28 @@
   }
 
   .animate-collapse-down {
-    animation: collapse-down 300ms ease-out;
+    animation: collapse-down 100ms ease-out;
   }
 
   .animate-collapse-up {
-    animation: collapse-up 300ms ease-out;
+    animation: collapse-up 100ms ease-out;
   }
 }
 
 /* Animacja pulsującego przycisku */
 @keyframes pulse {
-  0%, 100% {
+  0%, 50%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.3);
+    box-shadow: 0 0 0 0 rgba(70, 197, 94, 0.3);
   }
-  50% {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+  50%, 75% {
+    transform: scale(1);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0);
   }
 }
 
 .animate-pulseButton {
-  animation: pulse 2s infinite;
+  animation: pulse 4s infinite;
 }
 
 /* Radix UI Dialog (if used) */
@@ -235,4 +235,245 @@
   body {
     scrollbar-color: var(--sb-thumb-color) var(--sb-track-color);
   }
+}
+
+/* ==================
+   Animacje bąbelków z większą zmiennością rozmiaru
+   ================== */
+
+/* Animacja 1: randomBallOne */
+@keyframes randomBallOne {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.6;
+  }
+  10% {
+    transform: translate(80px, -60px) scale(1.3) rotate(10deg);
+    opacity: 0.8;
+  }
+  20% {
+    transform: translate(-100px, 40px) scale(0.7) rotate(-5deg);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translate(70px, 100px) scale(1.4) rotate(8deg);
+    opacity: 0.9;
+  }
+  40% {
+    transform: translate(-40px, 50px) scale(1.6) rotate(-12deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(60px, -80px) scale(0.6) rotate(6deg);
+    opacity: 0.6;
+  }
+  60% {
+    transform: translate(-80px, 120px) scale(1.8) rotate(2deg);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(100px, 20px) scale(1.0) rotate(-4deg);
+    opacity: 0.7;
+  }
+  80% {
+    transform: translate(-20px, -30px) scale(1.2) rotate(10deg);
+    opacity: 0.8;
+  }
+  90% {
+    transform: translate(40px, -60px) scale(0.5) rotate(-8deg);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.6;
+  }
+}
+.animate-randomBallOne {
+  animation: randomBallOne 200s infinite ease-in-out alternate;
+}
+
+/* Animacja 2: randomBallTwo */
+@keyframes randomBallTwo {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.5;
+  }
+  10% {
+    transform: translate(-40px, 80px) scale(1.4) rotate(-6deg);
+    opacity: 0.7;
+  }
+  20% {
+    transform: translate(50px, -90px) scale(0.6) rotate(4deg);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translate(10px, 60px) scale(1.5) rotate(10deg);
+    opacity: 0.8;
+  }
+  40% {
+    transform: translate(-50px, -10px) scale(1.0) rotate(-4deg);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translate(70px, 50px) scale(1.3) rotate(3deg);
+    opacity: 0.7;
+  }
+  60% {
+    transform: translate(-80px, -70px) scale(0.7) rotate(6deg);
+    opacity: 0.5;
+  }
+  70% {
+    transform: translate(100px, -20px) scale(1.6) rotate(-2deg);
+    opacity: 0.9;
+  }
+  80% {
+    transform: translate(-60px, 40px) scale(1.3) rotate(12deg);
+    opacity: 0.7;
+  }
+  90% {
+    transform: translate(30px, -50px) scale(0.55) rotate(-8deg);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.5;
+  }
+}
+.animate-randomBallTwo {
+  animation: randomBallTwo 200s infinite ease-in-out alternate;
+}
+
+/* Animacja 3: randomBallThree */
+@keyframes randomBallThree {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.6;
+  }
+  10% {
+    transform: translate(60px, -70px) scale(1.25) rotate(5deg);
+    opacity: 0.8;
+  }
+  20% {
+    transform: translate(-90px, 30px) scale(1.5) rotate(-3deg);
+    opacity: 0.7;
+  }
+  30% {
+    transform: translate(40px, 120px) scale(0.6) rotate(8deg);
+    opacity: 0.5;
+  }
+  40% {
+    transform: translate(-20px, -60px) scale(1.4) rotate(10deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(80px, 20px) scale(0.7) rotate(-6deg);
+    opacity: 0.6;
+  }
+  60% {
+    transform: translate(-70px, 90px) scale(1.6) rotate(4deg);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(30px, -30px) scale(1.0) rotate(0deg);
+    opacity: 0.7;
+  }
+  80% {
+    transform: translate(-60px, 10px) scale(1.3) rotate(12deg);
+    opacity: 0.8;
+  }
+  90% {
+    transform: translate(50px, -40px) scale(0.6) rotate(4deg);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.6;
+  }
+}
+.animate-randomBallThree {
+  animation: randomBallThree 200s infinite ease-in-out alternate;
+}
+
+/* Animacja 4: randomBallFour */
+@keyframes randomBallFour {
+  0% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.5;
+  }
+  10% {
+    transform: translate(-80px, 10px) scale(1.3) rotate(6deg);
+    opacity: 0.7;
+  }
+  20% {
+    transform: translate(70px, -40px) scale(0.65) rotate(-4deg);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translate(-20px, 90px) scale(1.5) rotate(8deg);
+    opacity: 0.8;
+  }
+  40% {
+    transform: translate(60px, 20px) scale(1.0) rotate(0deg);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translate(-100px, 40px) scale(1.6) rotate(-8deg);
+    opacity: 0.9;
+  }
+  60% {
+    transform: translate(40px, -80px) scale(0.8) rotate(5deg);
+    opacity: 0.7;
+  }
+  70% {
+    transform: translate(-60px, 60px) scale(1.2) rotate(-2deg);
+    opacity: 0.8;
+  }
+  80% {
+    transform: translate(80px, -10px) scale(1.35) rotate(10deg);
+    opacity: 0.6;
+  }
+  90% {
+    transform: translate(20px, 50px) scale(0.85) rotate(4deg);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 0.5;
+  }
+}
+.animate-randomBallFour {
+  animation: randomBallFour 200s infinite ease-in-out alternate;
+}
+
+/* Animacje tekstowe */
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.animate-fadeIn {
+  animation: fadeIn 1.2s ease forwards;
+}
+
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeInUp {
+  animation: fadeIn 1.2s ease forwards;
+}
+
+@keyframes textGradient {
+  0%,100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-textGradient {
+  background: linear-gradient(90deg, #f36fe8, #b081fd, #54a0fa, #b967f3, #ffa4a4);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textGradient 32s infinite ease;
+}
+
+.shadow-custom {
+  box-shadow: 0 0 50px 0 rgba(0, 0, 0, 0.08);
 }

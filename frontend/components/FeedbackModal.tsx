@@ -32,10 +32,13 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
   // Lista funkcji z pliku tłumaczeń
   const features = [
     { value: 'Flashcards', label: t('features_list.Flashcards') },
-    { value: 'Quizzes', label: t('features_list.Quizzes') },
-    { value: 'Progress Tracking', label: t('features_list.Progress Tracking') },
-    { value: 'Personalization', label: t('features_list.Personalization') },
-    { value: 'Community Support', label: t('features_list.Community Support') }
+    { value: 'Exams', label: t('features_list.Exams') },
+    { value: 'Chatbot', label: t('features_list.Chatbot') },
+    { value: 'Flashcards generations', label: t('features_list.Flashcard Generation') },
+    { value: 'Exams Generation', label: t('features_list.Exams Generation') },
+    { value: 'Statistics', label: t('features_list.Statistics') },
+    { value: 'File saving', label: t('features_list.File saving') },
+
   ];
 
   // Obsługa zmiany w checkboxes

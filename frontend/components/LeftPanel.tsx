@@ -277,7 +277,7 @@ export function LeftPanel({
   // ---------------
   return (
     <div
-      className={`bg-card text-foreground border-r border-border transition-all duration-300 z-50 flex flex-col ${
+      className={`bg-card text-foreground border-r border-border transition-all duration-300 z-20 flex flex-col ${
         isPanelVisible ? 'w-64' : 'w-20 items-center'
       }`}
     >
@@ -464,7 +464,9 @@ export function LeftPanel({
           <Button
             onClick={() => setIsFeedbackOpen(true)}
             variant="outline"
-            className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center'}`}
+            className={`w-full 
+                        ${isPanelVisible ? 'justify-start' : 'justify-center'}
+                        animate-pulseButton`}
           >
             <Mail className="h-4 w-4" />
             {isPanelVisible && <span className="ml-2">{t('send_feedback')}</span>}
