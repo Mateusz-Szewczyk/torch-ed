@@ -1,7 +1,6 @@
-// components/LeftPanel.tsx
 'use client';
 
-import { Home, BookOpen, TestTube, Mail } from 'lucide-react'; // Dodano Mail jako ikonę dla Feedback
+import { Home, BookOpen, TestTube, Mail } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,7 +36,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import FeedbackModal from '@/components/FeedbackModal'; // Importuj FeedbackModal
+import FeedbackModal from '@/components/FeedbackModal';
 
 interface Conversation {
   id: number;
@@ -66,11 +65,13 @@ export function LeftPanel({
   const { t, i18n } = useTranslation();
   const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
 
-  const userId = 'user-123'; // Zastąp rzeczywistym ID użytkownika z uwierzytelniania
-
+  const userId = 'user-123'; // Przykładowe ID (zastąp realnym)
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
 
+  // ---------------
+  // FETCH & PREFETCH
+  // ---------------
   useEffect(() => {
     const handleLanguageChange = () => setCurrentLanguage(i18n.language);
     i18n.on('languageChanged', handleLanguageChange);
@@ -81,11 +82,10 @@ export function LeftPanel({
 
   useEffect(() => {
     router.prefetch('/flashcards');
-    router.prefetch('/tests'); // Prefetch tests route
-    router.prefetch('/'); // Prefetch home route as well
+    router.prefetch('/tests');
+    router.prefetch('/');
   }, [router]);
 
-  // Fetch conversations from API
   useEffect(() => {
     const fetchConversations = async () => {
       try {
@@ -100,10 +100,12 @@ export function LeftPanel({
         console.error('Error fetching conversations:', error);
       }
     };
-
     fetchConversations();
-  }, [userId, API_BASE_URL]);
+  }, [API_BASE_URL, userId]);
 
+  // ---------------
+  // HANDLERS: NEW, CLICK, DELETE
+  // ---------------
   const handleNewConversation = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/chats/`, {
@@ -135,9 +137,7 @@ export function LeftPanel({
         method: 'DELETE',
       });
       if (response.ok || response.status === 204) {
-        setConversations((prev) => prev.filter((conv) => conv.id !== conversationId));
-
-        // If deleting the current conversation, redirect to home
+        setConversations((prev) => prev.filter((c) => c.id !== conversationId));
         if (conversationId === currentConversationId) {
           setCurrentConversationId(null);
           router.push('/');
@@ -150,6 +150,9 @@ export function LeftPanel({
     }
   };
 
+  // ---------------
+  // EDIT TITLE
+  // ---------------
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [currentEditingConv, setCurrentEditingConv] =
     useState<Conversation | null>(null);
@@ -173,12 +176,9 @@ export function LeftPanel({
           }
         );
         if (response.ok) {
-          // Update conversation state
-          setConversations((prevConversations) =>
-            prevConversations.map((conv) =>
-              conv.id === currentEditingConv.id
-                ? { ...conv, title: newTitle }
-                : conv
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === currentEditingConv.id ? { ...c, title: newTitle } : c
             )
           );
           setIsEditDialogOpen(false);
@@ -191,6 +191,9 @@ export function LeftPanel({
     }
   };
 
+  // ---------------
+  // DELETE CONFIRM
+  // ---------------
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] =
     useState<Conversation | null>(null);
@@ -208,14 +211,51 @@ export function LeftPanel({
     }
   };
 
-  const [menuOpenForConvId, setMenuOpenForConvId] = useState<number | null>(
+  // ---------------
+  // MENU
+  // ---------------
+  const [menuOpenForConvId, setMenuOpenForConvId] = useState<number | null>(null);
+
+  // Kontener "CollapsibleContent" – tam będzie `position: relative`.
+  const collapsibleContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Stan do przechowywania pozycji menu (top, left) w px
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(
     null
   );
 
+  // Refy do przycisków "trzech kropek"
+  const conversationButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+
   const toggleMenuForConv = (convId: number) => {
-    setMenuOpenForConvId((prev) => (prev === convId ? null : convId));
+    if (menuOpenForConvId === convId) {
+      // Zamknij, jeśli było otwarte
+      setMenuOpenForConvId(null);
+      return;
+    }
+
+    // Znajdź przycisk i kontener
+    const btnEl = conversationButtonRefs.current[convId];
+    const containerEl = collapsibleContainerRef.current;
+    if (btnEl && containerEl) {
+      // boundingRect kontenera
+      const containerRect = containerEl.getBoundingClientRect();
+      // boundingRect przycisku
+      const btnRect = btnEl.getBoundingClientRect();
+
+      // Oblicz offset przycisku względem kontenera "relative"
+      const top = btnRect.bottom - containerRect.top + 4; // +4px odstępu
+      const left = btnRect.left - containerRect.left - 120; // 120 - przybliżona szerokość menu
+
+      setMenuPosition({ top, left });
+    }
+
+    setMenuOpenForConvId(convId);
   };
 
+  // ---------------
+  // HOVER MENU
+  // ---------------
   const handleMouseEnter = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => setIsHovered(true), 200);
@@ -227,9 +267,14 @@ export function LeftPanel({
     setMenuOpenForConvId(null);
   };
 
-  // Stan do zarządzania modalem feedbacku
+  // ---------------
+  // FEEDBACK
+  // ---------------
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
+  // ---------------
+  // RENDER
+  // ---------------
   return (
     <div
       className={`bg-card text-foreground border-r border-border transition-all duration-300 z-50 flex flex-col ${
@@ -237,19 +282,17 @@ export function LeftPanel({
       }`}
     >
       <div className="p-4 flex-grow flex flex-col">
-        {/* Header with Menu and Home Button */}
+        {/* Header z Home */}
         <div
           className={`flex items-center mb-4 ${
             isPanelVisible ? 'justify-between' : 'justify-center'
           }`}
         >
           {!isPanelVisible ? (
-            // Menu icon when panel is closed - screen reader only
             <h2 className="sr-only">{t('menu')}</h2>
           ) : (
             <h2 className="text-xl font-semibold">{t('menu')}</h2>
           )}
-          {/* Home Button */}
           <Button
             asChild
             variant="ghost"
@@ -278,25 +321,24 @@ export function LeftPanel({
             </Link>
           </Button>
 
-          {/* New Tests Button */}
           <Button
             asChild
             variant="outline"
             className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center'}`}
           >
             <Link href="/tests">
-              <TestTube className="h-4 w-4" /> {/* Użyj odpowiedniej ikony */}
+              <TestTube className="h-4 w-4" />
               {isPanelVisible && <span className="ml-2">{t('tests')}</span>}
             </Link>
           </Button>
 
-          {/* Chat button with conversation list */}
+          {/* Chat – lista konwersacji */}
           <div
-            className="relative"
+            className="relative scroll-thin"
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
           >
-            <Collapsible open={isHovered && isPanelVisible}>
+            <Collapsible open={isHovered && isPanelVisible} className="scroll-thin">
               <CollapsibleTrigger asChild>
                 <Button
                   variant="outline"
@@ -307,83 +349,118 @@ export function LeftPanel({
                   <MessageSquare className="h-4 w-4" />
                   {isPanelVisible && (
                     <>
-                      <span className="ml-2 flex-grow text-left">
-                        {t('chat')}
-                      </span>
+                      <span className="ml-2 flex-grow text-left">{t('chat')}</span>
                       {isHovered ? (
-                        <ChevronUp className="h-4 w-4 transition-transform duration-200 ease-in-out" />
+                        <ChevronUp className="h-4 w-4" />
                       ) : (
-                        <ChevronDown className="h-4 w-4 transition-transform duration-200 ease-in-out" />
+                        <ChevronDown className="h-4 w-4" />
                       )}
                     </>
                   )}
                 </Button>
               </CollapsibleTrigger>
+
               {isPanelVisible && (
-                <CollapsibleContent className="mt-2 bg-secondary/50 rounded-md shadow-lg overflow-auto">
-                  <div className="p-2 space-y-2">
+                /**
+                 * 1) Ten rodzic jest "relative overflow-visible"
+                 *    aby menu mogło wyjść poza wiersze.
+                 */
+                <CollapsibleContent
+                  ref={collapsibleContainerRef}
+                  className="relative mt-2 bg-secondary/50 rounded-md shadow-lg overflow-visible p-2"
+                >
+                  <div className="space-y-2 overflow-auto max-h-64">
                     <Button
-                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
+                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 w-full"
                       onClick={handleNewConversation}
                     >
                       <Plus className="h-4 w-4" />
                       {t('new_conversation')}
                     </Button>
+
                     {conversations.map((conv) => (
-                      <div key={conv.id} className="relative flex items-center w-full overflow-hidden">
+                      <div
+                        key={conv.id}
+                        className="relative flex items-center w-full overflow-hidden"
+                      >
+                        {/* Przycisk wiersza konwersacji */}
                         <Button
                           variant="ghost"
                           className="flex-grow justify-start text-sm hover:bg-secondary/80 transition-colors duration-200 overflow-hidden text-ellipsis whitespace-nowrap truncate"
                           onClick={() => handleConversationClick(conv.id)}
-                          title={conv.title || t('conversation')} // Tooltip with full name
+                          title={conv.title || t('conversation')}
                         >
                           {conv.title || `${t('conversation')}`}
                         </Button>
+
+                        {/* Przycisk trzech kropek */}
                         <Button
                           variant="ghost"
                           className="text-gray-500 hover:bg-secondary/80 transition-colors duration-200"
                           onClick={() => toggleMenuForConv(conv.id)}
+                          ref={(el) => (conversationButtonRefs.current[conv.id] = el)}
                         >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
-                        {menuOpenForConvId === conv.id && (
-                          <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-md shadow-lg z-50">
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
-                              onClick={() => {
-                                openEditDialog(conv);
-                                setMenuOpenForConvId(null);
-                              }}
-                            >
-                              <Edit2 className="h-4 w-4 mr-2" />
-                              {t('edit_title')}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200"
-                              onClick={() => {
-                                openDeleteDialog(conv);
-                                setMenuOpenForConvId(null);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              {t('delete_conversation')}
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
+
+                  {/**
+                   * 3) Menu jest w tym samym CollapsibleContent
+                   * (a nie w wierszu rozmowy)
+                   * i jest absolutnie pozycjonowane.
+                   */}
+                  {menuOpenForConvId !== null && menuPosition && (
+                    <div
+                      className="z-50 w-48 bg-card border border-border rounded-md shadow-lg p-1"
+                      style={{
+                        position: 'absolute',
+                        top: menuPosition.top,
+                        left: menuPosition.left,
+                      }}
+                    >
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
+                        onClick={() => {
+                          const conv = conversations.find(
+                            (c) => c.id === menuOpenForConvId
+                          );
+                          if (conv) {
+                            openEditDialog(conv);
+                          }
+                          setMenuOpenForConvId(null);
+                        }}
+                      >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        {t('edit_title')}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200"
+                        onClick={() => {
+                          const conv = conversations.find(
+                            (c) => c.id === menuOpenForConvId
+                          );
+                          if (conv) {
+                            openDeleteDialog(conv);
+                          }
+                          setMenuOpenForConvId(null);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        {t('delete_conversation')}
+                      </Button>
+                    </div>
+                  )}
                 </CollapsibleContent>
               )}
             </Collapsible>
           </div>
 
-          {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Dodany Przycisk Feedbacku - Umieszczony niżej */}
           <Button
             onClick={() => setIsFeedbackOpen(true)}
             variant="outline"
@@ -393,7 +470,6 @@ export function LeftPanel({
             {isPanelVisible && <span className="ml-2">{t('send_feedback')}</span>}
           </Button>
 
-          {/* Sekcja Logowania/Rejestracji i Ustawień */}
           <div className="space-y-2 mt-4">
             <LoginRegisterDialog>
               <Button
@@ -403,9 +479,7 @@ export function LeftPanel({
                 }`}
               >
                 <UserCircle className="h-4 w-4" />
-                {isPanelVisible && (
-                  <span className="ml-2">{t('login_register')}</span>
-                )}
+                {isPanelVisible && <span className="ml-2">{t('login_register')}</span>}
               </Button>
             </LoginRegisterDialog>
             <SettingsDialog>
@@ -416,18 +490,16 @@ export function LeftPanel({
                 }`}
               >
                 <Settings className="h-4 w-4" />
-                {isPanelVisible && (
-                  <span className="ml-2">{t('settings')}</span>
-                )}
+                {isPanelVisible && <span className="ml-2">{t('settings')}</span>}
               </Button>
             </SettingsDialog>
           </div>
         </div>
 
-        {/* Toggle panel button */}
+        {/* Przycisk do zwijania panelu */}
         <Button
           variant="ghost"
-          className={`mb-4 hover:bg-secondary/80 transition-colors duration-200 ${
+          className={`mb-4 hover:bg-secondary/80 transition-colors duration-200 overflow-visible ${
             isPanelVisible ? 'self-end mr-2' : 'mx-auto'
           }`}
           onClick={() => setIsPanelVisible(!isPanelVisible)}
@@ -440,7 +512,7 @@ export function LeftPanel({
           )}
         </Button>
 
-        {/* Edit Conversation Title Dialog */}
+        {/* Dialog: Edycja tytułu */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -450,14 +522,11 @@ export function LeftPanel({
               type="text"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              placeholder={t('enter_new_title')}
+              placeholder={t('enter_new_title') || ''}
               className="mt-2"
             />
             <DialogFooter>
-              <Button
-                variant="secondary"
-                onClick={() => setIsEditDialogOpen(false)}
-              >
+              <Button variant="secondary" onClick={() => setIsEditDialogOpen(false)}>
                 {t('cancel')}
               </Button>
               <Button variant="primary" onClick={handleSaveNewTitle}>
@@ -467,14 +536,12 @@ export function LeftPanel({
           </DialogContent>
         </Dialog>
 
-        {/* Delete Conversation Confirmation Dialog */}
+        {/* Dialog: Usuwanie konwersacji */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('confirm_delete_title')}</DialogTitle>
-              <DialogDescription>
-                {t('confirm_delete_description')}
-              </DialogDescription>
+              <DialogDescription>{t('confirm_delete_description')}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button
