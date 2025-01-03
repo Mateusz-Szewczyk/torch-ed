@@ -1,11 +1,20 @@
+import os
+import redis
 from flask import Flask
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
+from dotenv import load_dotenv
 from .config import Config, TestConfig
-from .models import Base
+from .models.base import Base
 
+
+load_dotenv()
 
 session: scoped_session
+blacklist: redis.Redis = redis.Redis(
+    host=os.getenv('REDIS_URL', 'localhost'),
+    port=int(os.getenv('REDIS_PORT', 6379)),
+    db=0, decode_responses=True)
 
 
 def get_engine(testing: bool = False) -> Engine:
@@ -33,13 +42,13 @@ def create_app(testing: bool = False) -> Flask:
         Base.metadata.create_all(bind=conn)
         
 
-    from .api.api_auth import auth as api_auth
+    from .routes.token_auth import auth as api_auth
+    from .routes.user_auth import auth as user_auth
     app.register_blueprint(api_auth, url_prefix='/api/auth')
+    app.register_blueprint(user_auth, url_prefix='/api/auth')
     
     @app.teardown_appcontext
     def remove_session(exception=None) -> None:
         session.remove()
         
     return app
-    
-    

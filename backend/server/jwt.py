@@ -25,7 +25,7 @@ def generate_token(user_id: int, role: str, iss: str, path: str) -> bytes:
     return token
 
 
-def decode_token(token: bytes, path: str) -> dict | None:
+def decode_token(token: bytes, path: str) -> JWTClaims | None:
     data: None | JWTClaims = None
     with open(path, 'r') as key:
         public_key: str = key.read()
@@ -41,11 +41,12 @@ def decode_token(token: bytes, path: str) -> dict | None:
         return data
     return None
     
+
 # test
 if __name__ == '__main__':
     from dotenv import load_dotenv
     load_dotenv()
-    token: bytes =generate_token(1, 'admin', 'me', path=os.getenv('PUP_PATH', ''))
+    token: bytes = generate_token(1, 'admin', 'me', path=os.getenv('PUP_PATH', ''))
     print(token)
     data: dict | None = decode_token(token, path=os.getenv('PRP_PATH', ''))
     print(data)
