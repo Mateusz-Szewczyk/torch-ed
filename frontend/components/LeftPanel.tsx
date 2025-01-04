@@ -279,7 +279,7 @@ export function LeftPanel({
     <div
       className={`bg-card text-foreground border-r border-border transition-all duration-300 z-20 flex flex-col ${
         isPanelVisible ? 'w-64' : 'w-20 items-center'
-      }`}
+      } relative`} // Dodano 'relative'
     >
       <div className="p-4 flex-grow flex flex-col">
         {/* Header z Home */}
@@ -501,19 +501,18 @@ export function LeftPanel({
         {/* Przycisk do zwijania panelu */}
         <Button
           variant="ghost"
-          className={`mb-4 hover:bg-secondary/80 transition-colors duration-200 overflow-visible ${
-            isPanelVisible ? 'self-end mr-2' : 'mx-auto'
-          }`}
+          className={`border-r-2 absolute top-1/2 transform -translate-y-1/2 right-0 translate-x-1/3 hover:bg-secondary/80 transition-colors duration-200 rounded-full w-6 h-6 shadow-lg bg-card`}
           onClick={() => setIsPanelVisible(!isPanelVisible)}
           aria-label={isPanelVisible ? t('hide_panel') : t('show_panel')}
         >
           {isPanelVisible ? (
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-5 w-5" />
           ) : (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5" />
           )}
         </Button>
 
+        {/* Dialogi i modale */}
         {/* Dialog: Edycja tytułu */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
           <DialogContent>
