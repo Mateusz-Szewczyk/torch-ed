@@ -2,6 +2,7 @@ import os
 import hmac
 import hashlib
 from flask import Request, jsonify, request
+import smtplib
 from werkzeug.security import check_password_hash
 from functools import wraps
 from typing import Callable
@@ -9,8 +10,14 @@ from .models import User
 from . import session
 
 
-FRONTEND = 'www.google.pl'
-COOKIE_AUTH = 'TorchED_AUTH'
+FRONTEND: str = 'https://www.google.pl'
+COOKIE_AUTH: str = 'TorchED_AUTH'
+EMAIL: str | None = os.getenv('EMAIL')
+EMAIL_PASSWORD: str | None = os.getenv('EMAIL_PASSWORD')
+
+
+class Misconfiguration(Exception):
+    pass
 
 
 def data_check(request: Request, method: str) -> tuple | dict:
@@ -86,3 +93,15 @@ def signature_check(func: Callable) -> Callable | tuple:
         return func(*args, **kwargs)
     
     return wraper
+
+def send_email(to: str, message: str) -> None:
+    if not isinstance(EMAIL, str) or not isinstance(EMAIL_PASSWORD, str):
+        raise Misconfiguration('No email or password')
+    with smtplib.SMTP('smtp.gmail.com') as connection:
+        connection.starttls()
+        connection.login(EMAIL, EMAIL_PASSWORD)
+        connection.sendmail(
+            from_addr=EMAIL,
+            to_addrs=to,
+            msg=message
+        )

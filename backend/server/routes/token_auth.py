@@ -4,14 +4,14 @@ from ..jwt import generate_token
 from ..utils import signature_check
 
 
-auth: Blueprint = Blueprint(
+api_auth: Blueprint = Blueprint(
     name='api_auth',
     import_name=__name__,
 )
 
 
 @signature_check
-@auth.route('/token', methods=['POST'])
+@api_auth.route('/token', methods=['POST'])
 def get_token() -> dict | tuple:
     data: dict | None = request.get_json()
     token: str

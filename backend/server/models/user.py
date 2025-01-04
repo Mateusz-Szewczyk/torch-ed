@@ -2,6 +2,7 @@ from typing import Optional
 from sqlalchemy import (
     Integer,
     String,
+    Boolean,
 )
 from sqlalchemy.orm import (
     Mapped,
@@ -20,6 +21,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     role: Mapped[str] = mapped_column(String, nullable=False, default='user')    
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     @staticmethod
     def get_user(session: scoped_session, user_name: str) -> Optional['User'] | None:

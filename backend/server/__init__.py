@@ -42,10 +42,10 @@ def create_app(testing: bool = False) -> Flask:
         Base.metadata.create_all(bind=conn)
         
 
-    from .routes.token_auth import auth as api_auth
-    from .routes.user_auth import auth as user_auth
-    app.register_blueprint(api_auth, url_prefix='/api/auth')
-    app.register_blueprint(user_auth, url_prefix='/api/auth')
+    from .routes.token_auth import api_auth as api_auth
+    from .routes.user_auth import user_auth 
+    app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
+    app.register_blueprint(user_auth, url_prefix='/api/v1/auth')
     
     @app.teardown_appcontext
     def remove_session(exception=None) -> None:
