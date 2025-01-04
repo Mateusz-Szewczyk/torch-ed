@@ -1,7 +1,12 @@
 import os
+from itsdangerous import URLSafeSerializer, BadSignature, SignatureExpired
 from authlib.jose import jwt, JWTClaims
 from authlib.jose.errors import ExpiredTokenError, InvalidTokenError
 from datetime import datetime, timedelta, timezone
+ 
+ 
+KEY: str | None = os.getenv('SECRET_KEY')
+SALT: str | None = os.getenv('SALT')
 
 
 def generate_token(user_id: int, role: str, iss: str, path: str) -> bytes:
@@ -40,7 +45,32 @@ def decode_token(token: bytes, path: str) -> JWTClaims | None:
     else:
         return data
     return None
+
+
+
+def generate_confirmation_token(email: str) -> str | None:
+    if not SALT or not KEY:
+        return None
+
+    serializer: URLSafeSerializer = URLSafeSerializer(KEY)
+    token: str = serializer.dumps(email, salt=SALT)
+    return token
     
+    
+def confirm_token(token: str, expiration: int = 60*60*10) -> bool | str:
+    if not SALT or not KEY:
+        raise ValueError('SALT and KEY must be defined!')
+    serializer: URLSafeSerializer = URLSafeSerializer(KEY)
+    try:
+        email: str = serializer.loads(
+            token,
+            salt=SALT,
+            max_age=expiration
+        )
+    except (BadSignature, SignatureExpired):
+        return False
+    return email
+        
 
 # test
 if __name__ == '__main__':

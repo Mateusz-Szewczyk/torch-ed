@@ -1,20 +1,20 @@
-import json
 import os
 from dotenv import load_dotenv
-from flask import request, redirect, Blueprint, make_response, jsonify
+from flask import request, redirect, Blueprint, make_response, jsonify, url_for
 from werkzeug.security import generate_password_hash
 from werkzeug import Response
-from ..utils import FRONTEND, COOKIE_AUTH, data_check
+from ..utils import FRONTEND, COOKIE_AUTH, data_check, send_email, signature_check
 from ..jwt import generate_token, decode_token
 from ..models import User
 from .. import session, blacklist
+from ..jwt import generate_confirmation_token, confirm_token
 
 
 load_dotenv()
-auth: Blueprint = Blueprint('auth', __name__)
+user_auth: Blueprint = Blueprint('auth', __name__)
 
 
-@auth.route('/login', methods=['POST'])
+@user_auth.route('/login', methods=['POST'])
 def login() -> Response | tuple:
     '''
     Creates token and puts it int cookie.
@@ -55,7 +55,7 @@ def login() -> Response | tuple:
     return response
     
 
-@auth.route('/register', methods=['POST'])
+@user_auth.route('/register', methods=['POST'])
 def register() -> Response | str | tuple:
     '''
     Add new user to database.
@@ -67,14 +67,17 @@ def register() -> Response | str | tuple:
          - email,
          - age (optional)
          - role (optional, by default 'user')
-    After verifycation user is created.
+    After verifycation user is created and verifiying email is send.
     
     Returns
     Tuple with information about what happend and html status code
+
     '''
     data: dict | tuple
     user: User
-  
+    message: str
+    link: str
+    token: str | None
     
     data = data_check(request, 'register')
     if isinstance(data, tuple):
@@ -84,20 +87,36 @@ def register() -> Response | str | tuple:
         return jsonify({'error': 'Misconfiguration "user_auth | def register"'})
     if not (password := data.get('password')) or not isinstance(password, str):
         return jsonify({'error': 'Please provide password'})
+    if not isinstance(email := data.get('email'), str):
+        return jsonify({'error': 'Invalid email'})
     user = User(
         user_name=data.get('user_name'),
         password=generate_password_hash(password, salt_length=24),
-        email=data.get('email'),
+        email=email,
         role=data.get('role'),
         age=data.get('age')
     )    
+    
+    if not (token := generate_confirmation_token(email)):
+        return jsonify(
+            {'error': 'Something went wrong while generating confirmation email, please try again later'}
+            ), 500
+
     session.add(user)
     session.commit()
+    link = url_for('auth.confirm_email', token=token, _external=True)
+
+    message = f"Subject: Confirm your email\n\n"\
+        f"Click this link to confirm your email {link}."\
+        f"If you didn't registered for our website please ignore this email."\
+        f"\nBest regards,\nTorchED team"
+    
+    send_email(email, message)
 
     return jsonify({'Success': 'User has been successfuly created!'}), 201
     
 
-@auth.route('/logout', methods=['GET'])
+@user_auth.route('/logout', methods=['GET'])
 def logout() -> Response | tuple:
     '''
     Deletes cookie and puts token from it to blacklist.
@@ -146,3 +165,38 @@ def logout() -> Response | tuple:
 
 
 # TODO: Delete user
+@user_auth.route('/confirm_email/<string:token>', methods=['GET'])
+def confirm_email(token: str) -> tuple | Response:
+    '''
+    Confirms user account with token within url.
+    
+    Returns: 
+        - tuple containing json response and html status code
+        - response that redirects to FRONTEND (contained in utils.py)
+    '''
+    email: str | bool
+    try:
+        # for some reason url with token contain additional .if
+        # so we have to remove it with [:-3]
+        if not (email := confirm_token(token[:-3])):
+            return jsonify({'error': 'Invalid token'}), 400
+    except ValueError:
+        return jsonify({'error': 'Server misconfigured: Missing salt or key'}), 500
+    user: User | None = session.query(User).filter_by(email=email).first()
+    if not user:
+        return jsonify({'error': 'Account you tring to confirm doesn\'t exist'}), 400
+    
+    if user.confirmed:
+        return jsonify({'error': 'Account already confirmed'}), 400
+    
+    user.confirmed = True
+    session.add(user)
+    session.commit()
+    return redirect(FRONTEND)
+
+
+@signature_check
+@user_auth.route('/unregister/<int:iden>')
+def delete_user(iden: int) -> Response:
+    ... 
+    return redirect(FRONTEND)
