@@ -111,7 +111,7 @@ export default function HomePage() {
                          transform hover:-translate-y-2 hover:shadow-2xl
                          transition-all duration-500 animate-fadeInUp"
             >
-              <CardHeader className="flex items-center space-x-3">
+              <CardHeader className="flex items-center space-x-3 animate-textGradient">
                 <sec.icon className="h-8 w-8 text-[hsl(var(--primary))]" />
                 <CardTitle className="text-xl">{sec.title}</CardTitle>
               </CardHeader>

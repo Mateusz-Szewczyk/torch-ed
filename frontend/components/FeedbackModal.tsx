@@ -13,7 +13,7 @@ type FeedbackModalProps = {
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
-  const [state, handleSubmit] = useForm("xvgojkjv"); // Zastąp "xvgojkjv" swoim rzeczywistym Formspree form ID
+  const [state, handleSubmit] = useForm("xvgojkjv");
   const [selectedSource, setSelectedSource] = useState<string>('');
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [showImprovementSuggestions, setShowImprovementSuggestions] = useState<boolean>(false);
