@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.models import Base, ORMFile, Deck, Flashcard, Conversation, Message  # Dodano Conversation i Message
 from src.routers import files, decks, flashcards, query, chats, exams  # Dodano 'chats'
 from src.database import engine
+from src.auth import get_current_user  # Dodano get_current_user
 
 # Inicjalizacja logowania
 logging.basicConfig(

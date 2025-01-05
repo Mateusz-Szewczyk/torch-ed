@@ -394,7 +394,7 @@ class ChatAgent:
             return "Przepraszam, wystąpił problem z przetworzeniem Twojego zapytania."
 
         # If conversation just started
-        if len(conversation_history) < 2:  # np. < 2 oznacza, że jeszcze nie ma pełnych wymian
+        if (len(conversation_history) < 2) or conversation.title == "New Conversation":  # np. < 2 oznacza, że jeszcze nie ma pełnych wymian
             set_conversation_title_if_needed(conversation, query, self.model)
 
         context = "\n".join(conversation_history) if conversation_history else ""

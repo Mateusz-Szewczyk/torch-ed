@@ -1,7 +1,8 @@
 # src/models.py
+from typing import Optional
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session
 from .database import Base
 from datetime import datetime
 
@@ -47,6 +48,7 @@ class Deck(Base):
     __tablename__ = 'decks'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     flashcards = relationship("Flashcard", back_populates="deck", cascade="all, delete-orphan")
@@ -101,3 +103,20 @@ class ExamAnswer(Base):
 
     # Relacja do pytania
     question = relationship("ExamQuestion", back_populates="answers")
+
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id_: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    password: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    role: Mapped[str] = mapped_column(String, nullable=False, default='user')
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    @staticmethod
+    def get_user(session: scoped_session, user_name: str) -> Optional['User'] | None:
+        user: Optional['User'] | None = session.query(User).filter_by(user_name=user_name).first()
+        return user

@@ -54,8 +54,20 @@ export default function HomePage() {
   ];
 
   // Pobieranie planów jako tablicy obiektów
-  const futurePlans: FuturePlan[] = t('future_plans.items', { returnObjects: true }) as FuturePlan[];
+   // Attempt to get an array from i18n
+  const rawFuturePlans = t('future_plans.items', { returnObjects: true });
 
+  // Safely cast or convert it to an array
+  let futurePlans: FuturePlan[] = [];
+  if (Array.isArray(rawFuturePlans)) {
+    futurePlans = rawFuturePlans as FuturePlan[];
+  } else {
+    console.warn('future_plans.items is not an array:', rawFuturePlans);
+    // Or provide a fallback if needed
+    // futurePlans = [];
+  }
+
+  console.log('Future Plans:', futurePlans);
   // Debugging: Sprawdzenie zawartości futurePlans
   console.log('Future Plans:', futurePlans);
 

@@ -266,7 +266,7 @@ class RAGTool(BaseTool):
         max_generated_passages: int = 5
     ) -> str:
         """
-        Generates a factual and concise answer using internal and external knowledge.
+        Generates a factual and concise answer using external knowledge.
         """
         logger.info(f"Starting RAG for query: '{query}'")
         external_passages = []
@@ -284,7 +284,7 @@ class RAGTool(BaseTool):
 
     def finalize_answer(self, query: str, passages: List[str]) -> str:
         """
-        Produces the final factual answer from consolidated passages.
+        Produces the final factual answer from passages.
         """
         system_prompt = (
             "You are an AI tasked with producing concise and factual answers. Use the provided "

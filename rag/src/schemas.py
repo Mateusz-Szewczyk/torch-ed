@@ -67,7 +67,6 @@ class UploadResponse(BaseModel):
     category: Optional[str]
 
 class QueryRequest(BaseModel):
-    user_id: str
     query: str
     conversation_id: int
 
@@ -89,7 +88,7 @@ class ListFilesRequest(BaseModel):
     user_id: str
 
 class ConversationBase(BaseModel):
-    user_id: str
+    user_id: int
     title: Optional[str] = None  # Dodane pole title
 
 class ConversationCreate(ConversationBase):

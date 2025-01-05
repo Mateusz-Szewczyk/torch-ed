@@ -10,7 +10,7 @@ from .models import User
 from . import session
 
 
-FRONTEND: str = 'https://www.google.pl'
+FRONTEND: str = 'http://www.localhost:3000'
 COOKIE_AUTH: str = 'TorchED_AUTH'
 EMAIL: str | None = os.getenv('EMAIL')
 EMAIL_PASSWORD: str | None = os.getenv('EMAIL_PASSWORD')

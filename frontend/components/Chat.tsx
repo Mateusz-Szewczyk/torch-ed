@@ -1,4 +1,3 @@
-// components/Chat.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -24,11 +23,10 @@ type Message = {
 };
 
 interface ChatProps {
-  userId: string;
-  conversationId: number;
+  conversationId: number;  // usuwamy userId
 }
 
-const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
+const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -40,130 +38,106 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
 
-  // Automatycznie przewijaj do ostatniej wiadomości
+  // Autoscroll
   useEffect(() => {
-    if (endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Pobierz wiadomości
+  // Pobieramy wiadomości
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`);
-        if (response.ok) {
-          const data: Message[] = await response.json();
-          const loadedMessages = data.map((msg) => ({
-            ...msg,
-            isNew: false,
-            isError: false,
-          }));
-          setMessages(loadedMessages);
+        const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+          credentials: 'include', // cookie wędruje w obie strony
+        });
+        if (res.ok) {
+          const data: Message[] = await res.json();
+          setMessages(data.map(msg => ({ ...msg, isNew: false, isError: false })));
         } else {
-          console.error('Failed to fetch messages:', response.statusText);
+          console.error('Failed to fetch messages:', res.statusText);
         }
       } catch (err) {
         console.error('Error fetching messages:', err);
       }
     };
-
-    if (conversationId) {
-      fetchMessages();
-    }
-  }, [conversationId, API_BASE_URL]);
+    if (conversationId) fetchMessages();
+  }, [API_BASE_URL, conversationId]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    const currentInput = input.trim();
+    const userInput = input.trim();
     setInput('');
 
-    const userMessage: Message = {
+    // Dodajemy wiadomość usera lokalnie
+    const userMsg: Message = {
       id: Date.now(),
       conversation_id: conversationId,
-      text: currentInput,
+      text: userInput,
       sender: 'user',
       created_at: new Date().toISOString(),
     };
-
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMsg]);
 
     try {
       setIsLoading(true);
       setError('');
 
+      // Zapisujemy wiadomość usera
       await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sender: 'user', text: currentInput }),
+        body: JSON.stringify({ sender: 'user', text: userInput }),
       });
 
+      // Zapytanie do /query (jeśli taką logikę masz, to też bez userId)
       const response = await fetch(`${API_BASE_URL}/query/`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: userId,
           conversation_id: conversationId,
-          query: currentInput,
+          query: userInput,
         }),
       });
-
       if (!response.ok) {
-        const errorData = await response.json();
-        const errorDetail = errorData.detail;
-        if (Array.isArray(errorDetail)) {
-          const msgs = errorDetail.map((err: any) => `${err.loc.join('.')}: ${err.msg}`).join('; ');
-          throw new Error(msgs);
-        } else {
-          throw new Error(
-            errorDetail || t('error_network', { statusText: response.statusText })
-          );
-        }
+        const errData = await response.json();
+        throw new Error(errData.detail || `Error: ${response.statusText}`);
       }
-
       const data = await response.json();
 
-      const botMessage: Message = {
+      // Wiadomość bota
+      const botMsg: Message = {
         id: Date.now() + 1,
         conversation_id: conversationId,
         text: data.answer,
         sender: 'bot',
         created_at: new Date().toISOString(),
-        isNew: false,
       };
 
+      // Zapisanie wiadomości bota
       await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sender: 'bot', text: data.answer }),
       });
 
-      setMessages((prev) => [...prev, botMessage]);
+      setMessages(prev => [...prev, botMsg]);
       setIsTyping(false);
-    } catch (err: unknown) {
-      console.error(t('error_api'), err);
-
-      let errorMessageText = t('error_generic');
-      if (err instanceof Error) {
-        errorMessageText = err.message;
-      } else if (typeof err === 'object' && err !== null) {
-        errorMessageText = JSON.stringify(err);
-      } else if (typeof err === 'string') {
-        errorMessageText = err;
-      }
-
+    } catch (err) {
+      console.error('Error sending message:', err);
+      const errorText = err instanceof Error ? err.message : String(err);
       const errorMessage: Message = {
         id: Date.now() + 2,
         conversation_id: conversationId,
-        text: errorMessageText,
+        text: errorText,
         sender: 'bot',
         created_at: new Date().toISOString(),
-        isNew: false,
         isError: true,
       };
-
-      setMessages((prev) => [...prev, errorMessage]);
-      setError(errorMessageText);
+      setMessages(prev => [...prev, errorMessage]);
+      setError(errorText);
     } finally {
       setIsLoading(false);
     }
@@ -171,19 +145,15 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
-      {/* Sekcja wiadomości z własnym scrollbarem */}
-      <div className="flex-1 overflow-auto w-5/6 mx-auto p-4 pb-32 scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
-        {messages.map((message) => {
-          const alignmentClass =
-            message.sender === 'user'
-              ? 'ml-auto mr-0'
-              : 'mr-auto ml-0';
-
+      {/* Lista wiadomości */}
+      <div className="flex-1 overflow-auto w-5/6 mx-auto p-4 pb-32">
+        {messages.map(msg => {
+          const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
           return (
-            <div key={message.id} className="flex">
+            <div key={msg.id} className="flex">
               <div
-                className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-[80%] break-words ${
-                  message.sender === 'user'
+                className={`inline-block p-3 rounded-lg ${align} max-w-[80%] break-words ${
+                  msg.sender === 'user'
                     ? 'bg-secondary text-secondary-foreground'
                     : 'bg-background text-foreground'
                 }`}
@@ -211,13 +181,13 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
                     },
                   }}
                 >
-                  {message.text}
+                  {msg.text}
                 </ReactMarkdown>
               </div>
             </div>
           );
         })}
-        {(isLoading || isTyping) && (
+        {isLoading && (
           <div className="flex">
             <div className="inline-block p-3 rounded-lg mr-auto max-w-[80%] bg-secondary text-secondary-foreground break-words">
               <BouncingDots />
@@ -227,23 +197,19 @@ const Chat: React.FC<ChatProps> = ({ userId, conversationId }) => {
         <div ref={endRef} />
       </div>
 
-      {/* Pole do wpisywania wiadomości na dole */}
+      {/* Pole tekstowe */}
       <div className="border-t border-border p-4 w-full bg-background">
         <div className="max-w-3xl mx-auto flex space-x-2">
           <Input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !isTyping && handleSend()}
-            placeholder={t('type_message')}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
+            placeholder={t('type_message') || 'Type your message...'}
             className="flex-1"
-            disabled={isLoading || isTyping}
+            disabled={isLoading}
           />
-          <Button
-            onClick={handleSend}
-            disabled={isLoading || !input.trim() || isTyping}
-            variant="primary"
-          >
+          <Button onClick={handleSend} disabled={isLoading || !input.trim()} variant="primary">
             <SendIcon className="h-4 w-4" />
             <span className="sr-only">{t('send')}</span>
           </Button>

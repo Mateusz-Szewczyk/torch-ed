@@ -12,32 +12,52 @@ interface ClientLayoutProps {
 const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
   const [isPanelVisible, setIsPanelVisible] = useState(true);
-  const userId = 'user-123'; // Tutaj wstaw swój właściwy userId, jeśli to konieczne
+
+  // The critical piece: persistent login state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const pathname = usePathname();
 
+  // Check if user is on /chat/..., otherwise reset ID
   useEffect(() => {
-    // Jeśli nie jesteśmy na stronie czatu, zresetuj currentConversationId
     if (!pathname.startsWith('/chat/')) {
       setCurrentConversationId(null);
     }
   }, [pathname]);
 
+  // On mount, check if user is still logged in'''
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const res = await fetch('http://localhost:14440/api/v1/auth/me', {
+          credentials: 'include',
+        });
+        if (res.ok) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (err) {
+        console.error('Error verifying session:', err);
+        setIsAuthenticated(false);
+      }
+    };
+
+    checkSession();
+  }, []);
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <LeftPanel
-        userId={userId}
+        isAuthenticated={isAuthenticated}
+        setIsAuthenticated={setIsAuthenticated}
         isPanelVisible={isPanelVisible}
         setIsPanelVisible={setIsPanelVisible}
         currentConversationId={currentConversationId}
         setCurrentConversationId={setCurrentConversationId}
       />
       <main className="flex-1 overflow-auto">
-        {currentConversationId ? (
-          <Chat userId={userId} conversationId={currentConversationId} />
-        ) : (
-          children
-        )}
+        {currentConversationId ? <Chat conversationId={currentConversationId} /> : children}
       </main>
     </div>
   );

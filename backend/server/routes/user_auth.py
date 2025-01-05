@@ -14,6 +14,27 @@ load_dotenv()
 user_auth: Blueprint = Blueprint('auth', __name__)
 
 
+@user_auth.route('/me', methods=['GET'])
+def me():
+    """
+    Check if user is logged in.
+    :return: JSON with logged_in status
+    """
+    token = request.cookies.get(COOKIE_AUTH)
+    if not token:
+        return jsonify({"logged_in": False}), 401
+
+    token_data = decode_token(token.encode('utf-8'), path=os.getenv('PRP_PATH', ''))
+    if not token_data:
+        return jsonify({"logged_in": False}), 401
+
+    # If decode is successful
+    return jsonify({
+        "logged_in": True,
+        "user_id": token_data["aud"],
+        # or any other info
+    })
+
 @user_auth.route('/login', methods=['POST'])
 def login() -> Response | tuple:
     '''
@@ -49,8 +70,8 @@ def login() -> Response | tuple:
         return jsonify({'error': 'Misconfiguration "user_auth | def login"'}), 500
     token_bytes = generate_token(user_id=user.id_, role=user.role, iss='TorchED_BACKEND_AUTH', path=path)
     token = token_bytes.decode('utf-8')
-    response = make_response(redirect(FRONTEND))
-    response.set_cookie(COOKIE_AUTH, token, max_age=60*60*24, httponly=True, secure=True)
+    response = jsonify({'success': True, 'message': 'Logged in'})
+    response.set_cookie(COOKIE_AUTH, token, max_age=60*60*24, httponly=True, secure=False)
     
     return response
     
@@ -158,7 +179,7 @@ def logout() -> Response | tuple:
         )
         blacklist.expire(token, 60*60*24)
     print(blacklist.ttl(token))
-    response: Response = make_response(redirect(FRONTEND))
+    response = jsonify({'success': True, 'message': 'Successfully logged out'})
     response.set_cookie(COOKIE_AUTH, max_age=0)
     
     return response

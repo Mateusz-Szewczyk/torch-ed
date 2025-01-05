@@ -1,19 +1,20 @@
 # src/routers/query.py
 
-from fastapi import APIRouter, HTTPException, Depends, Form
-from ..schemas import QueryResponse, QueryRequest
-from ..dependencies import get_db
-
-from ..agent.agent import agent_response
-
 import os
 import logging
 import asyncio
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+
+from ..schemas import QueryResponse, QueryRequest
+from ..dependencies import get_db
+from ..auth import get_current_user  # Dekodowanie tokenu, zwraca obiekt User
+from ..models import User
+from ..agent.agent import agent_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Configure logging format (optional but recommended)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s %(message)s',
@@ -22,7 +23,6 @@ logging.basicConfig(
     ]
 )
 
-# Load API keys
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 if not ANTHROPIC_API_KEY:
     raise ValueError("Anthropic API key is not set. Please set the ANTHROPIC_API_KEY environment variable.")
@@ -36,15 +36,23 @@ if not OPENAI_API_KEY:
     raise ValueError("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.")
 
 @router.post("/", response_model=QueryResponse)
-async def query_knowledge(request: QueryRequest):
-    user_id = request.user_id
+async def query_knowledge(
+    request: QueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Odpowiada na zapytania użytkownika, opierając się na agent_response().
+    user_id pobieramy z current_user, a conversation_id z requestu.
+    """
+    user_id = str(current_user.id_)  # Dekodowane z tokenu
     query = request.query
     conversation_id = request.conversation_id
 
     logger.info(f"Received query from user_id: {user_id} - '{query}'")
 
     try:
-        # Generate response
+        # Wykonujemy agent_response w wątku synchronicznym
         answer = await asyncio.to_thread(
             agent_response,
             user_id,
@@ -55,11 +63,13 @@ async def query_knowledge(request: QueryRequest):
             tavily_api_key=TAVILY_API_KEY
         )
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
+
         return QueryResponse(
-            user_id=user_id,
+            user_id=user_id,        # Zwracamy w odpowiedzi
             query=query,
             answer=answer
         )
+
     except Exception as e:
         logger.error(f"Error generating answer for user_id: {user_id}, query '{query}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error generating answer: {str(e)}")
