@@ -74,6 +74,7 @@ class Exam(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    user_id = Column(String, index=True, nullable=False)
 
     # Relacja do pytań w egzaminie
     questions = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")

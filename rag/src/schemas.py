@@ -43,7 +43,8 @@ class DeckCreate(DeckBase):
 
 class DeckRead(DeckBase):
     id: int
-    name: str
+    # user_id is read-only, so we can show it in DeckRead
+    user_id: str
     flashcards: List[FlashcardRead]
 
     class Config:

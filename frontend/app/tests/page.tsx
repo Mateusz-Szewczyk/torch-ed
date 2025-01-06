@@ -1,40 +1,39 @@
 // src/components/ExamsPage.tsx
+
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { EditExamDialog } from '@/components/EditExamDialog'
-import axios from 'axios'
 import { Button } from "@/components/ui/button"
 import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CustomTooltip } from '@/components/CustomTooltip'
 import { StudyExam } from '@/components/StudyExam'
-import { useTranslation } from 'react-i18next';
-import React from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+} from '@/components/ui/collapsible'
 
 interface ExamAnswer {
-  id: number;
-  text: string;
-  is_correct: boolean;
+  id: number
+  text: string
+  is_correct: boolean
 }
 
 interface ExamQuestion {
-  id: number;
-  text: string;
-  answers: ExamAnswer[];
+  id: number
+  text: string
+  answers: ExamAnswer[]
 }
 
 interface Exam {
-  id: number;
-  name: string;
-  description?: string;
-  created_at: string;
-  questions: ExamQuestion[];
+  id: number
+  name: string
+  description?: string
+  created_at: string
+  questions: ExamQuestion[]
 }
 
 export default function ExamsPage() {
@@ -43,133 +42,179 @@ export default function ExamsPage() {
   const [error, setError] = useState<string | null>(null)
   const [studyingExam, setStudyingExam] = useState<Exam | null>(null)
 
-  const { t } = useTranslation();
+  const { t } = useTranslation()
+  /**
+   * Podstawowy URL endpointu – ale tym razem używamy "API_BASE_URL" bez /exams/ na końcu,
+   * żeby łatwo doklejać ścieżki w fetchach.
+   */
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api'
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/exams/'
-
+  /**
+   * Pobiera listę egzaminów z backendu, przesyłając ciasteczka (credentials: 'include')
+   */
   const fetchExams = async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.get<Exam[]>(API_BASE_URL)
-      setExams(response.data)
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        setError(err.response.data.detail || t('error_fetch_exams'))
-      } else {
-        setError(t('error_unexpected_fetch_exams'))
+      const res = await fetch(`${API_BASE_URL}/exams/`, {
+        method: 'GET',
+        credentials: 'include', // Ciasteczka w obie strony
+      })
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || t('error_fetch_exams') || 'Error fetching exams.')
       }
-      console.error(err)
+      const data: Exam[] = await res.json()
+      setExams(data)
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError(t('error_unexpected_fetch_exams') || 'Unexpected error fetching exams.')
+      }
+      console.error('Error fetching exams:', err)
     } finally {
       setLoading(false)
     }
   }
 
+  // Pierwsze pobranie egzaminów
   useEffect(() => {
     fetchExams()
   }, [])
 
+  /**
+   * Zapisywanie egzaminu (tworzenie lub aktualizacja).
+   */
   const handleSave = async (updatedExam: Exam) => {
     try {
-      if (updatedExam.id === 0) {
-        // Create new exam
-        const createExamResponse = await axios.post<Exam>(API_BASE_URL, {
-          name: updatedExam.name,
-          description: updatedExam.description,
-          questions: updatedExam.questions.map(q => ({
-            text: q.text,
-            answers: q.answers.map(a => ({
-              text: a.text,
-              is_correct: a.is_correct
-            }))
-          })),
-        });
-        const newExam = createExamResponse.data;
-        setExams(prevExams => [...prevExams, newExam]);
-      } else {
-        // Update existing exam
-        const updateExamResponse = await axios.put<Exam>(`${API_BASE_URL}${updatedExam.id}/`, {
-          name: updatedExam.name,
-          description: updatedExam.description,
-          questions: updatedExam.questions.map(q => {
-            if (q.id) {
+      // Struktura danych, która będzie wysłana w body
+      const bodyData = {
+        name: updatedExam.name,
+        description: updatedExam.description,
+        questions: updatedExam.questions.map(q => {
+          const answers = q.answers.map(a => {
+            if (a.id) {
               return {
-                id: q.id,
-                text: q.text,
-                answers: q.answers.map(a => {
-                  if (a.id) {
-                    return {
-                      id: a.id,
-                      text: a.text,
-                      is_correct: a.is_correct
-                    };
-                  } else {
-                    return {
-                      text: a.text,
-                      is_correct: a.is_correct
-                    };
-                  }
-                })
-              };
+                id: a.id,
+                text: a.text,
+                is_correct: a.is_correct,
+              }
             } else {
               return {
-                text: q.text,
-                answers: q.answers.map(a => ({
-                  text: a.text,
-                  is_correct: a.is_correct
-                }))
-              };
+                text: a.text,
+                is_correct: a.is_correct,
+              }
             }
-          }),
-        });
-        const updatedExamFromServer = updateExamResponse.data;
-        setExams(prevExams => prevExams.map(exam =>
-          exam.id === updatedExamFromServer.id ? updatedExamFromServer : exam
-        ));
+          })
+          if (q.id) {
+            return {
+              id: q.id,
+              text: q.text,
+              answers,
+            }
+          } else {
+            return {
+              text: q.text,
+              answers,
+            }
+          }
+        }),
       }
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error) && error.response) {
-        console.error("Error saving exam:", error.response.data);
-        setError(`${t('error_saving_exam')}: ${JSON.stringify(error.response.data)}`);
+
+      if (updatedExam.id === 0) {
+        // Tworzymy nowy egzamin
+        const res = await fetch(`${API_BASE_URL}/exams/`, {
+          method: 'POST',
+          credentials: 'include', // kluczowe
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bodyData),
+        })
+        if (!res.ok) {
+          const errorData = await res.json()
+          throw new Error(errorData.detail || t('error_saving_exam') || 'Error saving exam.')
+        }
+        const newExam: Exam = await res.json()
+        setExams(prev => [...prev, newExam])
       } else {
-        console.error("Error saving exam:", error);
-        setError(t('error_unexpected_saving_exam'));
+        // Aktualizacja istniejącego egzaminu
+        const res = await fetch(`${API_BASE_URL}/exams/${updatedExam.id}/`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bodyData),
+        })
+        if (!res.ok) {
+          const errorData = await res.json()
+          throw new Error(errorData.detail || t('error_saving_exam') || 'Error saving exam.')
+        }
+        const updatedExamFromServer: Exam = await res.json()
+        setExams(prev =>
+          prev.map(exam => (exam.id === updatedExamFromServer.id ? updatedExamFromServer : exam))
+        )
+      }
+    } catch (err: unknown) {
+      console.error('Error saving exam:', err)
+      if (err instanceof Error) {
+        setError(`${t('error_saving_exam')}: ${err.message}`)
+      } else {
+        setError(t('error_unexpected_saving_exam') || 'Unexpected error saving exam.')
       }
     }
-  };
+  }
 
+  /**
+   * Usuwanie egzaminu
+   */
   const handleDelete = async (examId: number) => {
     try {
-      await axios.delete(`${API_BASE_URL}${examId}/`)
-      setExams(exams.filter(exam => exam.id !== examId))
+      const res = await fetch(`${API_BASE_URL}/exams/${examId}/`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.detail || t('error_deleting_exam') || 'Error deleting exam.')
+      }
+      setExams(prev => prev.filter(exam => exam.id !== examId))
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        console.error("Error deleting exam:", err.response.data);
-        setError(`${t('error_deleting_exam')}: ${err.response.data.detail || err.response.statusText}`);
+      if (err instanceof Error) {
+        console.error('Error deleting exam:', err)
+        setError(`${t('error_deleting_exam')}: ${err.message}`)
       } else {
         console.error(err)
-        setError(t('error_unexpected_deleting_exam'))
+        setError(t('error_unexpected_deleting_exam') || 'Unexpected error deleting exam.')
       }
     }
   }
 
+  // Przejście do trybu "nauki egzaminu"
   const handleStudy = (exam: Exam) => {
-    setStudyingExam(exam);
+    setStudyingExam(exam)
   }
 
+  // Wyjście z trybu nauki
   const handleExitStudy = () => {
-    setStudyingExam(null);
+    setStudyingExam(null)
   }
 
+  // Ekran ładowania
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <Loader2 className="mr-2 h-16 w-16 animate-spin text-primary" />
-        <span className="text-xl font-semibold text-primary">{t('loading_exams')}</span>
+        <span className="text-xl font-semibold text-primary">
+          {t('loading_exams')}
+        </span>
       </div>
     )
   }
 
+  // Ekran błędu
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen p-4 bg-background">
@@ -181,7 +226,10 @@ export default function ExamsPage() {
             <p className="text-destructive">{error}</p>
           </CardContent>
           <CardFooter>
-            <Button onClick={fetchExams} className="bg-primary hover:bg-primary-dark text-primary-foreground">
+            <Button
+              onClick={fetchExams}
+              className="bg-primary hover:bg-primary-dark text-primary-foreground"
+            >
               {t('try_again')}
             </Button>
           </CardFooter>
@@ -190,15 +238,19 @@ export default function ExamsPage() {
     )
   }
 
+  // Ekran nauki konkretnego egzaminu
   if (studyingExam) {
-    return <StudyExam exam={studyingExam} onExit={handleExitStudy} />;
+    return <StudyExam exam={studyingExam} onExit={handleExitStudy} />
   }
 
+  // Główny ekran egzaminów
   return (
     <div className="p-4 max-w-full mx-auto bg-background">
       {/* Header Section */}
       <div className="text-center mb-6 flex flex-col items-center justify-center space-y-2">
-        <h1 className="text-5xl font-extrabold text-primary">{t('tests')}</h1>
+        <h1 className="text-5xl font-extrabold text-primary">
+          {t('tests')}
+        </h1>
         <div className="flex items-center space-x-2">
           <CustomTooltip className="" content={t('tests_tooltip')}>
             <Button variant="ghost" size="icon" className="text-secondary hover:text-primary">
@@ -209,13 +261,17 @@ export default function ExamsPage() {
         </div>
       </div>
 
-      {/* No Exams Available */}
+      {/* Brak egzaminów */}
       {exams.length === 0 ? (
         <div className="flex flex-col items-center justify-center">
           <Card className="w-full max-w-2xl bg-card shadow-lg">
             <CardHeader>
-              <CardTitle className="text-3xl font-bold text-primary">{t('welcome_tests')}</CardTitle>
-              <CardDescription className="text-xl text-secondary">{t('get_started_create_test')}</CardDescription>
+              <CardTitle className="text-3xl font-bold text-primary">
+                {t('welcome_tests')}
+              </CardTitle>
+              <CardDescription className="text-xl text-secondary">
+                {t('get_started_create_test')}
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center space-y-6 py-12">
               <BookOpen className="h-40 w-40 text-muted-foreground" />
@@ -239,7 +295,7 @@ export default function ExamsPage() {
         </div>
       ) : (
         <>
-          {/* Create New Exam Button */}
+          {/* Przycisk tworzenia egzaminu */}
           <div className="mb-8 flex justify-end">
             <EditExamDialog
               exam={{ id: 0, name: '', description: '', questions: [] }}
@@ -253,7 +309,7 @@ export default function ExamsPage() {
             />
           </div>
 
-          {/* Exams Grid */}
+          {/* Grid egzaminów */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {exams.map(exam => (
               <Card key={exam.id} className="flex flex-col min-h-[350px] bg-card shadow-lg">

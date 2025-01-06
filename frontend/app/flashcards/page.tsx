@@ -1,183 +1,251 @@
-'use client'
+'use client';
 
-import { useState, useEffect, FormEvent } from 'react'
-import React from 'react'
-import axios from 'axios'
-import { EditDeckDialog } from '@/components/EditDeckDialog'
-import { Button } from "@/components/ui/button"
-import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2, Upload } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { useState, useEffect, FormEvent } from 'react';
+import React from 'react';
+import { EditDeckDialog } from '@/components/EditDeckDialog';
+import { Button } from "@/components/ui/button";
+import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2, Upload } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+} from '@/components/ui/collapsible';
 
-import { StudyDeck } from '@/components/StudyDeck'
-import { CustomTooltip } from '@/components/CustomTooltip'
-import { useTranslation } from 'react-i18next'
+import { StudyDeck } from '@/components/StudyDeck';
+import { CustomTooltip } from '@/components/CustomTooltip';
+import { useTranslation } from 'react-i18next';
 
 interface Flashcard {
-  id?: number
-  question: string
-  answer: string
-  media_url?: string
+  id?: number;
+  question: string;
+  answer: string;
+  media_url?: string;
 }
 
 interface Deck {
-  id: number
-  name: string
-  description?: string
-  flashcards: Flashcard[]
+  id: number;
+  name: string;
+  description?: string;
+  flashcards: Flashcard[];
 }
 
 export default function FlashcardsPage() {
-  const [decks, setDecks] = useState<Deck[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
-  const [error, setError] = useState<string | null>(null)
-  const [studyingDeck, setStudyingDeck] = useState<Deck | null>(null)
-  const [importing, setImporting] = useState<boolean>(false)
-  const [importError, setImportError] = useState<string | null>(null)
-  const [importSuccess, setImportSuccess] = useState<string | null>(null)
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [studyingDeck, setStudyingDeck] = useState<Deck | null>(null);
+  const [importing, setImporting] = useState<boolean>(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/'
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/';
 
+  // Funkcja do pobierania decków
   const fetchDecks = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const response = await axios.get<Deck[]>(API_BASE_URL)
-      setDecks(response.data)
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        setError(err.response.data.detail || t('error_fetch_decks'))
-      } else {
-        setError(t('error_unexpected_fetch_decks'))
+      const response = await fetch(API_BASE_URL, {
+        method: 'GET',
+        credentials: 'include', // Przesyłanie ciasteczek
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Nie udało się pobrać decków.');
       }
-      console.error(err)
+
+      const data: Deck[] = await response.json();
+      setDecks(data);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || t('error_fetch_decks'));
+      } else {
+        setError(t('error_unexpected_fetch_decks'));
+      }
+      console.error(err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchDecks()
-  }, [])
+    fetchDecks();
+  }, []);
 
+  // Funkcja do zapisywania (tworzenia/aktualizacji) decka
   const handleSave = async (updatedDeck: Deck) => {
     try {
       if (updatedDeck.id === 0) {
-        // Tworzenie nowego decku
-        const createDeckResponse = await axios.post<Deck>(API_BASE_URL, {
-          name: updatedDeck.name,
-          description: updatedDeck.description,
-          flashcards: updatedDeck.flashcards.map(fc => ({
-            question: fc.question,
-            answer: fc.answer,
-            media_url: fc.media_url,
-          })),
-        })
-        const newDeck = createDeckResponse.data
-        setDecks(prevDecks => [...prevDecks, newDeck])
-      } else {
-        // Aktualizacja istniejącego decku
-        const updateDeckResponse = await axios.put<Deck>(`${API_BASE_URL}${updatedDeck.id}/`, {
-          name: updatedDeck.name,
-          description: updatedDeck.description,
-          flashcards: updatedDeck.flashcards.map(fc => {
-            if (fc.id) {
-              return {
-                id: fc.id,
-                question: fc.question,
-                answer: fc.answer,
-                media_url: fc.media_url,
-              }
-            } else {
-              return {
-                question: fc.question,
-                answer: fc.answer,
-                media_url: fc.media_url,
-              }
-            }
+        // Tworzenie nowego decka
+        const response = await fetch(API_BASE_URL, {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: updatedDeck.name,
+            description: updatedDeck.description,
+            flashcards: updatedDeck.flashcards.map(fc => ({
+              question: fc.question,
+              answer: fc.answer,
+              media_url: fc.media_url,
+            })),
           }),
-        })
-        const updatedDeckFromServer = updateDeckResponse.data
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Nie udało się stworzyć decka.');
+        }
+
+        const newDeck: Deck = await response.json();
+        setDecks(prevDecks => [...prevDecks, newDeck]);
+      } else {
+        // Aktualizacja istniejącego decka
+        const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: updatedDeck.name,
+            description: updatedDeck.description,
+            flashcards: updatedDeck.flashcards.map(fc => {
+              if (fc.id) {
+                return {
+                  id: fc.id,
+                  question: fc.question,
+                  answer: fc.answer,
+                  media_url: fc.media_url,
+                };
+              } else {
+                return {
+                  question: fc.question,
+                  answer: fc.answer,
+                  media_url: fc.media_url,
+                };
+              }
+            }),
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Nie udało się zaktualizować decka.');
+        }
+
+        const updatedDeckFromServer: Deck = await response.json();
         setDecks(prevDecks =>
           prevDecks.map(deck =>
             deck.id === updatedDeckFromServer.id ? updatedDeckFromServer : deck
           )
-        )
+        );
       }
     } catch (error: unknown) {
-      if (axios.isAxiosError(error) && error.response) {
-        console.error('Error saving deck:', error.response.data)
-        setError(`${t('error_saving_deck')}: ${JSON.stringify(error.response.data)}`)
+      if (error instanceof Error) {
+        console.error('Error saving deck:', error.message);
+        setError(`${t('error_saving_deck')}: ${error.message}`);
       } else {
-        console.error('Error saving deck:', error)
-        setError(t('error_unexpected_saving_deck'))
+        console.error('Error saving deck:', error);
+        setError(t('error_unexpected_saving_deck'));
       }
     }
-  }
+  };
 
+  // Funkcja do usuwania decka
   const handleDelete = async (deckId: number) => {
     try {
-      await axios.delete(`${API_BASE_URL}${deckId}/`)
-      setDecks(decks.filter(deck => deck.id !== deckId))
+      const response = await fetch(`${API_BASE_URL}${deckId}/`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Nie udało się usunąć decka.');
+      }
+
+      setDecks(decks.filter(deck => deck.id !== deckId));
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        console.error('Error deleting deck:', err.response.data)
-        setError(`${t('error_deleting_deck')}: ${err.response.data.detail || err.response.statusText}`)
+      if (err instanceof Error) {
+        console.error('Error deleting deck:', err.message);
+        setError(`${t('error_deleting_deck')}: ${err.message}`);
       } else {
-        console.error(err)
-        setError(t('error_unexpected_deleting_deck'))
+        console.error('Error deleting deck:', err);
+        setError(t('error_unexpected_deleting_deck'));
       }
     }
-  }
+  };
 
+  // Funkcja do studiowania decka
   const handleStudy = (deck: Deck) => {
-    setStudyingDeck(deck)
-  }
+    setStudyingDeck(deck);
+  };
 
   const handleExitStudy = () => {
-    setStudyingDeck(null)
-  }
+    setStudyingDeck(null);
+  };
 
+  // Funkcja do importu fiszek
   const handleImport = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const file = formData.get('file') as File
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const file = formData.get('file') as File;
+
+    const deck_name = formData.get('deck_name') as string;
+    const deck_description = formData.get('deck_description') as string;
 
     if (!file) {
-      setImportError(t('no_file_selected'))
-      return
+      setImportError(t('no_file_selected'));
+      return;
     }
 
-    setImporting(true)
-    setImportError(null)
-    setImportSuccess(null)
+    setImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
 
     try {
-      await axios.post(`${API_BASE_URL}import/`, formData, {
+      const response = await fetch(`${API_BASE_URL}import/`, {
+        method: 'POST',
+        credentials: 'include',
         headers: {
-          'Content-Type': 'multipart/form-data',
+          // 'Content-Type': 'multipart/form-data' // Nie ustawiaj ręcznie, fetch ustawi automatycznie
         },
-      })
-      setImportSuccess(t('import_success'))
-      fetchDecks()
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response) {
-        setImportError(err.response.data.detail || t('import_failed'))
-      } else {
-        setImportError(t('import_failed'))
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Nie udało się zaimportować fiszek.');
       }
-      console.error(err)
+
+      const successData = await response.json();
+      setImportSuccess(t('import_success'));
+      fetchDecks();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setImportError(err.message || t('import_failed'));
+      } else {
+        setImportError(t('import_failed'));
+      }
+      console.error(err);
     } finally {
-      setImporting(false)
+      setImporting(false);
     }
-  }
+  };
 
   if (loading) {
     return (
@@ -185,7 +253,7 @@ export default function FlashcardsPage() {
         <Loader2 className="mr-2 h-16 w-16 animate-spin" />
         <span className="text-xl font-semibold">{t('loading_decks')}</span>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -203,11 +271,11 @@ export default function FlashcardsPage() {
           </CardFooter>
         </Card>
       </div>
-    )
+    );
   }
 
   if (studyingDeck) {
-    return <StudyDeck deck={studyingDeck} onExit={handleExitStudy} />
+    return <StudyDeck deck={studyingDeck} onExit={handleExitStudy} />;
   }
 
   return (
@@ -293,8 +361,8 @@ export default function FlashcardsPage() {
                         type="button"
                         variant="ghost"
                         onClick={() => {
-                          setImportError(null)
-                          setImportSuccess(null)
+                          setImportError(null);
+                          setImportSuccess(null);
                         }}
                       >
                         {t('cancel')}
@@ -380,8 +448,8 @@ export default function FlashcardsPage() {
                       type="button"
                       variant="ghost"
                       onClick={() => {
-                        setImportError(null)
-                        setImportSuccess(null)
+                        setImportError(null);
+                        setImportSuccess(null);
                       }}
                     >
                       {t('cancel')}
@@ -476,5 +544,5 @@ export default function FlashcardsPage() {
         </>
       )}
     </div>
-  )
+  );
 }

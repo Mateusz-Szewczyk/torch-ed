@@ -342,8 +342,9 @@ class ChatAgent:
 
         self.flashcard_tool = FlashcardGenerator(
             model_type="OpenAI",
-            model_name="gpt-4o-mini-2024-07-18",  # Przykładowa nazwa modelu OpenAI
-            api_key=openai_api_key
+            model_name="gpt-4o-mini-2024-07-18",
+            api_key=openai_api_key,
+            user_id=self.user_id
         )
         self.rag_tool = RAGTool(
             model_name="gpt-4o-mini-2024-07-18",
@@ -360,9 +361,10 @@ class ChatAgent:
             include_raw_content=True,
             include_images=True
         )
-        self.exam_tool = ExamGenerator(  # Inicjalizacja ExamGenerator
+        self.exam_tool = ExamGenerator(
             model_name="gpt-4o-mini-2024-07-18",
-            openai_api_key=openai_api_key
+            openai_api_key=openai_api_key,
+            user_id=self.user_id
         )
         self.direct_answer_tool = DirectAnswer(model=self.model)
 

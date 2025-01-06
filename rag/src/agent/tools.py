@@ -59,8 +59,9 @@ class FlashcardGenerator(BaseTool):
 
     _model: Any = PrivateAttr()
     _output_parser: JsonOutputParser = PrivateAttr()
+    user_id: str = Field(default=None)
 
-    def __init__(self, model_type: str = "Anthropic", model_name: str = "claude-3-haiku-20240307", api_key: str = None):
+    def __init__(self, user_id: str, model_type: str = "Anthropic", model_name: str = "claude-3-haiku-20240307", api_key: str = None):
         """
         Inicjalizacja FlashcardGenerator z wybranym modelem AI.
 
@@ -70,6 +71,7 @@ class FlashcardGenerator(BaseTool):
             api_key (str): Klucz API dla wybranego modelu.
         """
         super().__init__()
+        self.user_id = user_id
         if model_type == "Anthropic":
             if not api_key:
                 raise ValueError("Anthropic API key is not set.")
@@ -163,7 +165,7 @@ Zwróć fiszki w dokładnie takim formacie JSON:
             db: Session = SessionLocal()
             try:
                 # Tworzenie nowego zestawu
-                new_deck = Deck(name=topic, description=description)
+                new_deck = Deck(user_id=self.user_id, name=topic, description=description)
                 db.add(new_deck)
                 db.commit()
                 db.refresh(new_deck)
@@ -321,9 +323,11 @@ class ExamGenerator(BaseTool):
 
     _model: ChatOpenAI = PrivateAttr()
     _output_parser: JsonOutputParser = PrivateAttr()
+    user_id: str = Field(default=None)
 
-    def __init__(self, model_name: str = "gpt-4o-mini-2024-07-18", openai_api_key: str = None):
+    def __init__(self, user_id: str, model_name: str = "gpt-4o-mini-2024-07-18", openai_api_key: str = None):
         super().__init__()
+        self.user_id = user_id
         if not openai_api_key:
             raise ValueError("OpenAI API key is not set.")
         self._model = ChatOpenAI(model_name=model_name, openai_api_key=openai_api_key)
@@ -455,7 +459,7 @@ Provide the exam in the exact following JSON format with an example:
             db: Session = SessionLocal()
             try:
                 # Tworzenie nowego egzaminu
-                new_exam = Exam(name=topic, description=exam_description)
+                new_exam = Exam(user_id=self.user_id, name=topic, description=exam_description)
                 db.add(new_exam)
                 db.commit()
                 db.refresh(new_exam)
