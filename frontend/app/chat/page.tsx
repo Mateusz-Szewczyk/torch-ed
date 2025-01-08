@@ -1,4 +1,4 @@
-// app/chat/[conversation_id]/page.tsx
+// app/chat/page.tsx
 
 'use client';
 
