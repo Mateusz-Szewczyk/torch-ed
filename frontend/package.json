@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -H 0.0.0.0 -p 3000",
     "lint": "next lint",
-    "export": "next export"
+    "export": "next build && next export"
   },
   "dependencies": {
     "@formspree/react": "^2.5.1",
