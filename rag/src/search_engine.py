@@ -162,7 +162,7 @@ def retrieve(query: str):
     logging.basicConfig(level=logging.INFO)
     embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
-    user_id = "user-123"
+    user_id = "2"
     results = search_and_rerank(query, user_id, n_results=3)
     print("Wyniki:")
     for r in results:
@@ -201,4 +201,7 @@ def upload():
 
 if __name__ == "__main__":
     # upload()
-    retrieve("Kim jest amos tversky?")
+    retrieve("Overconsumption refers to the excessive use of resources or goods beyond what is sustainable or necessary. "
+             "It often leads to environmental degradation, depletion of natural resouces, and negative social impacts. "
+             "This term is commonly discussed in the context of consumer behavior, where individuals or societies consume more than they need, "
+             "contributing to issues such as waste, pollution, and climate change.")

@@ -83,7 +83,6 @@ class DeleteKnowledgeRequest(BaseModel):
 class DeleteKnowledgeResponse(BaseModel):
     message: str
     deleted_from_vector_store: bool
-    deleted_from_graph: bool
 
 class ListFilesRequest(BaseModel):
     user_id: str

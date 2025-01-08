@@ -3,7 +3,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import axios, { AxiosError } from 'axios';
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -33,18 +32,16 @@ interface DeleteKnowledgeResponse {
 }
 
 interface DeleteKnowledgeRequest {
-  user_id: string;
   file_name: string;
 }
 
 interface ManageFileDialogProps {
-  userId: string;
   isPanelVisible: boolean;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
 
-const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisible }) => {
+const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ isPanelVisible }) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileRead[]>([]);
   const [fileDescription, setFileDescription] = useState<string>('');
   const [category, setCategory] = useState<string>('');
@@ -62,33 +59,58 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
 
   const { t } = useTranslation();
 
+  /**
+   * Funkcja do pobierania listy załadowanych plików z backendu.
+   * Używa natywnego fetch z credentials: 'include' aby przesyłać ciasteczka autoryzacyjne.
+   */
   const fetchUploadedFiles = useCallback(async () => {
     try {
-      const response = await axios.post<UploadedFileRead[]>(
-        `${API_BASE_URL}/files/list/`,
-        { user_id: userId },
-        { headers: { 'Content-Type': 'application/json' } }
-      );
-      setUploadedFiles(response.data);
-    } catch (err) {
-      const error = err as AxiosError;
-      console.error('Fetch files error:', error);
-      setError(t('error_fetch_files'));
-    }
-  }, [userId, t]);
+      const response = await fetch(`${API_BASE_URL}/files/list/`, {
+        method: 'GET', // Zmieniono z POST na GET
+        credentials: 'include', // Przesyłanie ciasteczek
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || t('error_fetch_files') || 'Error fetching files.');
+      }
+
+      const data: UploadedFileRead[] = await response.json();
+      setUploadedFiles(data);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(t('error_unexpected_fetch_files') || 'Unexpected error fetching files.');
+      }
+      console.error('Fetch files error:', err);
+    }
+  }, [t]);
+
+  /**
+   * Efekt uruchamiający pobranie plików, gdy panel jest widoczny.
+   */
   useEffect(() => {
     if (isPanelVisible) {
       fetchUploadedFiles();
     }
   }, [isPanelVisible, fetchUploadedFiles]);
 
+  /**
+   * Funkcja do wywołania okna wyboru pliku.
+   */
   const handleChooseFile = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
 
+  /**
+   * Funkcja obsługująca wybór pliku przez użytkownika.
+   */
   const handleFileSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
@@ -98,6 +120,9 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     }
   };
 
+  /**
+   * Funkcja obsługująca przesyłanie pliku.
+   */
   const handleUploadFile = async () => {
     if (!selectedFile) {
       setError(t('error_no_file_selected'));
@@ -115,7 +140,7 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     }
 
     const formData = new FormData();
-    formData.append('user_id', userId);
+    // Usunięto dodawanie 'user_id' do formData
     formData.append('file_description', fileDescription);
     formData.append('category', category);
     if (startPage !== undefined) {
@@ -131,17 +156,24 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
     setSuccessMessage(null);
 
     try {
-      const response = await axios.post<UploadResponse>(`${API_BASE_URL}/files/upload/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const response = await fetch(`${API_BASE_URL}/files/upload/`, {
+        method: 'POST',
+        credentials: 'include', // Przesyłanie ciasteczek
+        body: formData, // 'Content-Type' jest ustawiany automatycznie przez fetch dla multipart/form-data
       });
 
-      console.log('Upload response:', response.data);
-
-      if (!response.data.uploaded_files) {
-        throw new Error(t('error_upload_file'));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || t('error_upload_file') || 'Error uploading file.');
       }
 
-      const newUploadedFiles: UploadedFileRead[] = response.data.uploaded_files.map(f => ({
+      const data: UploadResponse = await response.json();
+
+      if (!data.uploaded_files) {
+        throw new Error(t('error_upload_file') || 'Error uploading file.');
+      }
+
+      const newUploadedFiles: UploadedFileRead[] = data.uploaded_files.map(f => ({
         id: f.id,
         name: f.name,
         description: f.description,
@@ -150,72 +182,94 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
 
       setUploadedFiles(prev => [...prev, ...newUploadedFiles]);
 
-      // Reset after successful upload
+      // Reset po udanym przesłaniu pliku
       setFileDescription('');
       setCategory('');
       setStartPage(undefined);
       setEndPage(undefined);
       setSelectedFile(null);
       setSuccessMessage(t('settings_saved_successfully'));
-    } catch (err) {
-      const error = err as AxiosError;
-      console.error('Upload error:', error);
-      setError(error.response?.data?.detail || t('error_upload_file'));
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(`${t('error_upload_file')}: ${err.message}`);
+      } else {
+        setError(t('error_unexpected_upload_file') || 'Unexpected error uploading file.');
+      }
+      console.error('Upload error:', err);
     } finally {
       setUploading(false);
     }
   };
 
+  /**
+   * Funkcja obsługująca usuwanie pliku.
+   */
   const handleDelete = async (id: number, fileName: string) => {
     setDeletingFileId(id);
     setDeleteError(null);
     setSuccessMessage(null);
 
     try {
-      const deleteRequest: DeleteKnowledgeRequest = { user_id: userId, file_name: fileName };
+      const deleteRequest: DeleteKnowledgeRequest = { file_name: fileName };
+      // Używamy fetch zamiast axios do wysyłania DELETE z body
 
-      const response = await axios.delete<DeleteKnowledgeResponse>(`${API_BASE_URL}/files/delete-file/`, {
-        data: deleteRequest,
-        headers: { 'Content-Type': 'application/json' }
+      const response = await fetch(`${API_BASE_URL}/files/delete-file/`, {
+        method: 'DELETE',
+        credentials: 'include', // Przesyłanie ciasteczek
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(deleteRequest),
       });
 
-      console.log('Delete response:', response.data);
-
-      if (!response.data.message) {
-        throw new Error(t('error_delete_file'));
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || t('error_delete_file') || 'Error deleting file.');
       }
 
-      if (response.data.deleted_from_vector_store || response.data.deleted_from_graph) {
+      const data: DeleteKnowledgeResponse = await response.json();
+
+      if (!data.message) {
+        throw new Error(t('error_delete_file') || 'Error deleting file.');
+      }
+
+      if (data.deleted_from_vector_store || data.deleted_from_graph) {
         setUploadedFiles(prev => prev.filter(file => file.id !== id));
         setSuccessMessage(t('file_deleted_successfully'));
       } else {
-        throw new Error(t('error_deletion_failed'));
+        throw new Error(t('error_deletion_failed') || 'Error deleting file.');
       }
-    } catch (err) {
-      const error = err as AxiosError;
-      console.error('Delete file error:', error);
-      setDeleteError(error.response?.data?.detail || t('error_delete_file'));
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setDeleteError(`${t('error_delete_file')}: ${err.message}`);
+      } else {
+        setDeleteError(t('error_unexpected_delete_file') || 'Unexpected error deleting file.');
+      }
+      console.error('Delete file error:', err);
     } finally {
       setDeletingFileId(null);
     }
   };
 
+  /**
+   * Warunek sprawdzający, czy można zapisać plik (wszystkie wymagane pola są wypełnione i nie trwa już przesyłanie).
+   */
   const canSaveFile = selectedFile && fileDescription.trim() && category.trim() && !uploading;
 
-  return (
+return (
     <Dialog>
-      <DialogTrigger asChild>
+      <DialogTrigger>
         <Button variant="outline" className="w-full justify-start bg-background text-foreground border-border hover:bg-secondary/80 transition-colors">
           <Upload className="h-4 w-4" />
           {isPanelVisible && <span className="ml-2">{t('manage_files')}</span>}
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-background border border-border text-foreground p-6 rounded-lg max-w-3xl w-full">
+      <DialogContent className="bg-background border border-border text-foreground p-4 sm:p-6 rounded-lg w-[90vw] max-w-3xl sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl flex flex-col h-[90vh] max-h-[800px]">
         <DialogHeader>
           <DialogTitle className="text-foreground text-lg font-bold">{t('manage_uploaded_files')}</DialogTitle>
         </DialogHeader>
 
-        {/* Success / Error Messages */}
+        {/* Messages */}
         {successMessage && (
           <p className="mt-2 text-sm text-green-600">
             {successMessage}
@@ -228,36 +282,36 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
         )}
 
         {/* File Upload Form */}
-        <div className="space-y-4 mt-6 bg-secondary/10 p-4 rounded-md">
+        <div className="space-y-4 mt-4 bg-secondary/10 p-4 rounded-md flex-none">
           <p className="text-sm text-muted-foreground">{t('upload_instructions')}</p>
 
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">{t('file_description')}</label>
-            <input
-              type="text"
-              value={fileDescription}
-              onChange={(e) => setFileDescription(e.target.value)}
-              className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
-              placeholder={t('enter_file_description')}
-            />
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* File Description */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1">{t('file_description')}</label>
+              <input
+                type="text"
+                value={fileDescription}
+                onChange={(e) => setFileDescription(e.target.value)}
+                className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
+                placeholder={t('enter_file_description')}
+              />
+            </div>
 
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
-            <input
-              type="text"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
-              placeholder={t('enter_category')}
-            />
-          </div>
+            {/* Category */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1">{t('category')}</label>
+              <input
+                type="text"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
+                placeholder={t('enter_category')}
+              />
+            </div>
 
-          {/* Pages */}
-          <div className="flex space-x-4">
-            <div className="flex-1">
+            {/* Start Page */}
+            <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('start_page')} ({t('optional')})</label>
               <input
                 type="number"
@@ -267,7 +321,9 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
                 className="block w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground p-2"
               />
             </div>
-            <div className="flex-1">
+
+            {/* End Page */}
+            <div>
               <label className="block text-sm font-medium text-foreground mb-1">{t('end_page')} ({t('optional')})</label>
               <input
                 type="number"
@@ -279,8 +335,8 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
             </div>
           </div>
 
-          {/* File selection */}
-          <div className="flex items-center space-x-2 mt-4">
+          {/* File Selection and Upload */}
+          <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2 mt-4">
             <input
               type="file"
               className="hidden"
@@ -289,7 +345,7 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
             />
             <Button
               variant="outline"
-              className="flex items-center justify-center space-x-2 bg-background hover:bg-secondary/80 transition-colors"
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-background hover:bg-secondary/80 transition-colors"
               onClick={handleChooseFile}
               disabled={uploading}
             >
@@ -298,8 +354,8 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
             </Button>
 
             <Button
-              variant="primary"
-              className="flex items-center justify-center space-x-2 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              variant="default"
+              className="w-full sm:w-auto flex items-center justify-center space-x-2 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
               onClick={handleUploadFile}
               disabled={!canSaveFile}
             >
@@ -325,9 +381,9 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ userId, isPanelVisi
         </div>
 
         {/* Uploaded Files List */}
-        <div className="mt-8">
+        <div className="mt-6 flex-1 flex flex-col min-h-0">
           <h3 className="text-lg font-semibold mb-2">{t('uploaded_files')}</h3>
-          <ScrollArea className="h-64 w-full pr-4 bg-background border border-border rounded-md">
+          <ScrollArea className="flex-1 w-full pr-4 bg-background border border-border rounded-md">
             {uploadedFiles.length === 0 ? (
               <p className="text-center text-muted-foreground m-4">{t('no_files_uploaded_yet')}</p>
             ) : (

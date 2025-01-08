@@ -1,11 +1,10 @@
 # routers/files.py
 
-from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile
-from gitdb.fun import chunk_size
+from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile, Request
 from sqlalchemy.orm import Session
 from typing import List
 
-from ..models import ORMFile
+from ..models import ORMFile, User
 from ..schemas import (
     UploadResponse,
     UploadedFileRead,
@@ -14,8 +13,9 @@ from ..schemas import (
     ListFilesRequest
 )
 from ..dependencies import get_db
+from ..auth import get_current_user  # <-- AUTORYZACJA
 from ..vector_store import delete_file_from_vector_store, create_vector_store
-from ..graph_store import delete_knowledge_from_graph, create_graph_entries, create_entity_relationships
+from ..graph_store import delete_knowledge_from_graph
 from ..file_processor.pdf_processor import PDFProcessor
 from ..file_processor.documents_processor import DocumentProcessor
 from ..metadata_extraction import MetadataExtractor
@@ -43,21 +43,22 @@ except Exception as e:
 
 @router.post("/upload/", response_model=UploadResponse)
 async def upload_file(
-        user_id: str = Form(..., description="Unique identifier for the user."),
-        file_description: str = Form(None, description="Description of the uploaded file."),
-        category: str = Form(None, description="Category of the document."),
-        start_page: int = Form(None, description="Starting page number for PDF processing."),
-        end_page: int = Form(None, description="Ending page number for PDF processing."),
-        file: UploadFile = File(..., description="The file to be uploaded and processed."),
-        db: Session = Depends(get_db)
+    file_description: str = Form(None, description="Description of the uploaded file."),
+    category: str = Form(None, description="Category of the document."),
+    start_page: int = Form(None, description="Starting page number for PDF processing."),
+    end_page: int = Form(None, description="Ending page number for PDF processing."),
+    file: UploadFile = File(..., description="The file to be uploaded and processed."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # <-- używamy autoryzacji
 ):
     """
     Upload Endpoint
     ---------------
     Handles file uploads, processes the content, generates embeddings, extracts metadata,
     updates the knowledge graph, stores relevant information in the database,
-    and records file metadata.
+    and records file metadata. The user_id is derived from the logged-in user's token.
     """
+    user_id = str(current_user.id_)
     logger.info(f"Received upload request from user_id: {user_id} for file: {file.filename}")
 
     # Walidacja i ustawienie domyślnych wartości dla start_page i end_page
@@ -84,7 +85,7 @@ async def upload_file(
             raise HTTPException(status_code=500, detail=f"Failed to create upload directory: {str(e)}")
 
     # Upewnienie się, że nazwa pliku jest bezpieczna
-    safe_filename = Path(file.filename).name  # Wyciąga nazwę pliku bez komponentów ścieżki
+    safe_filename = Path(file.filename).name  # wyciąga nazwę pliku bez komponentów ścieżki
 
     # Sprawdzenie, czy plik o tej samej nazwie już istnieje dla użytkownika
     existing_file = db.query(ORMFile).filter(ORMFile.user_id == user_id, ORMFile.name == safe_filename).first()
@@ -135,30 +136,17 @@ async def upload_file(
             logger.warning(f"Number of embeddings ({len(embeddings)}) does not match number of chunks ({len(chunks)})")
         logger.info(f"Generated embeddings for chunks from file: {safe_filename}")
 
-        # Inicjalizacja MetadataExtractor
-        metadata_extractor = MetadataExtractor()
-
-        # Ekstrakcja metadanych przy użyciu LLM
-        extracted_metadatas = await asyncio.gather(*[
-            asyncio.to_thread(metadata_extractor.extract_metadata, chunk, category) for chunk in chunks
-        ])
         logger.info(f"Extracted metadata for chunks from file: {safe_filename}")
 
-        # Tworzenie vector store (po ekstrakcji metadanych)
+        # Tworzenie vector store
         await asyncio.to_thread(
             create_vector_store,
             chunks,
             user_id,
             file_description,
             category,
-            extracted_metadatas
         )
         logger.info(f"Vector store updated for user_id: {user_id}")
-
-        # Tworzenie wpisów w grafie wiedzy (nodes i relationships)
-        await asyncio.to_thread(create_graph_entries, chunks, extracted_metadatas, user_id, safe_filename)
-        await asyncio.to_thread(create_entity_relationships, extracted_metadatas, user_id)
-        logger.info(f"Knowledge graph updated for user_id: {user_id}")
 
         # Zapisanie informacji o pliku do bazy danych
         new_file = ORMFile(
@@ -203,25 +191,25 @@ async def upload_file(
                 logger.error(f"Failed to delete uploaded file: {safe_filename}. Error: {e}")
                 # Opcjonalnie, możesz powiadomić użytkownika o błędzie usuwania pliku
 
-@router.post("/list/", response_model=List[UploadedFileRead])
-async def list_uploaded_files(request: ListFilesRequest, db: Session = Depends(get_db)):
+@router.get("/list/", response_model=List[UploadedFileRead])
+async def list_uploaded_files(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    List Uploaded Files for a User
-    ------------------------------
-    Retrieves all uploaded files for a specific user based on user_id in the body.
-
-    Args:
-        request (ListFilesRequest): The request body containing user_id.
-
-    Returns:
-        List[UploadedFileRead]: List of uploaded files with descriptions.
+    List Uploaded Files for the Currently Logged-in User
     """
-    user_id = request.user_id
+    user_id = str(current_user.id_)
     logger.info(f"Fetching uploaded files for user_id: {user_id}")
     try:
         files = db.query(ORMFile).filter(ORMFile.user_id == user_id).all()
         uploaded_files = [
-            UploadedFileRead(id=file.id, name=file.name, description=file.description, category=file.category)
+            UploadedFileRead(
+                id=file.id,
+                name=file.name,
+                description=file.description,
+                category=file.category
+            )
             for file in files
         ]
         return uploaded_files
@@ -230,18 +218,16 @@ async def list_uploaded_files(request: ListFilesRequest, db: Session = Depends(g
         raise HTTPException(status_code=500, detail=f"Error fetching uploaded files: {str(e)}")
 
 @router.delete("/delete-file/", response_model=DeleteKnowledgeResponse)
-async def delete_knowledge(request: DeleteKnowledgeRequest, db: Session = Depends(get_db)):
+async def delete_knowledge(
+    request: DeleteKnowledgeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Delete knowledge from both ChromaDB and Neo4j based on user_id and file_name,
-    and remove the corresponding file record from the database.
-
-    Args:
-        request (DeleteKnowledgeRequest): The request body containing user_id and file_name.
-
-    Returns:
-        DeleteKnowledgeResponse: Confirmation of deletion operations.
+    Delete knowledge from both ChromaDB and Neo4j based on the currently logged-in user's ID,
+    plus the file_name in request. Removes the corresponding file record from the database.
     """
-    user_id = request.user_id
+    user_id = str(current_user.id_)  # Pobieramy user_id z autoryzacji
     file_name = request.file_name
 
     # Delete from ChromaDB

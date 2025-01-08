@@ -4,18 +4,17 @@ import { Inter } from 'next/font/google';
 import { cookies } from 'next/headers';
 
 import RootClient from '@/components/RootClient';
-
 const inter = Inter({ subsets: ['latin'] });
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = cookies();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
   const languageCookie = cookieStore.get('language');
   const languageFromCookies = languageCookie?.value || 'en';
 
   return (
     <html lang={languageFromCookies}>
       <body className={inter.className}>
-        <RootClient initialLanguage={languageFromCookies}>{children}</RootClient>
+        <RootClient>{children}</RootClient>
       </body>
     </html>
   );

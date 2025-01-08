@@ -1,17 +1,20 @@
+// src/components/Chat.tsx
+
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback} from 'react';
 import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from 'react-i18next';
 import BouncingDots from './BouncingDots';
 
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
+// Definicje typów
 type Message = {
   id: number;
   conversation_id: number;
@@ -24,6 +27,13 @@ type Message = {
 
 interface ChatProps {
   conversationId: number;  // usuwamy userId
+}
+
+// Definicja interfejsu dla komponentu code
+interface CustomCodeProps {
+  inline?: boolean;
+  className?: string;
+  children?: React.ReactNode;
 }
 
 const Chat: React.FC<ChatProps> = ({ conversationId }) => {
@@ -44,24 +54,25 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   }, [messages, isTyping]);
 
   // Pobieramy wiadomości
-  useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-          credentials: 'include', // cookie wędruje w obie strony
-        });
-        if (res.ok) {
-          const data: Message[] = await res.json();
-          setMessages(data.map(msg => ({ ...msg, isNew: false, isError: false })));
-        } else {
-          console.error('Failed to fetch messages:', res.statusText);
-        }
-      } catch (err) {
-        console.error('Error fetching messages:', err);
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+        credentials: 'include', // cookie wędruje w obie strony
+      });
+      if (res.ok) {
+        const data: Message[] = await res.json();
+        setMessages(data.map(msg => ({ ...msg, isNew: false, isError: false })));
+      } else {
+        console.error('Failed to fetch messages:', res.statusText);
       }
-    };
-    if (conversationId) fetchMessages();
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    }
   }, [API_BASE_URL, conversationId]);
+
+  useEffect(() => {
+    if (conversationId) fetchMessages();
+  }, [fetchMessages, conversationId]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -83,14 +94,19 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       setError('');
 
       // Zapisujemy wiadomość usera
-      await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+      const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
-        credentials: 'include',
+        credentials: 'include', // kluczowe
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sender: 'user', text: userInput }),
       });
 
-      // Zapytanie do /query (jeśli taką logikę masz, to też bez userId)
+      if (!userMessageResponse.ok) {
+        const errData = await userMessageResponse.json();
+        throw new Error(errData.detail || 'Error sending user message.');
+      }
+
+      // Zapytanie do /query
       const response = await fetch(`${API_BASE_URL}/query/`, {
         method: 'POST',
         credentials: 'include',
@@ -100,10 +116,12 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
           query: userInput,
         }),
       });
+
       if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.detail || `Error: ${response.statusText}`);
       }
+
       const data = await response.json();
 
       // Wiadomość bota
@@ -116,12 +134,17 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       };
 
       // Zapisanie wiadomości bota
-      await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+      const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sender: 'bot', text: data.answer }),
       });
+
+      if (!botMessageResponse.ok) {
+        const errData = await botMessageResponse.json();
+        throw new Error(errData.detail || 'Error sending bot message.');
+      }
 
       setMessages(prev => [...prev, botMsg]);
       setIsTyping(false);
@@ -143,6 +166,29 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     }
   };
 
+  // Definicja komponentów dla ReactMarkdown
+  const components: Components = {
+    code({ inline, className, children, ...props }: CustomCodeProps) {
+      const match = /language-(\w+)/.exec(className || '');
+      const {...rest } = props; // Usunięcie `ref` z props
+
+      return !inline && match ? (
+        <SyntaxHighlighter
+          {...rest}
+          style={oneDark}
+          language={match[1]}
+          PreTag="div"
+        >
+          {String(children).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      ) : (
+        <code className={className} {...rest}>
+          {children}
+        </code>
+      );
+    },
+  };
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
       {/* Lista wiadomości */}
@@ -161,25 +207,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   className="prose dark:prose-invert break-words max-w-none"
-                  components={{
-                    code({ node, inline, className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      return !inline && match ? (
-                        <SyntaxHighlighter
-                          {...props}
-                          style={oneDark}
-                          language={match[1]}
-                          PreTag="div"
-                        >
-                          {String(children).replace(/\n$/, '')}
-                        </SyntaxHighlighter>
-                      ) : (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      );
-                    },
-                  }}
+                  components={components}
                 >
                   {msg.text}
                 </ReactMarkdown>
@@ -209,7 +237,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
             className="flex-1"
             disabled={isLoading}
           />
-          <Button onClick={handleSend} disabled={isLoading || !input.trim()} variant="primary">
+          <Button onClick={handleSend} disabled={isLoading || !input.trim()} variant="default">
             <SendIcon className="h-4 w-4" />
             <span className="sr-only">{t('send')}</span>
           </Button>

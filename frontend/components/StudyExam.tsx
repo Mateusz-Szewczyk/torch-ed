@@ -33,8 +33,7 @@ interface StudyExamProps {
 export function StudyExam({ exam, onExit }: StudyExamProps) {
   const { t } = useTranslation()
 
-  // Przykładowe userId i conversationId dla czatu
-  const userId = 'user-123'
+
   const [conversationId] = useState<number>(999)
 
   // Czy panel czatu jest otwarty
@@ -163,7 +162,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             {/* Start Exam Button */}
             <Button
               onClick={startExam}
-              variant="primary"
+              variant="default"
               className="w-full flex items-center justify-center space-x-2"
             >
               <span>{t('start_exam')}</span>
@@ -257,7 +256,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                       variant={
                         isSelected
                           ? isCorrect
-                            ? 'success'
+                            ? 'default'
                             : 'destructive'
                           : 'outline'
                       }
@@ -331,7 +330,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
         {/* Panel czatu po prawej stronie */}
         {isChatOpen && (
           <div className="w-[40rem] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
-            <Chat userId={userId} conversationId={conversationId} />
+            <Chat conversationId={conversationId} />
           </div>
         )}
       </div>

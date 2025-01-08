@@ -25,7 +25,7 @@ interface DialogTriggerProps {
   className?: string;
 }
 
-export const DialogTrigger = ({ children, className }: DialogTriggerProps) => {
+export const DialogTrigger = ({ children}: DialogTriggerProps) => {
   return (
     <RadixDialog.Trigger asChild>
       {children}
@@ -143,7 +143,7 @@ interface DialogCloseProps {
   className?: string;
 }
 
-export const DialogClose = ({ children, className }: DialogCloseProps) => {
+export const DialogClose = ({ children}: DialogCloseProps) => {
   return (
     <RadixDialog.Close asChild>
       {children}

@@ -1,11 +1,14 @@
+// src/components/StudyDeck.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, RotateCcw, XCircle, MessageCircle } from 'lucide-react';
+import { ArrowLeft, RotateCcw, MessageCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Chat from '@/components/Chat'; // <--- importujemy chat
+import Image from 'next/image'; // <--- importujemy Image z next/image
 
 interface Flashcard {
   id?: number;
@@ -35,8 +38,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   // Stan do sterowania chatem
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  // Przykładowe userId i conversationId do czatu (możesz dopasować do logiki)
-  const userId = 'user-123';
+  // Przykładowe conversationId do czatu (możesz dopasować do logiki)
   const conversationId = deck.id;
   // Możesz też użyć np. deck.id + 1000 czy innej konwencji, by każda talia miała osobny conversationId.
 
@@ -163,10 +165,13 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
                 <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
                   <p className="text-xl font-semibold text-center">{visibleCard?.question}</p>
                   {visibleCard?.media_url && (
-                    <img
+                    <Image
                       src={visibleCard.media_url}
                       alt="Flashcard Media"
                       className="mt-4 max-w-full h-auto rounded shadow"
+                      width={500} // Dodaj odpowiednie wartości szerokości i wysokości
+                      height={300}
+                      objectFit="contain"
                     />
                   )}
                 </div>
@@ -177,10 +182,13 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
                 <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
                   <p className="text-xl font-semibold text-center">{visibleCard?.answer}</p>
                   {visibleCard?.media_url && (
-                    <img
+                    <Image
                       src={visibleCard.media_url}
                       alt="Flashcard Media"
                       className="mt-4 max-w-full h-auto rounded shadow"
+                      width={500} // Dodaj odpowiednie wartości szerokości i wysokości
+                      height={300}
+                      objectFit="contain"
                     />
                   )}
                 </div>
@@ -219,7 +227,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       {/* Panel czatu z prawej strony */}
       {isChatOpen && (
         <div className="w-[40rem] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
-          <Chat userId={userId} conversationId={conversationId} />
+          <Chat conversationId={conversationId} />
         </div>
       )}
     </div>

@@ -1,12 +1,19 @@
+// app/flashcards/page.tsx
+
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
-import React from 'react';
+import React, { useState, useEffect, useCallback, FormEvent, MouseEvent } from 'react';
+import * as Dialog from '@radix-ui/react-dialog'; // Poprawny import Radix Dialog
 import { EditDeckDialog } from '@/components/EditDeckDialog';
 import { Button } from "@/components/ui/button";
 import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import {
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '@/components/ui/dialog'; // Upewnij się, że te komponenty są z Radix lub odpowiedniej biblioteki
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,19 +24,7 @@ import { StudyDeck } from '@/components/StudyDeck';
 import { CustomTooltip } from '@/components/CustomTooltip';
 import { useTranslation } from 'react-i18next';
 
-interface Flashcard {
-  id?: number;
-  question: string;
-  answer: string;
-  media_url?: string;
-}
-
-interface Deck {
-  id: number;
-  name: string;
-  description?: string;
-  flashcards: Flashcard[];
-}
+import { Deck,} from '@/types'; // Import typów z centralnego pliku
 
 export default function FlashcardsPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -39,13 +34,16 @@ export default function FlashcardsPage() {
   const [importing, setImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [openCollapsibles, setOpenCollapsibles] = useState<{ [key: number]: boolean }>({});
 
   const { t } = useTranslation();
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/';
 
-  // Funkcja do pobierania decków
-  const fetchDecks = async () => {
+  /**
+   * Funkcja do pobierania decków
+   */
+  const fetchDecks = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -74,15 +72,27 @@ export default function FlashcardsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE_URL, t]);
 
   useEffect(() => {
     fetchDecks();
-  }, []);
+  }, [fetchDecks]);
 
-  // Funkcja do zapisywania (tworzenia/aktualizacji) decka
+  /**
+   * Funkcja do zapisywania (tworzenia/aktualizacji) decka
+   */
   const handleSave = async (updatedDeck: Deck) => {
     try {
+      const bodyData = {
+        name: updatedDeck.name,
+        description: updatedDeck.description,
+        flashcards: updatedDeck.flashcards.map(fc => ({
+          question: fc.question,
+          answer: fc.answer,
+          media_url: fc.media_url,
+        })),
+      };
+
       if (updatedDeck.id === 0) {
         // Tworzenie nowego decka
         const response = await fetch(API_BASE_URL, {
@@ -91,15 +101,7 @@ export default function FlashcardsPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            name: updatedDeck.name,
-            description: updatedDeck.description,
-            flashcards: updatedDeck.flashcards.map(fc => ({
-              question: fc.question,
-              answer: fc.answer,
-              media_url: fc.media_url,
-            })),
-          }),
+          body: JSON.stringify(bodyData),
         });
 
         if (!response.ok) {
@@ -120,22 +122,12 @@ export default function FlashcardsPage() {
           body: JSON.stringify({
             name: updatedDeck.name,
             description: updatedDeck.description,
-            flashcards: updatedDeck.flashcards.map(fc => {
-              if (fc.id) {
-                return {
-                  id: fc.id,
-                  question: fc.question,
-                  answer: fc.answer,
-                  media_url: fc.media_url,
-                };
-              } else {
-                return {
-                  question: fc.question,
-                  answer: fc.answer,
-                  media_url: fc.media_url,
-                };
-              }
-            }),
+            flashcards: updatedDeck.flashcards.map(fc => ({
+              id: fc.id, // id jest teraz wymagane
+              question: fc.question,
+              answer: fc.answer,
+              media_url: fc.media_url,
+            })),
           }),
         });
 
@@ -151,18 +143,22 @@ export default function FlashcardsPage() {
           )
         );
       }
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        console.error('Error saving deck:', error.message);
-        setError(`${t('error_saving_deck')}: ${error.message}`);
+
+      // Zamknięcie Collapsible po zapisaniu
+      setOpenCollapsibles(prev => ({ ...prev, [updatedDeck.id]: false }));
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(`${t('error_saving_deck')}: ${err.message}`);
       } else {
-        console.error('Error saving deck:', error);
         setError(t('error_unexpected_saving_deck'));
       }
+      console.error('Error saving deck:', err);
     }
   };
 
-  // Funkcja do usuwania decka
+  /**
+   * Funkcja do usuwania decka
+   */
   const handleDelete = async (deckId: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}${deckId}/`, {
@@ -178,35 +174,41 @@ export default function FlashcardsPage() {
         throw new Error(errorData.detail || 'Nie udało się usunąć decka.');
       }
 
-      setDecks(decks.filter(deck => deck.id !== deckId));
+      setDecks(prev => prev.filter(deck => deck.id !== deckId));
+
+      // Zamknięcie Collapsible po usunięciu
+      setOpenCollapsibles(prev => ({ ...prev, [deckId]: false }));
     } catch (err: unknown) {
       if (err instanceof Error) {
-        console.error('Error deleting deck:', err.message);
         setError(`${t('error_deleting_deck')}: ${err.message}`);
       } else {
-        console.error('Error deleting deck:', err);
         setError(t('error_unexpected_deleting_deck'));
       }
+      console.error('Error deleting deck:', err);
     }
   };
 
-  // Funkcja do studiowania decka
+  /**
+   * Funkcja do studiowania decka
+   */
   const handleStudy = (deck: Deck) => {
     setStudyingDeck(deck);
   };
 
+  /**
+   * Funkcja do wyjścia z trybu nauki
+   */
   const handleExitStudy = () => {
     setStudyingDeck(null);
   };
 
-  // Funkcja do importu fiszek
+  /**
+   * Funkcja do importu fiszek
+   */
   const handleImport = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const file = formData.get('file') as File;
-
-    const deck_name = formData.get('deck_name') as string;
-    const deck_description = formData.get('deck_description') as string;
 
     if (!file) {
       setImportError(t('no_file_selected'));
@@ -221,9 +223,6 @@ export default function FlashcardsPage() {
       const response = await fetch(`${API_BASE_URL}import/`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          // 'Content-Type': 'multipart/form-data' // Nie ustawiaj ręcznie, fetch ustawi automatycznie
-        },
         body: formData,
       });
 
@@ -232,7 +231,6 @@ export default function FlashcardsPage() {
         throw new Error(errorData.detail || 'Nie udało się zaimportować fiszek.');
       }
 
-      const successData = await response.json();
       setImportSuccess(t('import_success'));
       fetchDecks();
     } catch (err: unknown) {
@@ -245,6 +243,16 @@ export default function FlashcardsPage() {
     } finally {
       setImporting(false);
     }
+  };
+
+  /**
+   * Funkcja do togglowania Collapsible dla konkretnego decka
+   */
+  const toggleCollapsible = (deckId: number) => {
+    setOpenCollapsibles(prev => ({
+      ...prev,
+      [deckId]: !prev[deckId]
+    }));
   };
 
   if (loading) {
@@ -280,6 +288,7 @@ export default function FlashcardsPage() {
 
   return (
     <div className="p-4 max-w-full mx-auto">
+      {/* Header section */}
       <div className="text-center mb-6 flex flex-col items-center justify-center space-y-2">
         <h1 className="text-5xl font-extrabold text-primary">{t('flashcards')}</h1>
         <div className="flex items-center space-x-2">
@@ -293,6 +302,7 @@ export default function FlashcardsPage() {
       </div>
 
       {decks.length === 0 ? (
+        // Stan pusty
         <div className="flex flex-col items-center justify-center">
           <Card className="w-full max-w-2xl shadow-lg">
             <CardHeader>
@@ -307,14 +317,14 @@ export default function FlashcardsPage() {
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
               {/* Dialog Import Flashcards */}
-              <Dialog>
-                <DialogTrigger asChild>
+              <Dialog.Root>
+                <Dialog.Trigger asChild>
                   <Button className="flex items-center space-x-2 px-6 py-3">
                     <Upload className="h-6 w-6" />
                     <span>{t('import_flashcards')}</span>
                   </Button>
-                </DialogTrigger>
-                <DialogContent>
+                </Dialog.Trigger>
+                <Dialog.Content>
                   {/* Formularz importu */}
                   <form onSubmit={handleImport} className="flex flex-col space-y-4">
                     <DialogHeader className="flex flex-row items-center justify-between">
@@ -373,15 +383,15 @@ export default function FlashcardsPage() {
                       </Button>
                     </DialogFooter>
                   </form>
-                </DialogContent>
-              </Dialog>
+                </Dialog.Content>
+              </Dialog.Root>
 
               {/* Dialog Create New Deck */}
               <EditDeckDialog
                 deck={{ id: 0, name: '', description: '', flashcards: [] }}
                 onSave={handleSave}
                 trigger={
-                  <Button className="flex items-center space-x-2 px-6 py-3">
+                  <Button className="flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-primary-dark text-primary-foreground">
                     <PlusCircle className="h-6 w-6" />
                     <span>{t('create_your_first_deck')}</span>
                   </Button>
@@ -392,16 +402,17 @@ export default function FlashcardsPage() {
         </div>
       ) : (
         <>
+          {/* Sekcja przycisków Import i Create New Deck */}
           <div className="mb-8 flex justify-end space-x-4">
             {/* Dialog Import Flashcards */}
-            <Dialog>
-              <DialogTrigger asChild>
+            <Dialog.Root>
+              <Dialog.Trigger asChild>
                 <Button className="flex items-center space-x-2 px-6 py-3">
                   <Upload className="h-6 w-6" />
                   <span>{t('import_flashcards')}</span>
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
+              </Dialog.Trigger>
+              <Dialog.Content>
                 {/* Formularz importu */}
                 <form onSubmit={handleImport} className="flex flex-col space-y-4">
                   <DialogHeader className="flex flex-row items-center justify-between">
@@ -460,15 +471,15 @@ export default function FlashcardsPage() {
                     </Button>
                   </DialogFooter>
                 </form>
-              </DialogContent>
-            </Dialog>
+              </Dialog.Content>
+            </Dialog.Root>
 
             {/* Dialog Create New Deck */}
             <EditDeckDialog
               deck={{ id: 0, name: '', description: '', flashcards: [] }}
               onSave={handleSave}
               trigger={
-                <Button className="flex items-center space-x-2 px-6 py-3">
+                <Button className="flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-primary-dark text-primary-foreground">
                   <PlusCircle className="h-6 w-6" />
                   <span>{t('create_new_deck')}</span>
                 </Button>
@@ -476,20 +487,29 @@ export default function FlashcardsPage() {
             />
           </div>
 
-          {/* Decks Grid */}
+          {/* Grid Decków */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {decks.map(deck => (
-              <Card key={deck.id} className="flex flex-col min-h-[350px] shadow-lg">
+              <Card key={deck.id} className="flex flex-col min-h-[350px] shadow-lg relative">
                 <CardHeader className="flex flex-col">
                   <div className="flex justify-between items-center space-x-4">
                     <CardTitle className="text-2xl font-bold truncate">{deck.name}</CardTitle>
-                    <Collapsible>
+                    {/* Collapsible Menu for Edit/Delete */}
+                    <Collapsible
+                      open={openCollapsibles[deck.id] || false}
+                      onOpenChange={() => toggleCollapsible(deck.id)}
+                    >
                       <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="p-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="p-1 text-secondary hover:text-primary"
+                          aria-label="Opcje"
+                        >
                           <MoreVertical className="h-5 w-5" />
                         </Button>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50">
+                      <CollapsibleContent className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50 p-2">
                         <div className="flex flex-col">
                           <EditDeckDialog
                             deck={deck}
@@ -498,7 +518,11 @@ export default function FlashcardsPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80"
+                                className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80 text-primary"
+                                onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                                  e.stopPropagation(); // Zapobiega propagacji zdarzenia
+                                  setOpenCollapsibles(prev => ({ ...prev, [deck.id]: false })); // Zamknięcie Collapsible
+                                }}
                               >
                                 <Edit2 className="h-4 w-4 mr-2" />
                                 {t('edit')}
@@ -509,7 +533,10 @@ export default function FlashcardsPage() {
                             variant="ghost"
                             size="sm"
                             className="flex items-center justify-start w-full px-4 py-2 text-destructive hover:bg-secondary/80"
-                            onClick={() => handleDelete(deck.id)}
+                            onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                              e.stopPropagation(); // Zapobiega propagacji zdarzenia
+                              handleDelete(deck.id);
+                            }}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             {t('delete')}

@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useRef, useEffect, ReactNode } from 'react';
+import React, { useState, useRef, useEffect} from 'react';
 import ReactDOM from 'react-dom';
 
 interface CustomTooltipProps {

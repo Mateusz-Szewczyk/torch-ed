@@ -1,4 +1,5 @@
 // app/chat/[conversation_id]/page.tsx
+
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -12,8 +13,8 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!conversation_id) {
-      // If no conversation ID, redirect or handle the error
-      router.push('/'); // Redirect to home or another page
+      // Jeśli nie ma conversation ID, przekieruj lub obsłuż błąd
+      router.push('/'); // Przekierowanie do strony głównej lub innej strony
     }
   }, [conversation_id, router]);
 
@@ -21,5 +22,5 @@ export default function ChatPage() {
     return <div>Loading...</div>;
   }
 
-  return <Chat userId={'user-123'} conversationId={Number(conversation_id)} />;
+  return <Chat conversationId={Number(conversation_id)} />;
 }

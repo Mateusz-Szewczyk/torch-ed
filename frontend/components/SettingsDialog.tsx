@@ -52,7 +52,7 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogTrigger>{children}</DialogTrigger>
       <DialogContent
         className={`
           sm:max-w-[425px] 

@@ -1,15 +1,20 @@
-// components/RootClient.tsx
+// src/components/RootClient.tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import ClientProvider from '@/components/ClientProvider';
+import React, { ReactNode, useState, useEffect } from 'react';
+import { I18nextProvider } from 'react-i18next';
+import i18n from '@/utils/i18n'; // Upewnij się, że i18n jest poprawnie skonfigurowany
 import ClientLayout from '@/components/ClientLayout';
 
-const RootClient: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface RootClientProps {
+  children: ReactNode;
+}
+
+const RootClient: React.FC<RootClientProps> = ({ children }) => {
   const [initialLanguage, setInitialLanguage] = useState('en');
 
   useEffect(() => {
-    // Get the 'language' cookie value
+    // Odczytanie wartości języka z ciasteczka
     const languageCookie = document.cookie
       .split('; ')
       .find((row) => row.startsWith('language='))
@@ -20,10 +25,21 @@ const RootClient: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     }
   }, []);
 
+  useEffect(() => {
+    // Zmiana języka w instancji i18n, jeśli jest inny niż aktualny
+    if (initialLanguage !== i18n.language) {
+      i18n.changeLanguage(initialLanguage).catch(err => {
+        console.error('Failed to change language:', err);
+      });
+    }
+  }, [initialLanguage]);
+
   return (
-    <ClientProvider initialLanguage={initialLanguage}>
-      <ClientLayout>{children}</ClientLayout>
-    </ClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <ClientLayout>
+        {children}
+      </ClientLayout>
+    </I18nextProvider>
   );
 };
 

@@ -1,12 +1,13 @@
+// src/components/LeftPanel.tsx
+
 'use client';
 
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Home, BookOpen, TestTube, Mail, MoreVertical,
   MessageSquare, ChevronLeft, ChevronRight,
   UserCircle, Settings, Plus, ChevronDown, ChevronUp, Edit2, Trash2
 } from 'lucide-react';
-
-import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { LoginRegisterDialog } from '@/components/LoginRegisterDialog';
@@ -53,14 +54,12 @@ export function LeftPanel({
   setCurrentConversationId,
 }: LeftPanelProps) {
 
-  // States from your existing code
+  // Inne stany
   const [isHovered, setIsHovered] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const router = useRouter();
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const { t, i18n } = useTranslation();
-  const [currentLanguage, setCurrentLanguage] = useState(i18n.language);
 
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -175,7 +174,10 @@ export function LeftPanel({
 
   // Sync language changes
   useEffect(() => {
-    const handleLanguageChange = () => setCurrentLanguage(i18n.language);
+    const handleLanguageChange = (lng: string) => {
+      console.log('Language changed to:', lng);
+      // Możesz dodać tutaj dodatkową logikę, jeśli jest potrzebna
+    };
     i18n.on('languageChanged', handleLanguageChange);
     return () => {
       i18n.off('languageChanged', handleLanguageChange);
@@ -249,27 +251,6 @@ export function LeftPanel({
     setMenuOpenForConvId(null);
   };
 
-  // Logout
-  const handleLogout = async () => {
-    try {
-      // NOTE: changed from `http://localhost:8043/api/v1/auth/logout` to `BE_API_BASE_URL + '/logout'`
-      const res = await fetch(`${BE_API_BASE_URL}/logout`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Logout failed');
-      }
-      setIsProfileOpen(false);
-      setIsAuthenticated(false);
-      router.push('/');
-    } catch (err) {
-      console.error('Error logging out:', err);
-      alert('Nie udało się wylogować: ' + String(err));
-    }
-  };
-
   return (
     <div
       className={`bg-card text-foreground border-r border-border transition-all duration-300 z-20 flex flex-col ${
@@ -306,7 +287,7 @@ export function LeftPanel({
         <div className="flex flex-col space-y-4 flex-1">
           {isAuthenticated && (
             <>
-              <ManageFileDialog userId="unused" isPanelVisible={isPanelVisible} />
+              <ManageFileDialog isPanelVisible={isPanelVisible} />
 
               <Button
                 asChild
@@ -387,7 +368,6 @@ export function LeftPanel({
                             variant="ghost"
                             className="text-gray-500 hover:bg-secondary/80 transition-colors duration-200"
                             onClick={() => toggleMenuForConv(conv.id)}
-                            ref={(el) => (conversationButtonRefs.current[conv.id] = el)}
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
@@ -494,7 +474,7 @@ export function LeftPanel({
 
       <Button
         variant="ghost"
-        className={`border-r-2 absolute top-1/2 transform -translate-y-1/2 right-0 translate-x-1/3 hover:bg-secondary/80 transition-colors duration-200 rounded-full w-6 h-6 shadow-lg bg-card`}
+        className={`border-r-2 absolute top-1/2 transform -translate-y-1/2 right-0 translate-x-1/3 hover:bg-secondary/80 transition-colors duration-200 rounded-full w-6 h-6 bg-card`}
         onClick={() => setIsPanelVisible(!isPanelVisible)}
         aria-label={isPanelVisible ? t('hide_panel') : t('show_panel')}
       >
@@ -561,7 +541,7 @@ export function LeftPanel({
             <Button variant="secondary" onClick={() => setIsEditDialogOpen(false)}>
               {t('cancel') || 'Cancel'}
             </Button>
-            <Button variant="primary" onClick={handleSaveNewTitle}>
+            <Button variant="default" onClick={handleSaveNewTitle}>
               {t('save') || 'Save'}
             </Button>
           </DialogFooter>

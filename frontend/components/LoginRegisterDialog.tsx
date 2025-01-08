@@ -112,7 +112,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
     <>
       {/* This is the dialog itself */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogTrigger asChild>{children}</DialogTrigger>
+        <DialogTrigger>{children}</DialogTrigger>
         <DialogContent className="sm:max-w-[425px] bg-background text-foreground">
           <DialogHeader>
             <DialogTitle>{t('login_register_dialog.title')}</DialogTitle>

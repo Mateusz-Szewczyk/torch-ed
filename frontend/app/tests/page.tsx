@@ -2,7 +2,7 @@
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, MouseEvent } from 'react'
 import { EditExamDialog } from '@/components/EditExamDialog'
 import { Button } from "@/components/ui/button"
 import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2 } from 'lucide-react'
@@ -31,7 +31,7 @@ interface ExamQuestion {
 interface Exam {
   id: number
   name: string
-  description?: string
+  description: string // Zmieniono z opcjonalnego na wymagane
   created_at: string
   questions: ExamQuestion[]
 }
@@ -41,8 +41,10 @@ export default function ExamsPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [studyingExam, setStudyingExam] = useState<Exam | null>(null)
+  const [openCollapsibles, setOpenCollapsibles] = useState<{ [key: number]: boolean }>({})
 
   const { t } = useTranslation()
+
   /**
    * Podstawowy URL endpointu – ale tym razem używamy "API_BASE_URL" bez /exams/ na końcu,
    * żeby łatwo doklejać ścieżki w fetchach.
@@ -52,7 +54,7 @@ export default function ExamsPage() {
   /**
    * Pobiera listę egzaminów z backendu, przesyłając ciasteczka (credentials: 'include')
    */
-  const fetchExams = async () => {
+  const fetchExams = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -76,12 +78,12 @@ export default function ExamsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_BASE_URL, t])
 
   // Pierwsze pobranie egzaminów
   useEffect(() => {
     fetchExams()
-  }, [])
+  }, [fetchExams])
 
   /**
    * Zapisywanie egzaminu (tworzenie lub aktualizacja).
@@ -202,6 +204,16 @@ export default function ExamsPage() {
     setStudyingExam(null)
   }
 
+  /**
+   * Funkcja do togglowania Collapsible dla konkretnego egzaminu
+   */
+  const toggleCollapsible = (examId: number) => {
+    setOpenCollapsibles(prev => ({
+      ...prev,
+      [examId]: !prev[examId]
+    }))
+  }
+
   // Ekran ładowania
   if (loading) {
     return (
@@ -252,7 +264,7 @@ export default function ExamsPage() {
           {t('tests')}
         </h1>
         <div className="flex items-center space-x-2">
-          <CustomTooltip className="" content={t('tests_tooltip')}>
+          <CustomTooltip content={t('tests_tooltip')}>
             <Button variant="ghost" size="icon" className="text-secondary hover:text-primary">
               <Info className="h-6 w-6" />
               <span className="sr-only">{t('more_information')}</span>
@@ -281,7 +293,11 @@ export default function ExamsPage() {
             </CardContent>
             <CardFooter className="flex justify-center space-x-4">
               <EditExamDialog
-                exam={{ id: 0, name: '', description: '', questions: [] }}
+                exam={{id: 0,
+                      name: "",
+                      description: "",
+                      created_at: "",
+                      questions: []}}
                 onSave={handleSave}
                 trigger={
                   <Button className="flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-primary-dark text-primary-foreground">
@@ -298,7 +314,11 @@ export default function ExamsPage() {
           {/* Przycisk tworzenia egzaminu */}
           <div className="mb-8 flex justify-end">
             <EditExamDialog
-              exam={{ id: 0, name: '', description: '', questions: [] }}
+              exam={{id: 0,
+                      name: "",
+                      description: "",
+                      created_at: "",
+                      questions: []}}
               onSave={handleSave}
               trigger={
                 <Button className="flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-primary-dark text-primary-foreground">
@@ -312,18 +332,26 @@ export default function ExamsPage() {
           {/* Grid egzaminów */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {exams.map(exam => (
-              <Card key={exam.id} className="flex flex-col min-h-[350px] bg-card shadow-lg">
+              <Card key={exam.id} className="flex flex-col min-h-[350px] bg-card shadow-lg relative">
                 <CardHeader className="flex flex-col">
                   <div className="flex justify-between items-center space-x-4">
                     <CardTitle className="text-2xl font-bold truncate text-primary">{exam.name}</CardTitle>
                     {/* Collapsible Menu for Edit/Delete */}
-                    <Collapsible>
+                    <Collapsible
+                      open={openCollapsibles[exam.id] || false}
+                      onOpenChange={() => toggleCollapsible(exam.id)}
+                    >
                       <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="p-1 text-secondary hover:text-primary">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="p-1 text-secondary hover:text-primary"
+                          aria-label="Opcje"
+                        >
                           <MoreVertical className="h-5 w-5" />
                         </Button>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50">
+                      <CollapsibleContent className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50 p-2">
                         <div className="flex flex-col">
                           <EditExamDialog
                             exam={exam}
@@ -333,6 +361,10 @@ export default function ExamsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80 text-primary"
+                                onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                                  e.stopPropagation() // Zapobiega propagacji zdarzenia
+                                  setOpenCollapsibles(prev => ({ ...prev, [exam.id]: false })) // Zamknięcie Collapsible
+                                }}
                               >
                                 <Edit2 className="h-4 w-4 mr-2" />
                                 {t('edit')}
@@ -343,7 +375,11 @@ export default function ExamsPage() {
                             variant="ghost"
                             size="sm"
                             className="flex items-center justify-start w-full px-4 py-2 text-destructive hover:bg-secondary/80"
-                            onClick={() => handleDelete(exam.id)}
+                            onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                              e.stopPropagation() // Zapobiega propagacji zdarzenia
+                              handleDelete(exam.id)
+                              setOpenCollapsibles(prev => ({ ...prev, [exam.id]: false }))
+                            }}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             {t('delete')}

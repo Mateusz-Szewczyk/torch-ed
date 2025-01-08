@@ -396,7 +396,7 @@ class ChatAgent:
             return "Przepraszam, wystąpił problem z przetworzeniem Twojego zapytania."
 
         # If conversation just started
-        if (len(conversation_history) < 2) or conversation.title == "New Conversation":  # np. < 2 oznacza, że jeszcze nie ma pełnych wymian
+        if (len(conversation_history) <= 2) or (conversation.title == "New conversation"):  # np. < 2 oznacza, że jeszcze nie ma pełnych wymian
             set_conversation_title_if_needed(conversation, query, self.model)
 
         context = "\n".join(conversation_history) if conversation_history else ""
@@ -481,7 +481,7 @@ def agent_response(
         model = ChatAnthropic(
             anthropic_api_key=anthropic_api_key,
             model=model_name,
-            temperature=0.0
+            temperature=0.1
         )
 
         agent = ChatAgent(

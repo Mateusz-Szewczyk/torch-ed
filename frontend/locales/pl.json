@@ -228,4 +228,7 @@
                 "description": "Bądź na bieżąco z najnowszymi trendami i poradami dotyczącymi efektywnej nauki."
             }
         ]
-    }}
+    },
+    "show_chat": "Pokaż czat",
+    "hide_chat": "Ukryj czat"
+}

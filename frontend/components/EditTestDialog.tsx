@@ -69,7 +69,7 @@ export function EditTestDialog({ test, onSave, trigger }: EditTestDialogProps) {
           <Button variant="secondary" onClick={() => setIsOpen(false)}>
             {t('cancel')}
           </Button>
-          <Button variant="primary" onClick={handleSave}>
+          <Button variant="default" onClick={handleSave}>
             {t('save')}
           </Button>
         </DialogFooter>

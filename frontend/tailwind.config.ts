@@ -1,6 +1,8 @@
-// tailwind.config.js
+// tailwind.config.ts
 
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
+import typography from "@tailwindcss/typography";
 
 const config: Config = {
   darkMode: 'class', // Use class-based dark mode
@@ -59,9 +61,9 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)'
       },
       zIndex: {
-        '40': 40,
-        '50': 50,
-        '60': 60,
+        '40': '40',
+        '50': '50',
+        '60': '60',
       },
       keyframes: {
         pulseButton: {
@@ -73,20 +75,20 @@ const config: Config = {
         pulseButton: 'pulseButton 2s infinite',
       },
       typography: {
-      DEFAULT: {
-        css: {
-          'h1, h2, h3, h4, h5, h6': {
-            fontSize: '1rem', // Ustal jednolitą wielkość czcionki
-            fontWeight: 'normal',
+        DEFAULT: {
+          css: {
+            'h1, h2, h3, h4, h5, h6': {
+              fontSize: '1rem',
+              fontWeight: 'normal',
+            },
           },
         },
       },
     },
-    }
   },
   plugins: [
-    require("tailwindcss-animate"),
-    require('@tailwindcss/typography')
+    tailwindcssAnimate,
+    typography,
   ],
 };
 

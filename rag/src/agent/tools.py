@@ -264,8 +264,6 @@ class RAGTool(BaseTool):
     def generate_answer_rag(
         self,
         query: str,
-        max_iterations: int = 2,
-        max_generated_passages: int = 5
     ) -> str:
         """
         Generates a factual and concise answer using external knowledge.
@@ -273,9 +271,11 @@ class RAGTool(BaseTool):
         logger.info(f"Starting RAG for query: '{query}'")
         external_passages = []
 
+        hyde_answer = self.generate_hyde_answer(query)
+
         # External Knowledge
         try:
-            results = search_and_rerank(query, user_id=self.user_id, n_results=5)
+            results = search_and_rerank(hyde_answer, user_id=self.user_id, n_results=5)
             external_passages = [doc.get('content', '') for doc in results]
             logger.info(f"Retrieved {len(external_passages)} external passages.")
         except Exception as e:
@@ -283,6 +283,30 @@ class RAGTool(BaseTool):
 
         # Finalization
         return self.finalize_answer(query, external_passages)
+
+    def generate_hyde_answer(self, query: str) -> str:
+        """
+        Generates a factual and concise answer using the Hyde model.
+        """
+        system_prompt = (
+            "You are an AI tasked with producing concise and factual one to two paragraph long answers. "
+            "You will try to generate short but informative answers."
+             )
+        user_prompt = f"""
+            Question: {query}
+
+            Please generate a factual and concise answer using the provided query.
+        """
+        prompt_template = ChatPromptTemplate.from_messages([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ])
+        try:
+            response = self._model.invoke(prompt_template.format(query=query))
+            return response.content.strip()
+        except Exception as e:
+            logger.error(f"Error generating answer: {e}")
+            return "Nie udało się wygenerować odpowiedzi."
 
     def finalize_answer(self, query: str, passages: List[str]) -> str:
         """
