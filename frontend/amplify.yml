@@ -1,19 +1,4 @@
-version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - echo "Instalowanie zależności..."
-        - npm install
-    build:
-      commands:
-        - echo "Budowanie aplikacji..."
-        - npm run build
-        - npm run export
-  artifacts:
-    baseDirectory: out
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*
+applications:
+  - appRoot: frontend
+    frontend: ...
+    backend: ...
