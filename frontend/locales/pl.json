@@ -203,7 +203,7 @@
     "optional_deck_name": "Wprowadź nazwę talii",
     "feedback_description": "Twoja odpowiedź jest dla nas bardzo ważna. Dziękujemy za poświęcony czas!",
 
-     "future_plans": {
+    "future_plans": {
         "title": "Plany na Przyszłość",
         "description": "Oto nasze plany na przyszłość, które mają na celu jeszcze bardziej usprawnić Twoją naukę:",
         "items": [
@@ -230,5 +230,17 @@
         ]
     },
     "show_chat": "Pokaż czat",
-    "hide_chat": "Ukryj czat"
+    "hide_chat": "Ukryj czat",
+
+    "very_difficult": "Bardzo trudne",
+    "difficult": "Trudne",
+    "easy": "Łatwe",
+    "very_easy": "Bardzo łatwe",
+    "very_dissatisfied": "Bardzo niezadowolony",
+    "dissatisfied": "Niezadowolony",
+    "satisfied": "Zadowolony",
+    "very_satisfied": "Bardzo zadowolony",
+    "neutral": "Neutralny",
+    "your_feedback": "Twoja opinia",
+    "close": "Zamknij"
 }
