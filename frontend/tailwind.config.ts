@@ -55,6 +55,12 @@ const config: Config = {
           '5': 'hsl(var(--chart-5))'
         }
       },
+      screens: {
+          'sm': '640px', // Małe ekrany
+          'md': '768px', // Średnie ekrany
+          'lg': '1024px', // Duże ekrany
+          'xl': '1280px', // Bardzo duże ekrany
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
