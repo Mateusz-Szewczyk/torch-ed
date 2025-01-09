@@ -97,7 +97,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
       {isMobile && !isPanelVisible && (
         <Button
           variant="ghost"
-          className="fixed top-1/2 left-0 z-50 transform -translate-y-1/2 bg-card hover:bg-secondary/80 transition-colors duration-200 rounded-r-full w-8 h-16 flex items-center justify-center"
+          className="fixed top-1/2 left-0 z-40 transform -translate-y-1/2 bg-card hover:bg-secondary/80 transition-colors duration-200 rounded-r-full w-8 h-16 flex items-center justify-center"
           onClick={togglePanel}
         >
           <ChevronRight className="h-4 w-4" />

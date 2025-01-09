@@ -53,7 +53,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
           "dark:bg-background dark:text-foreground",
           "p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto",
           "shadow-lg",
-          "z-40", // Dodano z-50
+          "z-[60]", // Dodano z-50
             "overflow-visible",
           className
         )}

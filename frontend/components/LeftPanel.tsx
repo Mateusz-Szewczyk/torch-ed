@@ -456,7 +456,7 @@ export function LeftPanel({
       <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 
       <Dialog open={isProfileOpen} onOpenChange={setIsProfileOpen}>
-        <DialogContent>
+        <DialogContent className="z-[51]">
           <DialogHeader>
             <DialogTitle>Mój profil</DialogTitle>
             <DialogDescription>Tutaj można dodać info o userze, itd.</DialogDescription>
@@ -490,7 +490,7 @@ export function LeftPanel({
       </Dialog>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="z-[51]">
           <DialogHeader>
             <DialogTitle>{t('edit_conversation_title') || 'Edit Title'}</DialogTitle>
           </DialogHeader>
@@ -513,7 +513,7 @@ export function LeftPanel({
       </Dialog>
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="z-[51]">
           <DialogHeader>
             <DialogTitle>{t('confirm_delete_title') || 'Confirm Delete'}</DialogTitle>
             <DialogDescription>
