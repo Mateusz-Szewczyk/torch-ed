@@ -50,7 +50,9 @@ def create_app(testing: bool = False) -> Flask:
     from .routes.user_auth import user_auth
     app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
     app.register_blueprint(user_auth, url_prefix='/api/v1/auth')
-
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SECURE=True)
     CORS(
         app,
         resources={
@@ -61,7 +63,9 @@ def create_app(testing: bool = False) -> Flask:
                             "https://torch-ed.vercel.app"
                             ],
 
-                "supports_credentials": True
+                "supports_credentials": True,
+                "allow_headers": ["Content-Type", "Authorization"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
             }
         }
     )
