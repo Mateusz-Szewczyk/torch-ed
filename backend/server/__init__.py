@@ -50,11 +50,10 @@ def create_app(testing: bool = False) -> Flask:
     from .routes.user_auth import user_auth
     app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
     app.register_blueprint(user_auth, url_prefix='/api/v1/auth')
-    app.config.update(
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SECURE=True,
-        SESSION_COOKIE_SAMESITE='None'
-    )
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+
     CORS(
         app,
         resources={
