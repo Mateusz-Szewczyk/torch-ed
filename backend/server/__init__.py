@@ -55,7 +55,12 @@ def create_app(testing: bool = False) -> Flask:
         app,
         resources={
             r"/api/*": {
-                "origins": ["http://localhost:3000", "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app", "http://127.0.0.1:3000", "https://torch-ed.vercel.app"],
+                "origins": ["http://localhost:3000",
+                            "http://127.0.0.1:3000",
+                            "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+                            "https://torch-ed.vercel.app"
+                            ],
+
                 "supports_credentials": True
             }
         }
