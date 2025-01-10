@@ -14,14 +14,14 @@ from src.database import engine
 from src.config import Config
 
 def load_private_keys():
-    prp_key_base64 = os.getenv("PRP_KEY")
+    prp_key_base64 = os.getenv("PUP_KEY")
 
     if prp_key_base64:
         prp_key = base64.b64decode(prp_key_base64).decode('utf-8')
-        with open(Config.PRP_PATH, "w") as f:
+        with open(Config.PUP_PATH, "w") as f:
             f.write(prp_key)
     else:
-        raise ValueError("PRP_KEY environment variable is missing!")
+        raise ValueError("PUP_KEY environment variable is missing!")
 
 
 load_private_keys()

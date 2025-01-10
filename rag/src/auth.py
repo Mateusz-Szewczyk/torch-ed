@@ -30,7 +30,7 @@ def get_current_user(
         )
 
     # Ścieżka do klucza
-    path = os.getenv("PRP_PATH", "")
+    path = os.getenv("PUP_PATH", "")
     if not path:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
