@@ -50,9 +50,6 @@ export default function FlashcardsPage() {
       const response = await fetch(API_BASE_URL, {
         method: 'GET',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {
@@ -98,9 +95,6 @@ export default function FlashcardsPage() {
         const response = await fetch(API_BASE_URL, {
           method: 'POST',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(bodyData),
         });
 
@@ -116,9 +110,6 @@ export default function FlashcardsPage() {
         const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
           method: 'PUT',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify({
             name: updatedDeck.name,
             description: updatedDeck.description,
@@ -164,9 +155,6 @@ export default function FlashcardsPage() {
       const response = await fetch(`${API_BASE_URL}${deckId}/`, {
         method: 'DELETE',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {
