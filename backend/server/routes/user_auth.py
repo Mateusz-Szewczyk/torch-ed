@@ -31,7 +31,6 @@ def me():
     return jsonify({
         "logged_in": True,
         "user_id": token_data["aud"],
-        # or any other info
     })
 
 

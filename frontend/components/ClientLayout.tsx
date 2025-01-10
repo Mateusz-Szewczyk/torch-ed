@@ -28,14 +28,16 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1';
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'https://torch-ed-production.up.railway.app/api/v1';
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
           credentials: 'include',
         });
         if (res.ok) {
           setIsAuthenticated(true);
+          console.log('User authenticated successfully.');
         } else {
           setIsAuthenticated(false);
+          console.log('User not authenticated.');
         }
       } catch (err) {
         console.error('Error verifying session:', err);
