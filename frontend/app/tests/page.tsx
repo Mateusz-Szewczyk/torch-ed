@@ -49,7 +49,7 @@ export default function ExamsPage() {
    * Podstawowy URL endpointu – ale tym razem używamy "API_BASE_URL" bez /exams/ na końcu,
    * żeby łatwo doklejać ścieżki w fetchach.
    */
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api'
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api'
 
   /**
    * Pobiera listę egzaminów z backendu, przesyłając ciasteczka (credentials: 'include')
