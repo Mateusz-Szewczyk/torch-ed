@@ -58,6 +58,8 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         credentials: 'include', // cookie wędruje w obie strony
+        headers: { 'Content-Type': 'application/json' },
+        method: 'GET',
       });
       if (res.ok) {
         const data: Message[] = await res.json();

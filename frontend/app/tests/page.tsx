@@ -61,6 +61,7 @@ export default function ExamsPage() {
       const res = await fetch(`${API_BASE_URL}/exams/`, {
         method: 'GET',
         credentials: 'include', // Ciasteczka w obie strony
+        headers: { 'Content-Type': 'application/json' },
       })
       if (!res.ok) {
         const errorData = await res.json()
@@ -177,6 +178,7 @@ export default function ExamsPage() {
       const res = await fetch(`${API_BASE_URL}/exams/${examId}/`, {
         method: 'DELETE',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
       })
       if (!res.ok) {
         const errorData = await res.json()

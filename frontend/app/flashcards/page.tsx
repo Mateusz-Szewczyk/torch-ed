@@ -49,8 +49,8 @@ export default function FlashcardsPage() {
     try {
       const response = await fetch(API_BASE_URL, {
         method: 'GET',
-        credentials: 'same-origin',
-        headers: { 'Authorization': 'TorchED_AUTH'}
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
@@ -213,6 +213,7 @@ export default function FlashcardsPage() {
         method: 'POST',
         credentials: 'include',
         body: formData,
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
