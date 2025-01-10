@@ -8,6 +8,7 @@ langchain-core
 langchain-community
 langchain-chroma
 langchain-anthropic
+langchain-openai
 gpt4all
 beautifulsoup4
 fastapi
