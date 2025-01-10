@@ -18,7 +18,7 @@ interface ManageFileDialogProps {
   isPanelVisible: boolean;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
 const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ isPanelVisible }) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFileRead[]>([]);
