@@ -58,7 +58,7 @@ export function LeftPanel({
 
   const FLASK_API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1/auth';
 
-  const AI_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
+  const AI_API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
   const BE_API_BASE_URL = `${FLASK_API_BASE_URL}/auth` || 'http://localhost:14440/api/v1/auth';
 
   const [menuOpenForConvId, setMenuOpenForConvId] = useState<number | null>(null);
@@ -201,7 +201,7 @@ export function LeftPanel({
         const newConv: Conversation = await response.json();
         setConversations((prev) => [...prev, newConv]);
         setCurrentConversationId(newConv.id);
-        router.push(`/chat/${newConv.id}`);
+        router.push(`/chat/`);
       } else {
         console.error('Failed to create conversation:', response.statusText);
       }
@@ -212,7 +212,7 @@ export function LeftPanel({
 
   const handleConversationClick = (conversationId: number) => {
     setCurrentConversationId(conversationId);
-    router.push(`/chat/${conversationId}`);
+    router.push(`/chat/`);
   };
 
   const handleMouseEnter = () => {

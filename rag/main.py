@@ -36,7 +36,11 @@ app = FastAPI(
 # Dodanie CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Zaktualizuj URL frontend jeśli potrzebne
+    allow_origins=["http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                    "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+                    "https://torch-ed.vercel.app"
+                    ],  # Zaktualizuj URL frontend jeśli potrzebne
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

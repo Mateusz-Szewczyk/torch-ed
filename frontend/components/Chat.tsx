@@ -46,7 +46,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const { t } = useTranslation();
 
   const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
+    process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
   // Autoscroll
   useEffect(() => {

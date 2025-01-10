@@ -38,7 +38,7 @@ export default function FlashcardsPage() {
 
   const { t } = useTranslation();
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api/decks/';
 
   /**
    * Funkcja do pobierania decków
