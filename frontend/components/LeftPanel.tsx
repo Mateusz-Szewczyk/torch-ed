@@ -202,13 +202,23 @@ export function LeftPanel({
 
   const handleNewConversation = async () => {
     try {
+      // Logowanie URL i dostępnych ciasteczek przed wysłaniem
+      console.log('New conversation Request URL:', `${AI_API_BASE_URL}/chats/`);
+      console.log('Available cookies:', document.cookie);
+
       const response = await fetch(`${AI_API_BASE_URL}/chats/`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
+
+      // Logowanie statusu odpowiedzi
+      console.log('New conversation Response status:', response.status);
+      console.log('New conversation Response status text:', response.statusText);
+
       if (response.ok) {
         const newConv: Conversation = await response.json();
+        console.log('New conversation created:', newConv);
         setConversations((prev) => [...prev, newConv]);
         setCurrentConversationId(newConv.id);
         router.push(`/chat/`);
