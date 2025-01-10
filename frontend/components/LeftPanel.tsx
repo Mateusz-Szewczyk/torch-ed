@@ -104,6 +104,7 @@ export function LeftPanel({
       try {
         const response = await fetch(`${AI_API_BASE_URL}/chats/`, {
           credentials: 'include',
+          headers: {'Authorization': 'TorchED_AUTH'}
         });
         if (response.ok) {
           const data: Conversation[] = await response.json();
