@@ -5,7 +5,7 @@ import os
 
 
 class Config:
-    DATABASE_URL: str = os.getenv("DATABASE_URL")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", 'postgresql://postgres:njLFJCMxXaxbWXHsCLgUvfFnsishdbvW@postgres.railway.internal:5432/railway')
     SQLALCHEMY_TRACK_MODYFICATIONS: bool = False
     SECRET_KEY: str | None = os.getenv('SECRET_KEY')
 
