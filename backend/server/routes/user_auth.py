@@ -62,7 +62,7 @@ def login() -> Response | tuple:
     token_bytes = generate_token(user_id=user.id_, role=user.role, iss='TorchED_BACKEND_AUTH', path=path)
     token = token_bytes.decode('utf-8')
     response = jsonify({'success': True, 'message': 'Logged in'})
-    response.set_cookie(COOKIE_AUTH, token, max_age=60 * 60 * 24, httponly=True, secure=False)
+    response.set_cookie(COOKIE_AUTH, token, samesite='None',  max_age=60 * 60 * 24, httponly=True, secure=False)
 
     return response
 
