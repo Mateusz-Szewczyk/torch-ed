@@ -15,4 +15,4 @@ NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', "password")
 LLM_MODEL_NAME = os.getenv('LLM_MODEL_NAME', "claude-3-haiku-20240307")
 
 class Config:
-    PRP_PATH: str = "pup_key.pem"
+    PUP_PATH: str = "pup_key.pem"
