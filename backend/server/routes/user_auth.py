@@ -62,7 +62,7 @@ def login() -> Response | tuple:
     token_bytes = generate_token(user_id=user.id_, role=user.role, iss='TorchED_BACKEND_AUTH', path=path)
     token = token_bytes.decode('utf-8')
     response = jsonify({'success': True, 'message': 'Logged in'})
-    response.set_cookie(COOKIE_AUTH, token, samesite='None',  max_age=60 * 60 * 24, httponly=True, secure=True)
+    response.set_cookie(COOKIE_AUTH, token, samesite='None',  max_age=60 * 60 * 24, httponly=True, secure=True, path='/')
 
     return response
 
@@ -131,11 +131,7 @@ def logout() -> Response | tuple:
     Then for 24h (basic life of token), puts it on blacklist maintained in redis
 
     Returns:
-        Response with redirection that deletes cookie
-        And
-        Adds token in format:
-        {token: {user_id: iss}}
-        to the redis blacklist database.
+        Response with success message and deleted cookie
     '''
     token = request.cookies.get(COOKIE_AUTH, None)
     if not token:
@@ -158,14 +154,23 @@ def logout() -> Response | tuple:
 
     if not blacklist.hexists(user_id, 'tokens'):
         blacklist.hset(
-            token,
             user_id,
+            token,  # Upewnij się, że klucze i wartości są poprawne
             iss
         )
         blacklist.expire(token, 60 * 60 * 24)
     print(blacklist.ttl(token))
+
     response = jsonify({'success': True, 'message': 'Successfully logged out'})
-    response.set_cookie(COOKIE_AUTH, max_age=0)
+    response.set_cookie(
+        COOKIE_AUTH,
+        '',  # Ustawienie pustej wartości
+        samesite='None',
+        max_age=0,  # Natychmiastowe wygaśnięcie
+        httponly=True,
+        secure=True,
+        path='/'  # Musi być zgodne z ustawieniem podczas logowania
+    )
 
     return response
 
