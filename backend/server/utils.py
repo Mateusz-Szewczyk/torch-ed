@@ -8,7 +8,7 @@ from functools import wraps
 from typing import Callable
 from .models import User
 from . import session
-
+from .config import Config
 
 FRONTEND: str = 'https://torch-ed.vercel.app/'
 COOKIE_AUTH: str = 'TorchED_AUTH'
@@ -27,8 +27,7 @@ def data_check(request: Request, method: str) -> tuple | dict:
     if not (data := request.get_json()):
         return jsonify({'error': 'Empty body'}), 400
 
-    if not (path := os.getenv('PRP_PATH')):
-        return jsonify({'error': 'Server misconfigured. Missing path'}), 500
+    path = Config.PRP_PATH
 
     user_name: str | None = data.get('user_name')
     user: User | None = User.get_user(session, user_name) if user_name else None
