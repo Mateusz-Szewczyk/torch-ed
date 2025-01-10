@@ -28,7 +28,8 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const res = await fetch('http://localhost:14440/api/v1/auth/me', {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1';
+        const res = await fetch(`${API_BASE_URL}/auth/me`, {
           credentials: 'include',
         });
         if (res.ok) {
@@ -108,4 +109,3 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
 };
 
 export default ClientLayout;
-
