@@ -146,12 +146,21 @@ export function LeftPanel({
   const handleSaveNewTitle = async () => {
     if (!currentEditingConv) return;
     try {
+      // Sprawdźmy URL i dostępne ciasteczka przed wysłaniem
+      console.log('Request URL:', `${AI_API_BASE_URL}/chats/${currentEditingConv.id}`);
+      console.log('Available cookies:', document.cookie);
+
       const resp = await fetch(`${AI_API_BASE_URL}/chats/${currentEditingConv.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTitle }),
       });
+
+      // Sprawdźmy status i headery odpowiedzi
+      console.log('Response status:', resp.status);
+      console.log('Response status text:', resp.statusText);
+
       if (resp.ok) {
         setConversations((prev) =>
           prev.map((c) => (c.id === currentEditingConv.id ? { ...c, title: newTitle } : c))
