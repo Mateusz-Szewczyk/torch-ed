@@ -56,8 +56,10 @@ export function LeftPanel({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  const FLASK_API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1/auth';
+
   const AI_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
-  const BE_API_BASE_URL = 'http://localhost:14440/api/v1/auth';
+  const BE_API_BASE_URL = `${FLASK_API_BASE_URL}/auth` || 'http://localhost:14440/api/v1/auth';
 
   const [menuOpenForConvId, setMenuOpenForConvId] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
