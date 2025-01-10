@@ -13,10 +13,7 @@ from .models.base import Base
 load_dotenv()
 
 session: scoped_session
-blacklist: redis.Redis = redis.Redis(
-    host=os.getenv('REDIS_URL', 'localhost'),
-    port=int(os.getenv('REDIS_PORT', 6379)),
-    db=0, decode_responses=True)
+blacklist: redis.Redis = redis.from_url(os.getenv('REDIS_URL', 'localhost'))
 
 
 def get_engine(testing: bool = False) -> Engine:

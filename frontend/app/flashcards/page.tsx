@@ -49,7 +49,7 @@ export default function FlashcardsPage() {
     try {
       const response = await fetch(API_BASE_URL, {
         method: 'GET',
-        credentials: 'include', // Przesyłanie ciasteczek
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
