@@ -190,7 +190,7 @@ export default function HomePage() {
       </section>
 
       {/* Stopka */}
-      <footer className="bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))] py-6 mt-auto">
+      <footer className="z-10 bg-[hsl(var(--secondary))] text-[hsl(var(--secondary-foreground))] py-6 mt-auto">
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between">
           <p className="text-xs sm:text-sm">
             &copy; {new Date().getFullYear()} Mateusz Szewczyk &amp; Adam Sarga. {t('all_rights_reserved')}
