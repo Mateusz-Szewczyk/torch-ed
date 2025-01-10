@@ -68,7 +68,7 @@ def login() -> Response | tuple:
                         max_age=60 * 60 * 24,
                         httponly=True, secure=True,
                         path='/',
-                        domain='up.railway.app')
+                        domain='.up.railway.app')
 
     return response
 
