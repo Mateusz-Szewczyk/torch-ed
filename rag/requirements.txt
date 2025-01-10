@@ -39,3 +39,4 @@ aiofiles
 sentence-transformers
 torch
 requests
+authlib
