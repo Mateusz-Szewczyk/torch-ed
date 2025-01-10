@@ -23,6 +23,8 @@ def get_current_user(
     Jeśli token nieprawidłowy, rzuca 401.
     """
     token = request.cookies.get("TorchED_AUTH")
+    cookies = request.cookies
+    print(cookies)
     print(token)
     if not token:
         raise HTTPException(
