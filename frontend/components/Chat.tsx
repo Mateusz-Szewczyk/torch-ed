@@ -234,7 +234,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         })}
         {isLoading && (
           <div className="flex">
-            <div className="inline-block p-3 rounded-lg mr-auto max-w-[80%] bg-secondary text-secondary-foreground break-words">
+            <div className="inline-block p-3 rounded-lg mr-auto max-w-[90%] bg-secondary text-secondary-foreground break-words">
               <BouncingDots />
             </div>
           </div>
@@ -243,21 +243,28 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       </div>
 
       {/* Pole tekstowe */}
-      <div className="border-t border-border p-4">
-        <div className="border-t border-border p-4">
-          <Input
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
-            placeholder={t('type_message') || 'Type your message...'}
-            className="flex-1 text-base sm:text-sm md:text-lg text-muted-foreground"
-            disabled={isLoading}
-          />
-          <Button onClick={handleSend} disabled={isLoading || !input.trim()} variant="default">
-            <SendIcon className="h-4 w-4" />
-            <span className="sr-only">{t('send')}</span>
-          </Button>
+     <div className="border-t p-4">
+        <div className="flex justify-center items-center w-full max-w-4xl mx-auto">
+          <div className="flex w-full gap-2">
+            <Input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
+              placeholder={t('type_message') || 'Type your message...'}
+              className="w-[80%] text-base sm:text-sm md:text-lg text-muted-foreground"
+              disabled={isLoading}
+            />
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              variant="default"
+              className="ml-2"
+            >
+              <SendIcon className="h-4 w-4" />
+              <span className="sr-only">{t('send')}</span>
+            </Button>
+          </div>
         </div>
         {error && <p className="mt-2 text-sm sm:text-base text-destructive text-center">{error}</p>}
       </div>

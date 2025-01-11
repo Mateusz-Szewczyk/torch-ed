@@ -58,7 +58,8 @@ def create_app(testing: bool = False) -> Flask:
                 "origins": ["http://localhost:3000",
                             "http://127.0.0.1:3000",
                             "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                            "https://torch-ed.vercel.app"
+                            "https://torch-ed.vercel.app",
+                            "https://torched.pl"
                             ],
 
                 "supports_credentials": True,

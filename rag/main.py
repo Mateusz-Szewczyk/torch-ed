@@ -53,7 +53,8 @@ app.add_middleware(
     allow_origins=["http://localhost:3000",
                     "http://127.0.0.1:3000",
                     "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                    "https://torch-ed.vercel.app"
+                    "https://torch-ed.vercel.app",
+                    "https://torched.pl"
                     ],  # Zaktualizuj URL frontend jeśli potrzebne
     allow_credentials=True,
     allow_methods=["*"],
