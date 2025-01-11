@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import ReactMarkdown from 'react-markdown';
 
 type Message = {
   id: number;
@@ -148,23 +149,18 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     const isUser = message.sender === 'user';
 
     return (
-      <div className={`flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
-        <div className={`
-          relative 
-          ${isUser ? 'ml-12' : 'mr-12'} 
-          max-w-[80%] 
-          p-4
-          rounded-2xl
-          ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'}
-          ${message.isError ? 'border-2 border-destructive' : ''}
-          shadow-sm
-        `}>
-          <div className="prose prose-sm md:prose-base max-w-none break-words">
-            {message.text.split('\n').map((line, i) => (
-              <p key={i} className="mb-3 last:mb-0">
-                {line}
-              </p>
-            ))}
+      <div className="flex">
+        <div
+          className={`inline-block p-3 rounded-lg ${
+            isUser ? 'ml-auto mr-0' : 'mr-auto ml-0'
+          } max-w-[95%] break-words ${
+            isUser ? 'bg-secondary' : 'bg-background'
+          } ${message.isError ? 'border border-red-500' : ''} ${
+            isUser ? 'text-secondary-foreground' : 'text-foreground'
+          }`}
+        >
+          <div className="break-words max-w-none text-base sm:text-sm md:text-lg">
+            <ReactMarkdown>{message.text}</ReactMarkdown>
           </div>
         </div>
       </div>
@@ -180,45 +176,50 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   );
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background">
-      <div className="flex-1 overflow-auto px-4 py-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          {messages.map(message => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-muted p-4 rounded-2xl shadow-sm">
-                <LoadingIndicator />
-              </div>
+    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
+      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-[85%]">
+        {messages.map(message => (
+          <MessageBubble key={message.id} message={message} />
+        ))}
+        {isLoading && (
+          <div className="flex">
+            <div className="inline-block p-3 rounded-lg mr-auto max-w-[95%] bg-secondary text-secondary-foreground break-words">
+              <LoadingIndicator />
             </div>
-          )}
-          <div ref={endRef} />
-        </div>
+          </div>
+        )}
+        <div ref={endRef} />
       </div>
 
-      <div className="border-t p-4 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="max-w-3xl mx-auto flex gap-3">
-          <Input
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
-            placeholder="Type your message..."
-            className="text-base"
-            disabled={isLoading}
-          />
-          <Button
-            onClick={handleSend}
-            disabled={isLoading || !input.trim()}
-            size="icon"
-          >
-            <SendIcon className="h-5 w-5" />
-            <span className="sr-only">Send</span>
-          </Button>
+      <div className="border-t p-4">
+        <div className="flex justify-center max-w-5xl mx-auto">
+          <div className="flex gap-2 w-[80%]">
+            <div className="flex-grow">
+              <Input
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
+                placeholder="Type your message..."
+                className="text-base sm:text-sm md:text-lg text-muted-foreground"
+                disabled={isLoading}
+              />
+            </div>
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              variant="default"
+              className="shrink-0"
+            >
+              <SendIcon className="h-4 w-4" />
+              <span className="sr-only">Send</span>
+            </Button>
+          </div>
         </div>
         {error && (
-          <p className="mt-3 text-sm text-destructive text-center">{error}</p>
+          <p className="mt-2 text-sm sm:text-base text-destructive text-center">
+            {error}
+          </p>
         )}
       </div>
     </div>
