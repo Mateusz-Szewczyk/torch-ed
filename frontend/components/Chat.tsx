@@ -207,7 +207,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
       {/* Lista wiadomości */}
-      <div className="flex-1 overflow-auto w-5/6 mx-auto p-4 pb-32">
+      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
         {messages.map(msg => {
           const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
           return (
@@ -242,7 +242,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       {/* Pole tekstowe */}
       <div className="border-t border-border p-4 w-full bg-background">
-        <div className="w-3/4 max-w-3xl mx-auto flex space-x-2">
+        <div className="w-3/4 mx-auto flex space-x-2">
           <Input
             type="text"
             value={input}

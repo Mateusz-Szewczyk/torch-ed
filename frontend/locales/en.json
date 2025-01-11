@@ -230,5 +230,6 @@
         ]
     },
     "show_chat": "Show chat",
-    "hide_chat": "Hide chat"
+    "hide_chat": "Hide chat",
+    "loading_exams": "Loading exams..."
 }
