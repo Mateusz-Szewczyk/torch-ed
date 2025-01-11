@@ -1,23 +1,10 @@
-// src/components/Chat.tsx
-
-'use client';
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid'; // Import UUID
+import React, { useState, useEffect, useRef } from 'react';
 import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useTranslation } from 'react-i18next';
-import BouncingDots from './BouncingDots';
 
-import ReactMarkdown, { Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-
-// Definicje typów
 type Message = {
-  id: string; // Zmieniono na string dla UUID
+  id: number;
   conversation_id: number;
   text: string;
   sender: 'user' | 'bot';
@@ -27,14 +14,7 @@ type Message = {
 };
 
 interface ChatProps {
-  conversationId: number; // usuwamy userId
-}
-
-// Definicja interfejsu dla komponentu code
-interface CustomCodeProps {
-  inline?: boolean;
-  className?: string;
-  children?: React.ReactNode;
+  conversationId: number;
 }
 
 const Chat: React.FC<ChatProps> = ({ conversationId }) => {
@@ -42,23 +22,20 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
-  const { t } = useTranslation();
 
-  const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
   // Autoscroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  }, [messages, isLoading]);
 
-  // Pobieramy wiadomości
-  const fetchMessages = useCallback(async () => {
+  // Fetch messages
+  const fetchMessages = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        credentials: 'include', // cookie wędruje w obie strony
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         method: 'GET',
       });
@@ -71,23 +48,19 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     } catch (err) {
       console.error('Error fetching messages:', err);
     }
-  }, [API_BASE_URL, conversationId]);
+  };
 
   useEffect(() => {
     if (conversationId) fetchMessages();
-  }, [fetchMessages, conversationId]);
+  }, [conversationId]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
     const userInput = input.trim();
     setInput('');
 
-    // Generowanie unikalnego ID dla wiadomości użytkownika
-    const userMsgId = uuidv4();
-
-    // Dodajemy wiadomość usera lokalnie
     const userMsg: Message = {
-      id: userMsgId,
+      id: Date.now(),
       conversation_id: conversationId,
       text: userInput,
       sender: 'user',
@@ -97,14 +70,12 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
     try {
       setIsLoading(true);
-      setIsTyping(true); // Ustawiamy isTyping na true
-
       setError('');
 
-      // Zapisujemy wiadomość usera
+      // Save user message
       const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
-        credentials: 'include', // kluczowe
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sender: 'user', text: userInput }),
       });
@@ -114,7 +85,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         throw new Error(errData.detail || 'Error sending user message.');
       }
 
-      // Zapytanie do /query
+      // Query endpoint
       const response = await fetch(`${API_BASE_URL}/query/`, {
         method: 'POST',
         credentials: 'include',
@@ -132,19 +103,15 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       const data = await response.json();
 
-      // Generowanie unikalnego ID dla wiadomości bota
-      const botMsgId = uuidv4();
-
-      // Wiadomość bota
       const botMsg: Message = {
-        id: botMsgId,
+        id: Date.now() + 1,
         conversation_id: conversationId,
         text: data.answer,
         sender: 'bot',
         created_at: new Date().toISOString(),
       };
 
-      // Zapisanie wiadomości bota
+      // Save bot message
       const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
         credentials: 'include',
@@ -162,11 +129,8 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       console.error('Error sending message:', err);
       const errorText = err instanceof Error ? err.message : String(err);
 
-      // Generowanie unikalnego ID dla wiadomości błędu
-      const errorMsgId = uuidv4();
-
       const errorMessage: Message = {
-        id: errorMsgId,
+        id: Date.now() + 2,
         conversation_id: conversationId,
         text: errorText,
         sender: 'bot',
@@ -177,101 +141,87 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       setError(errorText);
     } finally {
       setIsLoading(false);
-      setIsTyping(false); // Ustawiamy isTyping na false
     }
   };
 
-  // Definicja komponentów dla ReactMarkdown
-  const components: Components = {
-    code({ inline, className, children, ...props }: CustomCodeProps) {
-      const match = /language-(\w+)/.exec(className || '');
-      const { ...rest } = props; // Usunięcie `ref` z props
+  const MessageBubble = ({ message }: { message: Message }) => {
+    const isUser = message.sender === 'user';
 
-      return !inline && match ? (
-        <SyntaxHighlighter
-          {...rest}
-          style={oneDark}
-          language={match[1]}
-          PreTag="div"
-        >
-          {String(children).replace(/\n$/, '')}
-        </SyntaxHighlighter>
-      ) : (
-        <code className={className} {...rest}>
-          {children}
-        </code>
-      );
-    },
-  };
-
-  return (
-      <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
-        {/* Lista wiadomości */}
-        <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
-          {messages.map(msg => {
-            const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
-            const textColor =
-                msg.sender === 'user' ? 'text-secondary-foreground' : 'text-foreground';
-            return (
-                <div key={msg.id} className="flex">
-                  <div
-                      className={`inline-block p-3 rounded-lg ${align} max-w-[95%] break-words ${
-                          msg.sender === 'user'
-                              ? 'bg-secondary'
-                              : 'bg-background'
-                      } ${msg.isError ? 'border border-red-500' : ''} ${textColor}`}
-                  >
-                    <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        className="break-words max-w-none text-base sm:text-sm md:text-lg text-secondary-foreground"
-                        components={components}
-                    >
-                      {msg.text}
-                    </ReactMarkdown>
-                  </div>
-                </div>
-            );
-          })}
-          {isLoading && (
-              <div className="flex">
-                <div
-                    className="inline-block p-3 rounded-lg mr-auto max-w-[95%] bg-secondary text-secondary-foreground break-words">
-                  <BouncingDots/>
-                </div>
-              </div>
-          )}
-          <div ref={endRef}/>
-        </div>
-
-        {/* Pole tekstowe */}
-        <div className="border-t p-4">
-          <div className="flex justify-center max-w-5xl mx-auto">
-            <div className="flex gap-2 w-[80%]">
-              <div className="flex-grow">
-                <Input
-                    type="text"
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
-                    placeholder={t('type_message') || 'Type your message...'}
-                    className="text-base sm:text-sm md:text-lg text-muted-foreground"
-                    disabled={isLoading}
-                />
-              </div>
-              <Button
-                  onClick={handleSend}
-                  disabled={isLoading || !input.trim()}
-                  variant="default"
-                  className="shrink-0"
-              >
-                <SendIcon className="h-4 w-4"/>
-                <span className="sr-only">{t('send')}</span>
-              </Button>
-            </div>
+    return (
+      <div className={`flex w-full mb-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={`
+          relative 
+          ${isUser ? 'ml-12' : 'mr-12'} 
+          max-w-[80%] 
+          p-4
+          rounded-2xl
+          ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'}
+          ${message.isError ? 'border-2 border-destructive' : ''}
+          shadow-sm
+        `}>
+          <div className="prose prose-sm md:prose-base max-w-none break-words">
+            {message.text.split('\n').map((line, i) => (
+              <p key={i} className="mb-3 last:mb-0">
+                {line}
+              </p>
+            ))}
           </div>
-          {error && <p className="mt-2 text-sm sm:text-base text-destructive text-center">{error}</p>}
         </div>
       </div>
+    );
+  };
+
+  const LoadingIndicator = () => (
+    <div className="flex space-x-2 p-2">
+      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
+      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
+      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" />
+    </div>
+  );
+
+  return (
+    <div className="h-screen flex flex-col overflow-hidden bg-background">
+      <div className="flex-1 overflow-auto px-4 py-6">
+        <div className="max-w-3xl mx-auto space-y-6">
+          {messages.map(message => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-muted p-4 rounded-2xl shadow-sm">
+                <LoadingIndicator />
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+      </div>
+
+      <div className="border-t p-4 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="max-w-3xl mx-auto flex gap-3">
+          <Input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
+            placeholder="Type your message..."
+            className="text-base"
+            disabled={isLoading}
+          />
+          <Button
+            onClick={handleSend}
+            disabled={isLoading || !input.trim()}
+            size="icon"
+          >
+            <SendIcon className="h-5 w-5" />
+            <span className="sr-only">Send</span>
+          </Button>
+        </div>
+        {error && (
+          <p className="mt-3 text-sm text-destructive text-center">{error}</p>
+        )}
+      </div>
+    </div>
   );
 };
 
