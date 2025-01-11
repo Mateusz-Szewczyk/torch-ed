@@ -215,7 +215,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
           return (
             <div key={msg.id} className="flex">
               <div
-                className={`inline-block p-3 rounded-lg ${align} max-w-[80%] break-words ${
+                className={`inline-block p-3 rounded-lg ${align} max-w-[95%] break-words ${
                   msg.sender === 'user'
                     ? 'bg-secondary'
                     : 'bg-background'
@@ -234,7 +234,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         })}
         {isLoading && (
           <div className="flex">
-            <div className="inline-block p-3 rounded-lg mr-auto max-w-[90%] bg-secondary text-secondary-foreground break-words">
+            <div className="inline-block p-3 rounded-lg mr-auto max-w-[95%] bg-secondary text-secondary-foreground break-words">
               <BouncingDots />
             </div>
           </div>
@@ -244,15 +244,15 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       {/* Pole tekstowe */}
      <div className="border-t p-4">
-        <div className="flex justify-center items-center w-full max-w-4xl mx-auto">
-          <div className="flex w-full gap-2">
+        <div className="flex justify-center w-full">
+          <div className="flex w-[80%]">
             <Input
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
               placeholder={t('type_message') || 'Type your message...'}
-              className="w-[80%] text-base sm:text-sm md:text-lg text-muted-foreground"
+              className="text-base sm:text-sm md:text-lg text-muted-foreground"
               disabled={isLoading}
             />
             <Button
