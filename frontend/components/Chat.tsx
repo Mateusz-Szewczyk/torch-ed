@@ -1,16 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+// src/components/Chat.tsx
+
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { SyntaxHighlighterProps } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { useTranslation } from 'react-i18next';
+import { v4 as uuidv4 } from 'uuid';
+import BouncingDots from "@/components/BouncingDots";
 
+// Definicje typów
 type Message = {
-  id: number;
+  id: string;
   conversation_id: number;
   text: string;
   sender: 'user' | 'bot';
   created_at: string;
-  isNew?: boolean;
   isError?: boolean;
 };
 
@@ -24,16 +35,17 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
-  // Autoscroll
+  // Autoscroll do najnowszej wiadomości
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Fetch messages
-  const fetchMessages = async () => {
+  // Fetch wiadomości z API
+  const fetchMessages = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         credentials: 'include',
@@ -42,26 +54,27 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       });
       if (res.ok) {
         const data: Message[] = await res.json();
-        setMessages(data.map(msg => ({ ...msg, isNew: false, isError: false })));
+        setMessages(data.map(msg => ({ ...msg, isError: false })));
       } else {
         console.error('Failed to fetch messages:', res.statusText);
       }
     } catch (err) {
       console.error('Error fetching messages:', err);
     }
-  };
+  }, [API_BASE_URL, conversationId]);
 
   useEffect(() => {
     if (conversationId) fetchMessages();
-  }, [conversationId]);
+  }, [fetchMessages, conversationId]);
 
+  // Funkcja wysyłania wiadomości
   const handleSend = async () => {
     if (!input.trim()) return;
     const userInput = input.trim();
     setInput('');
 
     const userMsg: Message = {
-      id: Date.now(),
+      id: uuidv4(),
       conversation_id: conversationId,
       text: userInput,
       sender: 'user',
@@ -73,7 +86,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       setIsLoading(true);
       setError('');
 
-      // Save user message
+      // Zapisz wiadomość użytkownika
       const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
         credentials: 'include',
@@ -86,7 +99,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         throw new Error(errData.detail || 'Error sending user message.');
       }
 
-      // Query endpoint
+      // Endpoint zapytania
       const response = await fetch(`${API_BASE_URL}/query/`, {
         method: 'POST',
         credentials: 'include',
@@ -105,14 +118,14 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       const data = await response.json();
 
       const botMsg: Message = {
-        id: Date.now() + 1,
+        id: uuidv4(),
         conversation_id: conversationId,
         text: data.answer,
         sender: 'bot',
         created_at: new Date().toISOString(),
       };
 
-      // Save bot message
+      // Zapisz wiadomość bota
       const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         method: 'POST',
         credentials: 'include',
@@ -131,7 +144,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       const errorText = err instanceof Error ? err.message : String(err);
 
       const errorMessage: Message = {
-        id: Date.now() + 2,
+        id: uuidv4(),
         conversation_id: conversationId,
         text: errorText,
         sender: 'bot',
@@ -145,63 +158,77 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     }
   };
 
-  const MessageBubble = ({ message }: { message: Message }) => {
-    const isUser = message.sender === 'user';
-
-    return (
-      <div className="flex">
-        <div
-          className={`inline-block p-3 rounded-lg ${
-            isUser ? 'ml-auto mr-0' : 'mr-auto ml-0'
-          } max-w-[95%] break-words ${
-            isUser ? 'bg-secondary' : 'bg-background'
-          } ${message.isError ? 'border border-red-500' : ''} ${
-            isUser ? 'text-secondary-foreground' : 'text-foreground'
-          }`}
-        >
-          <div className="break-words max-w-none text-base sm:text-sm md:text-lg">
-            <ReactMarkdown>{message.text}</ReactMarkdown>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const LoadingIndicator = () => (
-    <div className="flex space-x-2 p-2">
-      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
-      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
-      <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" />
-    </div>
-  );
-
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
-      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-[85%]">
-        {messages.map(message => (
-          <MessageBubble key={message.id} message={message} />
-        ))}
+      {/* Lista wiadomości */}
+      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
+        {messages.map((message) => {
+          const alignmentClass =
+            message.sender === 'user'
+              ? 'ml-auto mr-0'
+              : 'mr-auto ml-0';
+          return (
+            <div key={message.id} className="flex">
+              <div
+                className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-[80%] break-words ${
+                  message.sender === 'user'
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'bg-background text-foreground'
+                }`}
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  className="prose dark:prose-invert break-words max-w-none"
+                  components={{
+                    code({ className, children, ...props }) {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const language = match ? match[1] : '';
+                      const isInline = !match;
+
+                      return isInline ? (
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      ) : (
+                        <SyntaxHighlighter
+                          style={oneDark}
+                          language={language}
+                          PreTag="div"
+                          {...(props as SyntaxHighlighterProps)}
+                        >
+                          {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
+                      );
+                    },
+                  }}
+                >
+                  {message.text}
+                </ReactMarkdown>
+              </div>
+            </div>
+          );
+        })}
         {isLoading && (
           <div className="flex">
-            <div className="inline-block p-3 rounded-lg mr-auto max-w-[95%] bg-secondary text-secondary-foreground break-words">
-              <LoadingIndicator />
+            <div className="inline-block p-3 rounded-lg mr-auto max-w-[80%] bg-secondary text-secondary-foreground break-words">
+              <BouncingDots />
             </div>
           </div>
         )}
         <div ref={endRef} />
       </div>
-
-      <div className="border-t p-4">
+      {/* Pole tekstowe */}
+      <div className="border-t border-border p-4 w-full bg-background">
         <div className="flex justify-center max-w-5xl mx-auto">
-          <div className="flex gap-2 w-[80%]">
+          <div className="flex gap-2 w-3/4">
             <div className="flex-grow">
               <Input
                 type="text"
                 value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
-                placeholder="Type your message..."
-                className="text-base sm:text-sm md:text-lg text-muted-foreground"
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()}
+                placeholder={t('type_message') || 'Type your message...'}
+                className="flex-1 text-base sm:text-lg md:text-xl text-muted-foreground"
                 disabled={isLoading}
               />
             </div>
@@ -212,7 +239,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
               className="shrink-0"
             >
               <SendIcon className="h-4 w-4" />
-              <span className="sr-only">Send</span>
+              <span className="sr-only">{t('send')}</span>
             </Button>
           </div>
         </div>
