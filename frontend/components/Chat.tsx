@@ -242,7 +242,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       {/* Pole tekstowe */}
       <div className="border-t border-border p-4 w-full bg-background">
-        <div className="max-w-3xl mx-auto flex space-x-2">
+        <div className="w-3/4 max-w-3xl mx-auto flex space-x-2">
           <Input
             type="text"
             value={input}

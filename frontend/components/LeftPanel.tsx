@@ -1,7 +1,25 @@
+// src/components/LeftPanel.tsx
+
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Home, BookOpen, TestTube, Mail, MoreVertical, MessageSquare, ChevronLeft, ChevronRight, UserCircle, Settings, Plus, ChevronDown, ChevronUp, Edit2, Trash2 } from 'lucide-react';
+import {
+  Home,
+  BookOpen,
+  TestTube,
+  Mail,
+  MoreVertical,
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight,
+  UserCircle,
+  Settings,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Edit2,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { LoginRegisterDialog } from '@/components/LoginRegisterDialog';
@@ -56,10 +74,13 @@ export function LeftPanel({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  const FLASK_API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1/auth';
+  const FLASK_API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1/auth';
 
-  const AI_API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
-  const BE_API_BASE_URL = `${FLASK_API_BASE_URL}/auth` || 'http://localhost:14440/api/v1/auth';
+  const AI_API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+  const BE_API_BASE_URL =
+    `${FLASK_API_BASE_URL}/auth` || 'http://localhost:14440/api/v1/auth';
 
   const [menuOpenForConvId, setMenuOpenForConvId] = useState<number | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
@@ -104,7 +125,7 @@ export function LeftPanel({
       try {
         const response = await fetch(`${AI_API_BASE_URL}/chats/`, {
           credentials: 'include',
-          headers: {'Authorization': 'TorchED_AUTH'}
+          headers: { Authorization: 'TorchED_AUTH' },
         });
         if (response.ok) {
           const data: Conversation[] = await response.json();
@@ -221,7 +242,7 @@ export function LeftPanel({
         console.log('New conversation created:', newConv);
         setConversations((prev) => [...prev, newConv]);
         setCurrentConversationId(newConv.id);
-        router.push(`/chat/`);
+        router.push(`/chat/${newConv.id}`); // Przekierowanie do nowo utworzonej konwersacji
       } else {
         console.error('Failed to create conversation:', response.statusText);
       }
@@ -232,7 +253,7 @@ export function LeftPanel({
 
   const handleConversationClick = (conversationId: number) => {
     setCurrentConversationId(conversationId);
-    router.push(`/chat/`);
+    router.push(`/chat/${conversationId}`); // Przekierowanie do konkretnej konwersacji
   };
 
   const handleMouseEnter = () => {
@@ -259,14 +280,16 @@ export function LeftPanel({
         className={`
           fixed top-0 left-0 h-full bg-card text-foreground border-r border-border
           transition-all duration-300 z-50 flex flex-col
-          ${isMobile ? (isPanelVisible ? 'w-64' : 'w-0') : (isPanelVisible ? 'w-64' : 'w-16')}
+          ${isMobile ? (isPanelVisible ? 'w-64' : 'w-0') : isPanelVisible ? 'w-64' : 'w-16'}
           ${isMobile && !isPanelVisible ? 'overflow-hidden' : ''}
         `}
       >
         {(!isMobile || isPanelVisible) && (
           <div className="p-4 flex-grow flex flex-col overflow-y-auto">
             <div className="flex items-center mb-4 justify-between">
-              <h2 className={`font-semibold ${isPanelVisible ? 'text-xl' : 'text-sm'}`}>{t('menu')}</h2>
+              <h2 className={`font-semibold ${isPanelVisible ? 'text-xl' : 'text-sm'}`}>
+                {t('menu')}
+              </h2>
               <Button
                 asChild
                 variant="ghost"
@@ -287,7 +310,9 @@ export function LeftPanel({
                   <Button
                     asChild
                     variant="outline"
-                    className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center items-center'}`}
+                    className={`w-full ${
+                      isPanelVisible ? 'justify-start' : 'justify-center items-center'
+                    }`}
                   >
                     <Link href="/flashcards">
                       <BookOpen className="h-4 w-4" />
@@ -298,7 +323,9 @@ export function LeftPanel({
                   <Button
                     asChild
                     variant="outline"
-                    className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center items-center'}`}
+                    className={`w-full ${
+                      isPanelVisible ? 'justify-start' : 'justify-center items-center'
+                    }`}
                   >
                     <Link href="/tests">
                       <TestTube className="h-4 w-4" />
@@ -361,6 +388,9 @@ export function LeftPanel({
                                 variant="ghost"
                                 className="text-gray-500 hover:bg-secondary/80 transition-colors duration-200"
                                 onClick={() => toggleMenuForConv(conv.id)}
+                                ref={(el) => {
+                                  conversationButtonRefs.current[conv.id] = el;
+                                }}
                               >
                                 <MoreVertical className="h-4 w-4" />
                               </Button>
@@ -378,7 +408,7 @@ export function LeftPanel({
                             >
                               <Button
                                 variant="ghost"
-                                className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200"
+                                className="w-full justify-start text-sm hover:bg-secondary/80 transition-colors duration-200 flex items-center"
                                 onClick={() => {
                                   const conv = conversations.find((c) => c.id === menuOpenForConvId);
                                   if (conv) openEditDialog(conv);
@@ -390,7 +420,7 @@ export function LeftPanel({
                               </Button>
                               <Button
                                 variant="ghost"
-                                className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200"
+                                className="w-full justify-start text-sm text-red-500 hover:bg-secondary/80 transition-colors duration-200 flex items-center"
                                 onClick={() => {
                                   const conv = conversations.find((c) => c.id === menuOpenForConvId);
                                   if (conv) openDeleteDialog(conv);
@@ -416,7 +446,9 @@ export function LeftPanel({
           <Button
             onClick={() => setIsFeedbackOpen(true)}
             variant="outline"
-            className={`w-full ${isPanelVisible ? 'justify-start' : 'justify-center items-center'} animate-pulseButton`}
+            className={`w-full ${
+              isPanelVisible ? 'justify-start' : 'justify-center items-center'
+            } animate-pulseButton`}
           >
             <Mail className="h-4 w-4" />
             {isPanelVisible && <span className="ml-2">{t('send_feedback')}</span>}
@@ -555,4 +587,3 @@ export function LeftPanel({
     </>
   );
 }
-
