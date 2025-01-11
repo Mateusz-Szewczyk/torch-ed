@@ -207,21 +207,23 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
       {/* Lista wiadomości */}
-      <div className="flex-1 overflow-auto w-5/6 mx-auto p-4 pb-32">
+      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
         {messages.map(msg => {
           const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
+          const textColor =
+            msg.sender === 'user' ? 'text-secondary-foreground' : 'text-foreground';
           return (
             <div key={msg.id} className="flex">
               <div
                 className={`inline-block p-3 rounded-lg ${align} max-w-[80%] break-words ${
                   msg.sender === 'user'
-                    ? 'bg-secondary text-secondary-foreground'
-                    : 'bg-background text-foreground'
-                } ${msg.isError ? 'border border-red-500' : ''}`} // Dodanie stylu błędu
+                    ? 'bg-secondary'
+                    : 'bg-background'
+                } ${msg.isError ? 'border border-red-500' : ''} ${textColor}`}
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
-                  className="prose dark:prose-invert break-words max-w-none"
+                  className="break-words max-w-none text-base sm:text-lg md:text-xl dark:text-muted-foreground"
                   components={components}
                 >
                   {msg.text}
@@ -242,7 +244,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       {/* Pole tekstowe */}
       <div className="border-t border-border p-4 w-full bg-background">
-        <div className="max-w-3xl mx-auto flex space-x-2">
+        <div className="mx-auto flex space-x-2">
           <Input
             type="text"
             value={input}

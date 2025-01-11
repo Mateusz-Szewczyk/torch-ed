@@ -242,7 +242,7 @@ export function LeftPanel({
         console.log('New conversation created:', newConv);
         setConversations((prev) => [...prev, newConv]);
         setCurrentConversationId(newConv.id);
-        router.push(`/chat/${newConv.id}`); // Przekierowanie do nowo utworzonej konwersacji
+        router.push(`/chat`); // Przekierowanie do nowo utworzonej konwersacji
       } else {
         console.error('Failed to create conversation:', response.statusText);
       }
@@ -253,7 +253,7 @@ export function LeftPanel({
 
   const handleConversationClick = (conversationId: number) => {
     setCurrentConversationId(conversationId);
-    router.push(`/chat/${conversationId}`); // Przekierowanie do konkretnej konwersacji
+    router.push(`/chat`); // Przekierowanie do konkretnej konwersacji
   };
 
   const handleMouseEnter = () => {
