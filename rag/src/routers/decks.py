@@ -44,7 +44,6 @@ async def create_deck(
             new_flashcard = Flashcard(
                 question=fc.question,
                 answer=fc.answer,
-                media_url=fc.media_url
             )
             new_deck.flashcards.append(new_flashcard)
             logger.debug(f"Dodano fiszkę: {new_flashcard}")
@@ -514,7 +513,6 @@ async def import_flashcards(
                     question=fc['question'],
                     answer=fc['answer'],
                     deck_id=new_deck.id,
-                    media_url=fc.get('media_url')
                 )
                 db.add(new_flashcard)
                 logger.debug(f"Dodano fiszkę: {new_flashcard}")

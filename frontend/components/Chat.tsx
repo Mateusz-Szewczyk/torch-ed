@@ -2,7 +2,8 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback} from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid'; // Import UUID
 import { SendIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +17,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 
 // Definicje typów
 type Message = {
-  id: number;
+  id: string; // Zmieniono na string dla UUID
   conversation_id: number;
   text: string;
   sender: 'user' | 'bot';
@@ -26,7 +27,7 @@ type Message = {
 };
 
 interface ChatProps {
-  conversationId: number;  // usuwamy userId
+  conversationId: number; // usuwamy userId
 }
 
 // Definicja interfejsu dla komponentu code
@@ -81,9 +82,12 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     const userInput = input.trim();
     setInput('');
 
+    // Generowanie unikalnego ID dla wiadomości użytkownika
+    const userMsgId = uuidv4();
+
     // Dodajemy wiadomość usera lokalnie
     const userMsg: Message = {
-      id: Date.now(),
+      id: userMsgId,
       conversation_id: conversationId,
       text: userInput,
       sender: 'user',
@@ -93,6 +97,8 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
     try {
       setIsLoading(true);
+      setIsTyping(true); // Ustawiamy isTyping na true
+
       setError('');
 
       // Zapisujemy wiadomość usera
@@ -126,9 +132,12 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       const data = await response.json();
 
+      // Generowanie unikalnego ID dla wiadomości bota
+      const botMsgId = uuidv4();
+
       // Wiadomość bota
       const botMsg: Message = {
-        id: Date.now() + 1,
+        id: botMsgId,
         conversation_id: conversationId,
         text: data.answer,
         sender: 'bot',
@@ -149,12 +158,15 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       }
 
       setMessages(prev => [...prev, botMsg]);
-      setIsTyping(false);
     } catch (err) {
       console.error('Error sending message:', err);
       const errorText = err instanceof Error ? err.message : String(err);
+
+      // Generowanie unikalnego ID dla wiadomości błędu
+      const errorMsgId = uuidv4();
+
       const errorMessage: Message = {
-        id: Date.now() + 2,
+        id: errorMsgId,
         conversation_id: conversationId,
         text: errorText,
         sender: 'bot',
@@ -165,6 +177,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       setError(errorText);
     } finally {
       setIsLoading(false);
+      setIsTyping(false); // Ustawiamy isTyping na false
     }
   };
 
@@ -172,7 +185,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const components: Components = {
     code({ inline, className, children, ...props }: CustomCodeProps) {
       const match = /language-(\w+)/.exec(className || '');
-      const {...rest } = props; // Usunięcie `ref` z props
+      const { ...rest } = props; // Usunięcie `ref` z props
 
       return !inline && match ? (
         <SyntaxHighlighter
@@ -204,7 +217,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
                   msg.sender === 'user'
                     ? 'bg-secondary text-secondary-foreground'
                     : 'bg-background text-foreground'
-                }`}
+                } ${msg.isError ? 'border border-red-500' : ''}`} // Dodanie stylu błędu
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}

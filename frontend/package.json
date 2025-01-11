@@ -44,7 +44,8 @@
     "react-tooltip": "^5.28.0",
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.5.5",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.0.5"
   },
   "devDependencies": {
     "@types/js-cookie": "^3.0.6",
