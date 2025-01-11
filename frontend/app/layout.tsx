@@ -1,21 +1,24 @@
 // app/layout.tsx
+
+'use client'; // Oznacza, że ten komponent jest komponentem klienta
+
 import './globals.css';
 import { Inter } from 'next/font/google';
-import { cookies } from 'next/headers';
-
+import { ThemeProvider } from 'next-themes';
 import RootClient from '@/components/RootClient';
+
 const inter = Inter({ subsets: ['latin'] });
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const cookieStore = await cookies();
-  const languageCookie = cookieStore.get('language');
-  const languageFromCookies = languageCookie?.value || 'en';
-
+function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang={languageFromCookies}>
+    <html lang="en">
       <body className={inter.className}>
-        <RootClient>{children}</RootClient>
+        <ThemeProvider attribute="class" enableSystem={true} defaultTheme="light">
+          <RootClient>{children}</RootClient>
+        </ThemeProvider>
       </body>
     </html>
   );
 }
+
+export default RootLayout;

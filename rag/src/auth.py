@@ -6,6 +6,7 @@ import os
 
 from .database import SessionLocal
 from .models import User
+from .config import Config
 
 def get_db():
     db = SessionLocal()
@@ -23,6 +24,9 @@ def get_current_user(
     Jeśli token nieprawidłowy, rzuca 401.
     """
     token = request.cookies.get("TorchED_AUTH")
+    cookies = request.cookies
+    print(cookies)
+    print(token)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -30,7 +34,7 @@ def get_current_user(
         )
 
     # Ścieżka do klucza
-    path = os.getenv("PRP_PATH", "")
+    path = Config.PUP_PATH
     if not path:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

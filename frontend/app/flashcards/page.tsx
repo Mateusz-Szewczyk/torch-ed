@@ -38,8 +38,8 @@ export default function FlashcardsPage() {
 
   const { t } = useTranslation();
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api/decks/';
-
+  const API_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+  const API_BASE_URL = `${API_URL}/decks/`;
   /**
    * Funkcja do pobierania decków
    */
@@ -49,10 +49,8 @@ export default function FlashcardsPage() {
     try {
       const response = await fetch(API_BASE_URL, {
         method: 'GET',
-        credentials: 'include', // Przesyłanie ciasteczek
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {
@@ -98,9 +96,6 @@ export default function FlashcardsPage() {
         const response = await fetch(API_BASE_URL, {
           method: 'POST',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify(bodyData),
         });
 
@@ -116,9 +111,6 @@ export default function FlashcardsPage() {
         const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
           method: 'PUT',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
           body: JSON.stringify({
             name: updatedDeck.name,
             description: updatedDeck.description,
@@ -164,9 +156,6 @@ export default function FlashcardsPage() {
       const response = await fetch(`${API_BASE_URL}${deckId}/`, {
         method: 'DELETE',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
 
       if (!response.ok) {
@@ -224,6 +213,7 @@ export default function FlashcardsPage() {
         method: 'POST',
         credentials: 'include',
         body: formData,
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!response.ok) {

@@ -46,7 +46,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const { t } = useTranslation();
 
   const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
+    process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
   // Autoscroll
   useEffect(() => {
@@ -58,6 +58,8 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
         credentials: 'include', // cookie wędruje w obie strony
+        headers: { 'Content-Type': 'application/json' },
+        method: 'GET',
       });
       if (res.ok) {
         const data: Message[] = await res.json();

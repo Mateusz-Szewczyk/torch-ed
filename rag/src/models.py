@@ -61,7 +61,6 @@ class Flashcard(Base):
     question = Column(String, nullable=False)
     answer = Column(String, nullable=False)
     deck_id = Column(Integer, ForeignKey('decks.id'), nullable=False)
-    media_url = Column(String, nullable=True)
     deck = relationship("Deck", back_populates="flashcards")
 
 

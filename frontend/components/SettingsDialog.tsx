@@ -3,18 +3,30 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { useTheme } from 'next-themes'; // Używamy next-themes
+import { useTheme } from 'next-themes';
 import Cookies from 'js-cookie';
 import { useTranslation } from 'react-i18next';
 
 export function SettingsDialog({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
-  const { theme, setTheme } = useTheme(); // Używamy next-themes hooka
+  const { theme, setTheme } = useTheme();
   const { t, i18n } = useTranslation();
   const [language, setLanguage] = useState('en');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -23,17 +35,17 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const savedLanguage = Cookies.get('language') || 'en';
     setLanguage(savedLanguage);
-    i18n.changeLanguage(savedLanguage); // Ustawienie języka w i18next
+    i18n.changeLanguage(savedLanguage);
   }, [i18n]);
 
-  // Logowanie aktualnego motywu
+  // Logowanie aktualnego motywu (opcjonalne)
   useEffect(() => {
     console.log('Current theme:', theme);
   }, [theme]);
 
   const handleSaveChanges = () => {
     // Zapisz język do ciasteczka
-    Cookies.set('language', language, { expires: 365 }); // Ciasteczko ważne przez rok
+    Cookies.set('language', language, { expires: 365 });
     setSuccessMessage(t('settings_saved_successfully'));
 
     // Aktualizacja języka w i18next

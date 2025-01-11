@@ -31,11 +31,14 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
   // Local state for success message after login
   const [loginSuccessMessage, setLoginSuccessMessage] = useState('');
 
+  // Pobierz bazowy URL API z zmiennej środowiskowej
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1';
+
   // Handler: login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:14440/api/v1/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -72,7 +75,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
     }
   };
 
-  // Handler: register (example)
+  // Handler: register
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -80,7 +83,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
         alert('Hasła nie są takie same!');
         return;
       }
-      const response = await fetch('http://localhost:14440/api/v1/auth/register', {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

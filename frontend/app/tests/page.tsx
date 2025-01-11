@@ -49,7 +49,7 @@ export default function ExamsPage() {
    * Podstawowy URL endpointu – ale tym razem używamy "API_BASE_URL" bez /exams/ na końcu,
    * żeby łatwo doklejać ścieżki w fetchach.
    */
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api'
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api'
 
   /**
    * Pobiera listę egzaminów z backendu, przesyłając ciasteczka (credentials: 'include')
@@ -61,6 +61,7 @@ export default function ExamsPage() {
       const res = await fetch(`${API_BASE_URL}/exams/`, {
         method: 'GET',
         credentials: 'include', // Ciasteczka w obie strony
+        headers: { 'Content-Type': 'application/json' },
       })
       if (!res.ok) {
         const errorData = await res.json()
@@ -177,6 +178,7 @@ export default function ExamsPage() {
       const res = await fetch(`${API_BASE_URL}/exams/${examId}/`, {
         method: 'DELETE',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
       })
       if (!res.ok) {
         const errorData = await res.json()

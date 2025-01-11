@@ -13,10 +13,7 @@ from .models.base import Base
 load_dotenv()
 
 session: scoped_session
-blacklist: redis.Redis = redis.Redis(
-    host=os.getenv('REDIS_URL', 'localhost'),
-    port=int(os.getenv('REDIS_PORT', 6379)),
-    db=0, decode_responses=True)
+blacklist: redis.Redis = redis.from_url(os.getenv('REDIS_URL', 'localhost'))
 
 
 def get_engine(testing: bool = False) -> Engine:
@@ -50,13 +47,23 @@ def create_app(testing: bool = False) -> Flask:
     from .routes.user_auth import user_auth
     app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
     app.register_blueprint(user_auth, url_prefix='/api/v1/auth')
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 
     CORS(
         app,
         resources={
             r"/api/*": {
-                "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
-                "supports_credentials": True
+                "origins": ["http://localhost:3000",
+                            "http://127.0.0.1:3000",
+                            "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+                            "https://torch-ed.vercel.app"
+                            ],
+
+                "supports_credentials": True,
+                "allow_headers": ["Content-Type", "Authorization"],
+                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
             }
         }
     )

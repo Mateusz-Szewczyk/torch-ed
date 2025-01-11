@@ -5,12 +5,26 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import base64
 
 # Importuj modele i bazę danych
-from src.models import Base, ORMFile, Deck, Flashcard, Conversation, Message  # Dodano Conversation i Message
-from src.routers import files, decks, flashcards, query, chats, exams  # Dodano 'chats'
+from src.models import Base
+from src.routers import files, decks, flashcards, query, chats, exams
 from src.database import engine
-from src.auth import get_current_user  # Dodano get_current_user
+from src.config import Config
+
+def load_private_keys():
+    prp_key_base64 = os.getenv("PUP_KEY")
+
+    if prp_key_base64:
+        prp_key = base64.b64decode(prp_key_base64).decode('utf-8')
+        with open(Config.PUP_PATH, "w") as f:
+            f.write(prp_key)
+    else:
+        raise ValueError("PUP_KEY environment variable is missing!")
+
+
+load_private_keys()
 
 # Inicjalizacja logowania
 logging.basicConfig(
@@ -36,7 +50,11 @@ app = FastAPI(
 # Dodanie CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Zaktualizuj URL frontend jeśli potrzebne
+    allow_origins=["http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                    "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+                    "https://torch-ed.vercel.app"
+                    ],  # Zaktualizuj URL frontend jeśli potrzebne
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

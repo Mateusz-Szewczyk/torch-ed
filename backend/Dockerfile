@@ -1,22 +1,27 @@
-FROM python:3.10-slim
+# Wybieramy bazowy obraz Pythona
+FROM python:3.12-slim
 
+# Ustawiamy katalog roboczy w kontenerze
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
+# Kopiujemy plik z zależnościami do kontenera
 COPY requirements.txt .
-RUN apt-get update && \
-    apt-get install -y build-essential libpq-dev && \
-    apt-get install -y --no-install-recommends sqlite3 libsqlite3-dev && \
+
+# Instalacja zależności systemowych i Pythonowych
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    sqlite3 \
+    libsqlite3-dev \
+    python3-dev && \
     apt-get clean && \
-    pip install pysqlite3-binary && \
     rm -rf /var/lib/apt/lists/* && \
-    pip install django-elasticsearch-dsl-drf && \
+    # Aktualizacja pip
+    pip install --upgrade pip && \
+    # Instalacja zależności aplikacji
     pip install --no-cache-dir -r requirements.txt
 
+# Kopiujemy cały kod aplikacji do kontenera
 COPY . .
 
-EXPOSE 8000
-
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["python", "run.py"]

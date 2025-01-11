@@ -1,45 +1,29 @@
-FROM ubuntu:22.04
+# Wybieramy bazowy obraz Pythona
+FROM python:3.12-slim
 
-# Ustaw zmienną środowiskową, aby uniknąć interaktywnych promptów
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Zainstaluj zależności systemowe
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    netcat \
-    && rm -rf /var/lib/apt/lists/*
-
-# Stwórz użytkownika aplikacji
-RUN useradd -ms /bin/bash appuser
-
-# Ustaw katalog roboczy
+# Ustawiamy katalog roboczy w kontenerze
 WORKDIR /app
 
-# Skopiuj kod aplikacji
-COPY . /app
+# Kopiujemy plik z zależnościami do kontenera
+COPY requirements.txt .
 
-# Zainstaluj zależności Pythona
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Instalacja zależności systemowych i Pythonowych
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-CMD bash -c "
-  until nc -z db 5432; do
-    echo 'Czekam na połączenie z bazą danych...';
-    sleep 5;
-  done;
-  python init_db.py;
-"
+# Kopiujemy cały kod aplikacji do kontenera
+COPY . .
 
-# Zmień użytkownika na "appuser"
-USER appuser
+# Eksponujemy port, na którym działa aplikacja FastAPI
+EXPOSE 8043
 
-# Eksponuj port aplikacji
-EXPOSE 8042
+# Definiujemy zmienną środowiskową dla Uvicorn (opcjonalne)
+ENV UVICORN_HOST=0.0.0.0
+ENV UVICORN_PORT=8043
 
-# Uruchom aplikację
-CMD ["uvicorn", "main_api:app", "--host", "0.0.0.0", "--port", "8042"]
+# Polecenie uruchamiające aplikację FastAPI za pomocą Uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8043"]
