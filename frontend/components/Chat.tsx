@@ -244,7 +244,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       {/* Pole tekstowe */}
      <div className="border-t p-4">
-        <div className="flex justify-center w-full">
+        <div className="flex justify-centerl">
           <div className="flex w-[80%]">
             <Input
               type="text"
@@ -252,7 +252,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
               placeholder={t('type_message') || 'Type your message...'}
-              className="text-base sm:text-sm md:text-lg text-muted-foreground"
+              className="text-base sm:text-sm md:text-lg text-muted-foreground w-[80%]"
               disabled={isLoading}
             />
             <Button
