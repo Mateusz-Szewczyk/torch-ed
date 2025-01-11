@@ -211,7 +211,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         {messages.map(msg => {
           const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
           const textColor =
-            msg.sender === 'user' ? 'text-secondary-foreground' : 'text-foreground';
+            msg.sender === 'user' ? 'text-secondary-foreground' : 'text-muted-foreground';
           return (
             <div key={msg.id} className="flex">
               <div
@@ -244,14 +244,14 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
       {/* Pole tekstowe */}
       <div className="border-t border-border p-4 w-full bg-background">
-        <div className="mx-auto flex space-x-2">
+        <div className="w-3/4 mx-auto flex space-x-2">
           <Input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
             placeholder={t('type_message') || 'Type your message...'}
-            className="flex-1"
+            className="flex-1 text-base sm:text-lg md:text-xl text-muted-foreground"
             disabled={isLoading}
           />
           <Button onClick={handleSend} disabled={isLoading || !input.trim()} variant="default">
@@ -259,7 +259,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
             <span className="sr-only">{t('send')}</span>
           </Button>
         </div>
-        {error && <p className="mt-2 text-sm text-destructive text-center">{error}</p>}
+        {error && <p className="mt-2 text-sm sm:text-base text-destructive text-center">{error}</p>}
       </div>
     </div>
   );
