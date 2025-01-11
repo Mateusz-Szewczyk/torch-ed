@@ -1,16 +1,16 @@
 // src/components/ui/input.tsx
-
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  wrapperClassName?: string;
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, label, id, ...props }, ref) => {
+  ({ className, wrapperClassName, type, label, id, ...props }, ref) => {
     return (
-      <div className="flex flex-col">
+      <div className={cn("flex flex-col w-full", wrapperClassName)}>
         {label && (
           <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
             {label}
@@ -32,4 +32,4 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 )
 Input.displayName = "Input"
 
-export { Input }
+export { Input };

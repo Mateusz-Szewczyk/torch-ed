@@ -205,70 +205,73 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
-      {/* Lista wiadomości */}
-      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
-        {messages.map(msg => {
-          const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
-          const textColor =
-            msg.sender === 'user' ? 'text-secondary-foreground' : 'text-foreground';
-          return (
-            <div key={msg.id} className="flex">
-              <div
-                className={`inline-block p-3 rounded-lg ${align} max-w-[95%] break-words ${
-                  msg.sender === 'user'
-                    ? 'bg-secondary'
-                    : 'bg-background'
-                } ${msg.isError ? 'border border-red-500' : ''} ${textColor}`}
-              >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  className="break-words max-w-none text-base sm:text-sm md:text-lg text-secondary-foreground"
-                  components={components}
-                >
-                  {msg.text}
-                </ReactMarkdown>
+      <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
+        {/* Lista wiadomości */}
+        <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
+          {messages.map(msg => {
+            const align = msg.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
+            const textColor =
+                msg.sender === 'user' ? 'text-secondary-foreground' : 'text-foreground';
+            return (
+                <div key={msg.id} className="flex">
+                  <div
+                      className={`inline-block p-3 rounded-lg ${align} max-w-[95%] break-words ${
+                          msg.sender === 'user'
+                              ? 'bg-secondary'
+                              : 'bg-background'
+                      } ${msg.isError ? 'border border-red-500' : ''} ${textColor}`}
+                  >
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        className="break-words max-w-none text-base sm:text-sm md:text-lg text-secondary-foreground"
+                        components={components}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+            );
+          })}
+          {isLoading && (
+              <div className="flex">
+                <div
+                    className="inline-block p-3 rounded-lg mr-auto max-w-[95%] bg-secondary text-secondary-foreground break-words">
+                  <BouncingDots/>
+                </div>
               </div>
-            </div>
-          );
-        })}
-        {isLoading && (
-          <div className="flex">
-            <div className="inline-block p-3 rounded-lg mr-auto max-w-[95%] bg-secondary text-secondary-foreground break-words">
-              <BouncingDots />
-            </div>
-          </div>
-        )}
-        <div ref={endRef} />
-      </div>
-
-      {/* Pole tekstowe */}
-     <div className="border-t p-4">
-        <div className="flex justify-centerl">
-          <div className="flex w-[80%]">
-            <Input
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
-              placeholder={t('type_message') || 'Type your message...'}
-              className="text-base sm:text-sm md:text-lg text-muted-foreground w-[80%]"
-              disabled={isLoading}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={isLoading || !input.trim()}
-              variant="default"
-              className="ml-2"
-            >
-              <SendIcon className="h-4 w-4" />
-              <span className="sr-only">{t('send')}</span>
-            </Button>
-          </div>
+          )}
+          <div ref={endRef}/>
         </div>
-        {error && <p className="mt-2 text-sm sm:text-base text-destructive text-center">{error}</p>}
+
+        {/* Pole tekstowe */}
+        <div className="border-t p-4">
+          <div className="flex justify-center max-w-5xl mx-auto">
+            <div className="flex gap-2 w-[80%]">
+              <div className="flex-grow">
+                <Input
+                    type="text"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
+                    placeholder={t('type_message') || 'Type your message...'}
+                    className="text-base sm:text-sm md:text-lg text-muted-foreground"
+                    disabled={isLoading}
+                />
+              </div>
+              <Button
+                  onClick={handleSend}
+                  disabled={isLoading || !input.trim()}
+                  variant="default"
+                  className="shrink-0"
+              >
+                <SendIcon className="h-4 w-4"/>
+                <span className="sr-only">{t('send')}</span>
+              </Button>
+            </div>
+          </div>
+          {error && <p className="mt-2 text-sm sm:text-base text-destructive text-center">{error}</p>}
+        </div>
       </div>
-    </div>
   );
 };
 
