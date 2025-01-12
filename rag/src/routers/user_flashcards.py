@@ -17,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 @router.get("/by_flashcard/{flashcard_id}/", response_model=UserFlashcardRead)
 def get_user_flashcard_by_flashcard(
-        flashcard_id: int,
-        db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user),
+    flashcard_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Pobiera UserFlashcard dla danego użytkownika i fiszki.
