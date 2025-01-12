@@ -12,16 +12,13 @@ import Image from 'next/image';
 import { Flashcard, Deck } from '@/types';
 import { fetchJson } from '@/utils/fetchJson';
 
-// Struktura do przechowania ocen "hard/good/easy"
 type LocalRating = {
-  flashcardId: number;
-  rating: number;       // 0=hard, 3=good, 5=easy
-  answeredAt: string;   // ISO string
+  flashcardId: number;  // rating: 0=hard, 3=good, 5=easy
+  rating: number;
+  answeredAt: string;   // ISO
 };
 
-type CardSeenCount = {
-  [flashcardId: number]: number; // ile razy user widział kartę
-};
+type CardSeenCount = { [flashcardId: number]: number };
 
 interface StudyDeckProps {
   deck: Deck;
@@ -33,34 +30,32 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:80
 export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   const { t } = useTranslation();
 
-  // Kolejka fiszek (front-end pętla)
+  // Kolejka fiszek
   const [cardsQueue, setCardsQueue] = useState<Flashcard[]>([]);
-  // Indeks aktualnego elementu w kolejce
   const [currentIndex, setCurrentIndex] = useState(0);
-
-  // Ocenione fiszki (do hurtowego zapisu)
+  // Ocenione fiszki
   const [localRatings, setLocalRatings] = useState<LocalRating[]>([]);
-
-  // Ile razy user widział daną fiszkę (do statystyk / UI feedback)
+  // Ile razy user zobaczył daną kartę
   const [cardSeenCount, setCardSeenCount] = useState<CardSeenCount>({});
 
-  // Stan flippingu
+  // Stan flippingu karty
   const [isFlipped, setIsFlipped] = useState(false);
-  // Stan otwarcia chatu
+  // Chat
   const [isChatOpen, setIsChatOpen] = useState(false);
-
-  // Stan zapisu + ewentualny błąd
+  // Stan zapisu
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // conversationId do czatu
+  // Data kolejnej sesji (opcjonalnie)
+  const [nextSessionDate, setNextSessionDate] = useState<string | null>(null);
+
+  // conversationId do Chat
   const conversationId = deck.id;
 
-  // ---------------------------
-  // 1. Inicjalizacja stanu z localStorage (lub z decku)
-  // ---------------------------
+  // ---------------------------------------
+  // 1. Inicjalizacja stanu z localStorage
+  // ---------------------------------------
   useEffect(() => {
-    // Próbujemy wczytać stan kolejki i ocen z localStorage
     const savedQueue = localStorage.getItem(`deck-${deck.id}-queue`);
     const savedRatings = localStorage.getItem(`deck-${deck.id}-ratings`);
     const savedSeenCount = localStorage.getItem(`deck-${deck.id}-seenCount`);
@@ -69,10 +64,10 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       try {
         const parsedQueue: Flashcard[] = JSON.parse(savedQueue);
         const parsedRatings: LocalRating[] = JSON.parse(savedRatings);
-        const parsedSeenCount: CardSeenCount = JSON.parse(savedSeenCount);
+        const parsedSeen: CardSeenCount = JSON.parse(savedSeenCount);
         setCardsQueue(parsedQueue);
         setLocalRatings(parsedRatings);
-        setCardSeenCount(parsedSeenCount);
+        setCardSeenCount(parsedSeen);
         setCurrentIndex(0);
         return;
       } catch (e) {
@@ -80,96 +75,90 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       }
     }
 
-    // Brak stanu => wypełniamy queue fiszkami z deck
+    // Gdy brak => inicjuj danymi deck
     const queue = [...deck.flashcards];
     setCardsQueue(queue);
     setCardSeenCount(
-      queue.reduce((obj, card) => {
-        obj[card.id] = 0;
-        return obj;
+      queue.reduce((acc, c) => {
+        acc[c.id] = 0;
+        return acc;
       }, {} as CardSeenCount)
     );
     setCurrentIndex(0);
   }, [deck]);
 
-  // ---------------------------
-  // 2. Zapisywanie stanu do localStorage przy każdej zmianie
-  // ---------------------------
+  // ---------------------------------------
+  // 2. Zapis stanu do localStorage
+  // ---------------------------------------
   useEffect(() => {
     localStorage.setItem(`deck-${deck.id}-queue`, JSON.stringify(cardsQueue));
     localStorage.setItem(`deck-${deck.id}-ratings`, JSON.stringify(localRatings));
     localStorage.setItem(`deck-${deck.id}-seenCount`, JSON.stringify(cardSeenCount));
   }, [deck.id, cardsQueue, localRatings, cardSeenCount]);
 
-  // ---------------------------
-  // 3. Gdy user ogląda nową kartę, zwiększamy jej "seenCount"
-  // ---------------------------
+  // ---------------------------------------
+  // 3. Zwiększ "seenCount" przy nowej karcie
+  // ---------------------------------------
   useEffect(() => {
     if (cardsQueue.length === 0) return;
     const cardId = cardsQueue[currentIndex].id;
-    setCardSeenCount((prev) => ({
+    setCardSeenCount(prev => ({
       ...prev,
       [cardId]: (prev[cardId] || 0) + 1,
     }));
   }, [currentIndex, cardsQueue]);
 
-  // ---------------------------
-  // 4. Zmiana oceny karty: hard/good -> recycle, easy -> remove
-  // ---------------------------
+  // ---------------------------------------
+  // 4. Funkcja oceny karty
+  // ---------------------------------------
   const handleRating = (rating: number) => {
     if (cardsQueue.length === 0) return;
     const currentCard = cardsQueue[currentIndex];
 
     // Dodaj ocenę do localRatings
-    setLocalRatings((prev) => [
+    setLocalRatings(prev => [
       ...prev,
       {
         flashcardId: currentCard.id,
         rating,
         answeredAt: new Date().toISOString(),
-      },
+      }
     ]);
 
-    // Kopia kolejki
     const updatedQueue = [...cardsQueue];
 
+    // Hard (0) / Good(3) => recykling
     if (rating === 0 || rating === 3) {
-      // Hard / Good => przenosimy kartę na koniec
-      const cardToRecycle = updatedQueue[currentIndex];
-      updatedQueue.splice(currentIndex, 1);
-      updatedQueue.push(cardToRecycle);
+      const [removed] = updatedQueue.splice(currentIndex, 1);
+      updatedQueue.push(removed);
     } else if (rating === 5) {
-      // Easy => usuwamy kartę
+      // Easy => usuwamy
       updatedQueue.splice(currentIndex, 1);
     }
 
-    // Jeśli kolejka pusta => koniec
+    // Gdy koniec
     if (updatedQueue.length === 0) {
       setCardsQueue([]);
       setCurrentIndex(0);
       return;
     }
 
-    // Oblicz next index
+    // Inaczej lecimy dalej
     let nextIndex = currentIndex;
     if (nextIndex >= updatedQueue.length) {
       nextIndex = updatedQueue.length - 1;
     }
-
     setCardsQueue(updatedQueue);
     setCurrentIndex(nextIndex);
     setIsFlipped(false);
   };
 
-  // ---------------------------
-  // 5. Zakończenie nauki => hurtowe wysłanie oceny
-  // ---------------------------
+  // ---------------------------------------
+  // 5. Hurtowe wysłanie ocen => bulk_record
+  // ---------------------------------------
   const handleFinish = async () => {
     if (localRatings.length === 0) {
-      // Nic nie oceniono => wyjdź
-      localStorage.removeItem(`deck-${deck.id}-queue`);
-      localStorage.removeItem(`deck-${deck.id}-ratings`);
-      localStorage.removeItem(`deck-${deck.id}-seenCount`);
+      clearLocalStorage();
       onExit();
       return;
     }
@@ -177,7 +166,6 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      // Wysyłamy do backendu (możesz nazwać endpoint inaczej)
       await fetchJson(`${API_BASE_URL}/study_sessions/bulk_record`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,11 +176,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
         }),
       });
 
-      // Po sukcesie czyścimy localStorage + wychodzimy
-      localStorage.removeItem(`deck-${deck.id}-queue`);
-      localStorage.removeItem(`deck-${deck.id}-ratings`);
-      localStorage.removeItem(`deck-${deck.id}-seenCount`);
-
+      clearLocalStorage();
       onExit();
     } catch (error) {
       if (error instanceof Error) {
@@ -200,28 +184,103 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
         setSubmitError(error.message);
       } else {
         console.error('Nieznany błąd:', error);
-        setSubmitError('Nieznany błąd podczas zapisywania fiszek.');
+        setSubmitError('Nieznany błąd podczas zapisu fiszek.');
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ---------------------------
-  // Funkcja flipping
-  // ---------------------------
-  const handleFlip = () => setIsFlipped(!isFlipped);
+  function clearLocalStorage() {
+    localStorage.removeItem(`deck-${deck.id}-queue`);
+    localStorage.removeItem(`deck-${deck.id}-ratings`);
+    localStorage.removeItem(`deck-${deck.id}-seenCount`);
+  }
 
-  // ---------------------------
-  // Jeśli brak kart => user skończył
-  // ---------------------------
+  // ---------------------------------------
+  // 6. Funkcja flipping
+  // ---------------------------------------
+  const handleFlip = () => {
+    setIsFlipped(!isFlipped);
+  };
+
+  // ---------------------------------------
+  // 7. Po opróżnieniu kolejki -> nextReviewDate + retake
+  // ---------------------------------------
+  useEffect(() => {
+    if (cardsQueue.length === 0) {
+      fetchEarliestNextReview(deck.id);
+    }
+  }, [cardsQueue.length, deck.id]);
+
+  async function fetchEarliestNextReview(deckId: number) {
+    try {
+      const data = await fetchJson<{ next_review: string | null }>(
+        `${API_BASE_URL}/study_sessions/next_review_date?deck_id=${deckId}`,
+        { method: 'GET', credentials: 'include' }
+      );
+      setNextSessionDate(data.next_review);
+    } catch (e) {
+      console.error('Błąd nextReviewDate:', e);
+      setNextSessionDate(null);
+    }
+  }
+
+  // 8. Przycisk retake "EF ≤ 1.9"
+  async function handleRetakeHardCards() {
+    try {
+      const retakeCards = await fetchJson<Flashcard[]>(
+        `${API_BASE_URL}/study_sessions/retake_cards?deck_id=${deck.id}&max_ef=1.9`,
+        { method: 'GET', credentials: 'include' }
+      );
+      if (!retakeCards || retakeCards.length === 0) {
+        alert(t('no_hard_cards_found'));
+        return;
+      }
+      // Re-inicjuj queue
+      setCardsQueue(retakeCards);
+      setCardSeenCount(
+        retakeCards.reduce((acc, c) => {
+          acc[c.id] = 0;
+          return acc;
+        }, {} as CardSeenCount)
+      );
+      setCurrentIndex(0);
+      setLocalRatings([]);
+      setNextSessionDate(null);
+      setIsFlipped(false);
+      clearLocalStorage();
+    } catch (err) {
+      console.error('Błąd handleRetakeHardCards:', err);
+      alert(t('retake_error_occurred'));
+    }
+  }
+
+  // ---------------------------------------
+  // 9. Gdy brak fiszek => user skończył
+  // ---------------------------------------
   if (cardsQueue.length === 0) {
     return (
       <div className="h-screen flex items-center justify-center bg-background p-4">
         <div className="flex flex-col items-center space-y-4">
           <h2 className="text-2xl font-bold">{t('congratulations')}</h2>
-          <p>{t('completed_flashcards')}</p>
-          {/* Można tu pokazać ile ocen "hard/good/easy" user dał w trakcie sesji */}
+          <p className="text-center">{t('completed_flashcards_today')}</p>
+
+          {nextSessionDate ? (
+            <p className="text-center">
+              {t('next_session_scheduled', { date: new Date(nextSessionDate).toLocaleString() })}
+            </p>
+          ) : (
+            <p className="text-center">{t('no_future_session_date_found')}</p>
+          )}
+
+          <Button
+            variant="outline"
+            onClick={handleRetakeHardCards}
+          >
+            {t('retake_hard_cards')} {/* "Powtórz fiszki z EF ≤ 1.9" */}
+          </Button>
+
           <div className="flex space-x-4">
             <Button onClick={handleFinish} disabled={isSubmitting}>
               {t('save_and_exit')}
@@ -231,6 +290,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
               {t('back_to_decks')}
             </Button>
           </div>
+
           {isSubmitting && (
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -245,17 +305,14 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
     );
   }
 
-  // ---------------------------
-  // 6. Mamy karty w kolejce => wyświetlamy obecną
-  // ---------------------------
+  // ---------------------------------------
+  // 10. Mamy fiszki -> normalny ekran nauki
+  // ---------------------------------------
   const currentCard = cardsQueue[currentIndex];
 
-  // UI/UX: obliczmy postęp (ile kart oznaczono jako easy)
   const totalCards = deck.flashcards.length;
   const answeredEasyCount = localRatings.filter(r => r.rating === 5).length;
   const progressPercent = Math.round((answeredEasyCount / totalCards) * 100);
-
-  // Ile razy user widział tę kartę?
   const seenCount = cardSeenCount[currentCard.id] || 0;
 
   return (
@@ -349,12 +406,11 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
             </Card>
           </div>
 
-          {/* Info o ile razy user już widział tę kartę */}
           <div className="text-sm text-muted-foreground">
             {t('seen_this_card_x_times', { count: seenCount })}
           </div>
 
-          {/* Rating Buttons */}
+          {/* Guziki oceny */}
           <div className="h-20 flex justify-center items-center">
             {isFlipped && (
               <div className="flex space-x-4">
@@ -380,17 +436,17 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
             )}
           </div>
 
-          {/* Komunikat błędu */}
+          {/* Ewentualny błąd */}
           {submitError && (
             <p className="text-destructive">{submitError}</p>
           )}
 
-          {/* Przycisk do zapisania i wyjścia */}
+          {/* Przycisk zapisu i wyjścia */}
           <Button variant="secondary" onClick={handleFinish} disabled={isSubmitting}>
             {t('save_and_exit')}
           </Button>
 
-          {/* Wskaźnik ładowania, gdy wysyłamy oceny */}
+          {/* Wskaźnik ładowania przy zapisie */}
           {isSubmitting && (
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
