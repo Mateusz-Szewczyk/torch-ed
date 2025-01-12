@@ -7,14 +7,13 @@ import tempfile
 import sqlite3
 import json
 import csv
-from datetime import datetime, timezone
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
-from ..models import Deck, Flashcard, User, ExamResult, ExamAnswer, ExamResultAnswer, Exam, ExamQuestion
-from ..schemas import DeckCreate, DeckRead, ExamResultRead, ExamResultCreate
+from ..models import Deck, Flashcard, User
+from ..schemas import DeckCreate, DeckRead
 from ..dependencies import get_db
 from ..auth import get_current_user
 
@@ -167,8 +166,7 @@ async def update_deck(
                 # Dodawanie nowej fiszki
                 new_flashcard = Flashcard(
                     question=fc.question,
-                    answer=fc.answer,
-                    media_url=fc.media_url
+                    answer=fc.answer
                 )
                 db.add(new_flashcard)
                 existing_deck.flashcards.append(new_flashcard)
