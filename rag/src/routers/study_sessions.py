@@ -66,7 +66,7 @@ def create_study_session(
     # Tworzenie nowej sesji
     new_session = StudySession(
         user_id=current_user.id_,
-        deck_id=deck.id,
+        deck_id=int(deck.id),
         started_at=datetime.utcnow()
     )
     db.add(new_session)
@@ -160,7 +160,7 @@ def record_flashcard_review(
     # Tworzenie rekordu przeglądu
     study_record = StudyRecord(
         session_id=session.id,
-        user_flashcard_id=user_flashcard.id,
+        user_flashcard_id=int(user_flashcard.id),
         rating=record_create.rating,
         reviewed_at=datetime.utcnow()
     )
