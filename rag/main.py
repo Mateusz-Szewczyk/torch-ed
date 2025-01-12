@@ -36,9 +36,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Inicjalizacja bazy danych
-Base.metadata.create_all(bind=engine)
-logger.info("Database tables created.")
 
 # Inicjalizacja FastAPI aplikacji
 app = FastAPI(

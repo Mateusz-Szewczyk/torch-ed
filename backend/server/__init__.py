@@ -39,6 +39,8 @@ def create_app(testing: bool = False) -> Flask:
     session_local: sessionmaker = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     session = scoped_session(session_local)
 
+    with engine.begin() as conn:
+        Base.metadata.create_all(bind=conn)
 
     from .routes.token_auth import api_auth as api_auth
     from .routes.user_auth import user_auth
