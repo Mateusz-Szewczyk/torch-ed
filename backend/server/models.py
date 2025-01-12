@@ -7,9 +7,11 @@ from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,
     func, Float, UniqueConstraint
 )
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session
-from .database import Base
 
+
+Base = declarative_base()
 
 class Conversation(Base):
     __tablename__ = 'conversations'
