@@ -247,5 +247,18 @@
     "no_answers_to_submit": "Brak odpowiedzi do wysłania.",
     "save_attempt": "Zapisz próbę",
     "submitting_results": "Wysyłanie wyników...",
-    "error_submitting_results": "Wystąpił błąd podczas wysyłania wyników."
+    "error_submitting_results": "Wystąpił błąd podczas wysyłania wyników.",
+      "seen_this_card_x_times": "Widziałeś(-aś) tę fiszkę już {{count}} razy.",
+      "progress": "Postęp",
+      "no_hard_cards_found": "Nie znaleziono trudnych fiszek.",
+      "retake_error_occurred": "Wystąpił błąd podczas ponownego przerabiania trudnych fiszek.",
+      "flashcard_counter": "{{current}} / {{total}}",
+      "completed_flashcards_today": "Ukończyłeś(-aś) naukę wszystkich fiszek na dziś!",
+      "next_session_scheduled": "Twoja następna sesja powtórkowa jest zaplanowana na {{date}}.",
+      "no_future_session_date_found": "Nie znaleziono przyszłej daty sesji.",
+      "retake_hard_cards": "Powtórz trudne fiszki",
+      "save_and_exit": "Zapisz i wyjdź",
+      "saving_results": "Zapisywanie wyników...",
+      "hard": "Trudne",
+      "good": "OK"
 }

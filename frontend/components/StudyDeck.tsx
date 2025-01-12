@@ -13,7 +13,7 @@ import { Flashcard, Deck } from '@/types';
 import { fetchJson } from '@/utils/fetchJson';
 
 type LocalRating = {
-  flashcardId: number;  // rating: 0=hard, 3=good, 5=easy
+  flashcard_id: number;  // rating: 0=hard, 3=good, 5=easy
   rating: number;
   answeredAt: string;   // ISO
 };
@@ -119,7 +119,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
     setLocalRatings(prev => [
       ...prev,
       {
-        flashcardId: currentCard.id,
+        flashcard_id: currentCard.id,
         rating,
         answeredAt: new Date().toISOString(),
       }

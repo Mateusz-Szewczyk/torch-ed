@@ -229,7 +229,22 @@
             }
         ]
     },
-    "show_chat": "Show chat",
-    "hide_chat": "Hide chat",
-    "loading_exams": "Loading exams..."
+    "loading_exams": "Loading exams...",
+
+     "seen_this_card_x_times": "You have seen this card {{count}} times.",
+      "progress": "Progress",
+      "no_hard_cards_found": "No hard cards found.",
+      "retake_error_occurred": "An error occurred while retaking hard cards.",
+      "flashcard_counter": "{{current}} / {{total}}",
+      "completed_flashcards_today": "You have completed all your flashcards for today!",
+      "next_session_scheduled": "Your next review session is scheduled for {{date}}.",
+      "no_future_session_date_found": "No future session date was found.",
+      "retake_hard_cards": "Retake Hard Cards",
+      "save_and_exit": "Save & Exit",
+      "hide_chat": "Hide Chat",
+      "show_chat": "Show Chat",
+      "saving_results": "Saving results...",
+      "hard": "Hard",
+      "good": "Good",
+      "easy": "Easy"
 }
