@@ -226,7 +226,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
 
       {/* Panel czatu z prawej strony */}
       {isChatOpen && (
-        <div className="w-[40rem] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
+        <div className="w-[40%] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
           <Chat conversationId={conversationId} />
         </div>
       )}

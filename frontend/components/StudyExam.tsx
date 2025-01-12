@@ -199,7 +199,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      const response = await fetch(`${API_BASE_URL}/submit/`, {
+      const response = await fetch(`${API_BASE_URL}/exams/submit/`, {
         method: 'POST',
         credentials: 'include', // Upewnij się, że przesyłasz ciasteczka dla autoryzacji
         headers: {
@@ -515,7 +515,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
 
         {/* Panel czatu po prawej stronie */}
         {isChatOpen && (
-          <div className="w-[40rem] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
+          <div className="w-[40%] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
             <Chat conversationId={conversationId} />
           </div>
         )}

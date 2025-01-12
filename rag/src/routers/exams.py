@@ -1,11 +1,12 @@
 # src/routers/exams.py
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 
-from ..models import Exam, ExamQuestion, ExamAnswer, User
-from ..schemas import ExamCreate, ExamRead, ExamUpdate
+from ..models import Exam, ExamQuestion, ExamAnswer, User, ExamResult, ExamResultAnswer
+from ..schemas import ExamCreate, ExamRead, ExamUpdate, ExamResultRead, ExamResultCreate
 from ..dependencies import get_db
 from ..auth import get_current_user
 
@@ -247,3 +248,105 @@ async def delete_exam(
         db.rollback()
         logger.error(f"Error deleting exam: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error deleting exam: {str(e)}")
+
+
+@router.post("/submit/", response_model=ExamResultRead)
+async def submit_exam_result(
+        result: ExamResultCreate,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    """
+    Zapisuje wynik egzaminu użytkownika.
+    """
+    user_id = str(current_user.id_)
+    logger.info(f"Submitting exam result for user_id={user_id}, exam_id={result.exam_id}")
+
+    try:
+        # Sprawdź czy egzamin istnieje i należy do użytkownika
+        exam = (
+            db.query(Exam)
+            .options(joinedload(Exam.questions).joinedload(ExamQuestion.answers))
+            .filter(Exam.id == result.exam_id, Exam.user_id == user_id)
+            .first()
+        )
+
+        if not exam:
+            raise HTTPException(status_code=404, detail="Exam not found")
+
+        # Utwórz nowy wynik egzaminu
+        exam_result = ExamResult(
+            exam_id=result.exam_id,
+            user_id=user_id,
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(tz=None),
+        )
+
+        db.add(exam_result)
+        db.flush()  # Aby otrzymać ID exam_result
+
+        # Zapisz odpowiedzi i oblicz wynik
+        correct_answers = 0
+        total_questions = len(result.answers)
+
+        for answer_data in result.answers:
+            # Sprawdź czy odpowiedź jest poprawna
+            correct_answer = (
+                db.query(ExamAnswer)
+                .filter(
+                    ExamAnswer.question_id == answer_data.question_id,
+                    ExamAnswer.id == answer_data.selected_answer_id,
+                    ExamAnswer.is_correct == True
+                )
+                .first()
+            )
+
+            answer = ExamResultAnswer(
+                exam_result_id=exam_result.id,
+                question_id=answer_data.question_id,
+                selected_answer_id=answer_data.selected_answer_id,
+                is_correct=bool(correct_answer),
+                answer_time=answer_data.answer_time
+            )
+
+            if correct_answer:
+                correct_answers += 1
+
+            db.add(answer)
+
+        # Oblicz wynik procentowy
+        exam_result.score = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+
+        db.commit()
+        db.refresh(exam_result)
+
+        return exam_result
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error submitting exam result: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error submitting exam result: {str(e)}")
+
+
+@router.get("/results/", response_model=List[ExamResultRead])
+async def get_user_results(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+):
+    """
+    Pobiera wszystkie wyniki egzaminów dla zalogowanego użytkownika.
+    """
+    user_id = str(current_user.id_)
+    logger.info(f"Fetching exam results for user_id={user_id}")
+
+    try:
+        results = (
+            db.query(ExamResult)
+            .options(joinedload(ExamResult.answers))
+            .filter(ExamResult.user_id == user_id)
+            .all()
+        )
+        return results
+    except Exception as e:
+        logger.error(f"Error fetching exam results: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching exam results: {str(e)}")
