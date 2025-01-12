@@ -5,24 +5,12 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, RotateCcw, MessageCircle } from 'lucide-react';
+import { ArrowLeft, RotateCcw, MessageCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import Chat from '@/components/Chat'; // <--- importujemy chat
-import Image from 'next/image'; // <--- importujemy Image z next/image
-
-interface Flashcard {
-  id?: number;
-  question: string;
-  answer: string;
-  media_url?: string; // Dodane pole media_url
-}
-
-interface Deck {
-  id: number;
-  name: string;
-  description?: string;
-  flashcards: Flashcard[];
-}
+import Chat from '@/components/Chat';
+import Image from 'next/image';
+import { Flashcard, Deck, StudySession, StudyRecord, UserFlashcard } from '@/types';
+import { fetchJson } from '@/utils/fetchJson';
 
 interface StudyDeckProps {
   deck: Deck;
@@ -30,82 +18,153 @@ interface StudyDeckProps {
 }
 
 export function StudyDeck({ deck, onExit }: StudyDeckProps) {
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [remainingCards, setRemainingCards] = useState<Flashcard[]>([]);
-  const [visibleCard, setVisibleCard] = useState<Flashcard>(deck.flashcards[0] || { question: '', answer: '' });
-
-  // Stan do sterowania chatem
-  const [isChatOpen, setIsChatOpen] = useState(false);
-
-  // Przykładowe conversationId do czatu (możesz dopasować do logiki)
-  const conversationId = deck.id;
-  // Możesz też użyć np. deck.id + 1000 czy innej konwencji, by każda talia miała osobny conversationId.
-
   const { t } = useTranslation();
 
-  useEffect(() => {
-    setRemainingCards([...deck.flashcards]);
-  }, [deck]);
+  // Stan sesji nauki
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [currentFlashcard, setCurrentFlashcard] = useState<Flashcard | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Conversation ID dla czatu
+  const conversationId = deck.id;
+
+  // Inicjalizacja sesji nauki
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    if (!isFlipped) {
-      timeoutId = setTimeout(() => {
-        setVisibleCard(remainingCards[currentCardIndex] || { question: '', answer: '' });
-      }, 250); // połowa czasu animacji flip
+    const initializeSession = async () => {
+      try {
+        const response = await fetchJson<StudySession>('/api/study_sessions/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ deck_id: deck.id }),
+        });
+        setSessionId(response.id);
+        fetchNextFlashcard(response.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error('Błąd podczas inicjalizacji sesji nauki:', error.message);
+        } else {
+          console.error('Nieznany błąd podczas inicjalizacji sesji nauki:', error);
+        }
+      }
+    };
+
+    initializeSession();
+  }, [deck.id]);
+
+  // Funkcja do pobrania następnej fiszki
+  const fetchNextFlashcard = async (sessionId: number) => {
+    try {
+      const flashcard = await fetchJson<Flashcard>(`/api/study_sessions/next_flashcard/${sessionId}/`, {
+        method: 'GET',
+      });
+      setCurrentFlashcard(flashcard);
+      setIsFlipped(false);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Błąd podczas pobierania następnej fiszki:', error.message);
+      } else {
+        console.error('Nieznany błąd podczas pobierania następnej fiszki:', error);
+      }
+      setCurrentFlashcard(null);
     }
-    return () => clearTimeout(timeoutId);
-  }, [isFlipped, currentCardIndex, remainingCards]);
+  };
 
+  // Funkcja do rejestrowania oceny
+  const recordReview = async (rating: number) => {
+    if (!sessionId || !currentFlashcard) return;
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      // Pobierz UserFlashcard ID dla bieżącej fiszki
+      const userFlashcard = await fetchJson<UserFlashcard>(`/api/user_flashcards/by_flashcard/${currentFlashcard.id}/`, {
+        method: 'GET',
+      });
+
+      await fetchJson<StudyRecord>(`/api/study_sessions/record_review/${sessionId}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_flashcard_id: userFlashcard.id,
+          rating: rating,
+        }),
+      });
+
+      // Pobierz następna fiszka
+      fetchNextFlashcard(sessionId);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Błąd podczas rejestrowania przeglądu:', error.message);
+        setSubmitError(error.message);
+      } else {
+        console.error('Nieznany błąd podczas rejestrowania przeglądu:', error);
+        setSubmitError('Błąd podczas zapisywania przeglądu.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Funkcja do resetowania sesji nauki
+  const resetSession = async () => {
+    if (!sessionId) return;
+
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+      // Tworzenie nowej sesji
+      const response = await fetchJson<StudySession>('/api/study_sessions/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deck_id: deck.id }),
+      });
+      setSessionId(response.id);
+      fetchNextFlashcard(response.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error('Błąd podczas resetowania sesji nauki:', error.message);
+        setSubmitError(error.message);
+      } else {
+        console.error('Nieznany błąd podczas resetowania sesji nauki:', error);
+        setSubmitError('Błąd podczas resetowania sesji nauki.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Flipping flashcard
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
   };
 
-  const handleRating = (rating: 'easy' | 'good' | 'hard') => {
-    setIsFlipped(false);
+  if (!sessionId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p>{t('initializing_study_session')}</p>
+      </div>
+    );
+  }
 
-    setTimeout(() => {
-      const currentCard = remainingCards[currentCardIndex];
-      const updatedRemainingCards = remainingCards.filter((_, index) => index !== currentCardIndex);
-
-      if (rating === 'hard') {
-        // Wkładamy kartę 3 miejsca dalej
-        updatedRemainingCards.splice(
-          Math.min(currentCardIndex + 3, updatedRemainingCards.length),
-          0,
-          currentCard
-        );
-      } else if (rating === 'good') {
-        // Wkładamy kartę na koniec
-        updatedRemainingCards.push(currentCard);
-      }
-      // 'easy' -> karta znika (nie wraca do talii)
-
-      setRemainingCards(updatedRemainingCards);
-
-      if (updatedRemainingCards.length > 0) {
-        setCurrentCardIndex(currentCardIndex % updatedRemainingCards.length);
-      } else {
-        setCurrentCardIndex(-1);
-      }
-    }, 250);
-  };
-
-  const resetDeck = () => {
-    setRemainingCards([...deck.flashcards]);
-    setCurrentCardIndex(0);
-    setIsFlipped(false);
-  };
-
-  if (remainingCards.length === 0 || currentCardIndex === -1) {
+  if (!currentFlashcard) {
     return (
       <div className="h-screen flex items-center justify-center bg-background p-4">
         <div className="flex flex-col items-center justify-center space-y-4">
           <h2 className="text-2xl font-bold">{t('congratulations')}</h2>
           <p>{t('completed_flashcards')}</p>
           <div className="flex space-x-4">
-            <Button onClick={resetDeck}>
+            <Button onClick={resetSession} disabled={isSubmitting}>
               <RotateCcw className="mr-2 h-4 w-4" />
               {t('reset_deck')}
             </Button>
@@ -114,6 +173,15 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
               {t('back_to_decks')}
             </Button>
           </div>
+          {isSubmitting && (
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span>{t('saving_results')}</span>
+            </div>
+          )}
+          {submitError && (
+            <p className="text-destructive">{submitError}</p>
+          )}
         </div>
       </div>
     );
@@ -147,9 +215,9 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
         {/* Zawartość talii */}
         <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-4">
           <div className="mb-4 text-sm font-medium text-primary">
-            {t('card_counter', {
-              current: currentCardIndex + 1,
-              total: remainingCards.length
+            {t('flashcard_counter', {
+              current: 1, // Możesz dynamicznie aktualizować to pole
+              total: deck.flashcards.length
             })}
           </div>
 
@@ -163,13 +231,13 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
               {/* Front Side */}
               <CardContent className="absolute w-full h-full p-4 [backface-visibility:hidden] flex items-center justify-center">
                 <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
-                  <p className="text-xl font-semibold text-center">{visibleCard?.question}</p>
-                  {visibleCard?.media_url && (
+                  <p className="text-xl font-semibold text-center">{currentFlashcard.question}</p>
+                  {currentFlashcard.media_url && (
                     <Image
-                      src={visibleCard.media_url}
+                      src={currentFlashcard.media_url}
                       alt="Flashcard Media"
                       className="mt-4 max-w-full h-auto rounded shadow"
-                      width={500} // Dodaj odpowiednie wartości szerokości i wysokości
+                      width={500}
                       height={300}
                       objectFit="contain"
                     />
@@ -180,13 +248,13 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
               {/* Back Side */}
               <CardContent className="absolute w-full h-full p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] flex items-center justify-center">
                 <div className="max-h-full w-full overflow-y-auto scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent">
-                  <p className="text-xl font-semibold text-center">{visibleCard?.answer}</p>
-                  {visibleCard?.media_url && (
+                  <p className="text-xl font-semibold text-center">{currentFlashcard.answer}</p>
+                  {currentFlashcard.media_url && (
                     <Image
-                      src={visibleCard.media_url}
+                      src={currentFlashcard.media_url}
                       alt="Flashcard Media"
                       className="mt-4 max-w-full h-auto rounded shadow"
-                      width={500} // Dodaj odpowiednie wartości szerokości i wysokości
+                      width={500}
                       height={300}
                       objectFit="contain"
                     />
@@ -201,19 +269,19 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
             {isFlipped && (
               <div className="flex space-x-4">
                 <Button
-                  onClick={() => handleRating('hard')}
+                  onClick={() => recordReview(0)}
                   className="bg-red-500 hover:bg-red-600 text-white"
                 >
                   {t('hard')}
                 </Button>
                 <Button
-                  onClick={() => handleRating('good')}
+                  onClick={() => recordReview(3)}
                   className="bg-blue-300 hover:bg-blue-400 text-gray-800"
                 >
                   {t('good')}
                 </Button>
                 <Button
-                  onClick={() => handleRating('easy')}
+                  onClick={() => recordReview(5)}
                   className="bg-green-500 hover:bg-green-600 text-white"
                 >
                   {t('easy')}
@@ -221,6 +289,17 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
               </div>
             )}
           </div>
+
+          {/* Loading Indicator and Error Message */}
+          {isSubmitting && (
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span>{t('saving_review')}</span>
+            </div>
+          )}
+          {submitError && (
+            <p className="text-destructive">{submitError}</p>
+          )}
         </div>
       </div>
 

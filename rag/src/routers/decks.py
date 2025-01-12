@@ -7,13 +7,14 @@ import tempfile
 import sqlite3
 import json
 import csv
+from datetime import datetime, timezone
 
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, status, File, UploadFile
 from sqlalchemy.orm import Session, joinedload
 
-from ..models import Deck, Flashcard, User
-from ..schemas import DeckCreate, DeckRead
+from ..models import Deck, Flashcard, User, ExamResult, ExamAnswer, ExamResultAnswer, Exam, ExamQuestion
+from ..schemas import DeckCreate, DeckRead, ExamResultRead, ExamResultCreate
 from ..dependencies import get_db
 from ..auth import get_current_user
 

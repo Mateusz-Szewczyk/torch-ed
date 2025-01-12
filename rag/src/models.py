@@ -1,7 +1,7 @@
 # src/models.py
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, func, Float
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, func, Float, UniqueConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session
 from .database import Base
 from datetime import datetime
@@ -62,6 +62,29 @@ class Flashcard(Base):
     answer = Column(String, nullable=False)
     deck_id = Column(Integer, ForeignKey('decks.id'), nullable=False)
     deck = relationship("Deck", back_populates="flashcards")
+
+    study_records = relationship("StudyRecord", back_populates="flashcard", cascade="all, delete-orphan")
+    user_flashcards = relationship("UserFlashcard", back_populates="flashcard", cascade="all, delete-orphan")
+
+
+
+class UserFlashcard(Base):
+    __tablename__ = 'user_flashcards'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey('users.id_'))
+    flashcard_id = Column(Integer, ForeignKey('flashcards.id'))
+    ef = Column(Float, default=2.5)  # Easiness Factor
+    interval = Column(Integer, default=0)  # Interval in days
+    repetitions = Column(Integer, default=0)  # Number of repetitions
+    next_review = Column(DateTime, default=datetime.utcnow)  # Next review date
+
+    user = relationship("User", back_populates="user_flashcards")
+    flashcard = relationship("Flashcard", back_populates="user_flashcards")
+    study_records = relationship("StudyRecord", back_populates="user_flashcard", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'flashcard_id', name='uix_user_flashcard'),
+    )
 
 
 # Nowe modele związane z Egzaminami
@@ -150,3 +173,27 @@ class ExamResultAnswer(Base):
     exam_result = relationship("ExamResult", back_populates="answers")
     question = relationship("ExamQuestion")
     selected_answer = relationship("ExamAnswer")
+
+
+class StudySession(Base):
+    __tablename__ = 'study_sessions'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey('users.id_'))
+    deck_id = Column(Integer, ForeignKey('decks.id'))
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="study_sessions")
+    deck = relationship("Deck", back_populates="study_sessions")
+    study_records = relationship("StudyRecord", back_populates="session", cascade="all, delete-orphan")
+
+class StudyRecord(Base):
+    __tablename__ = 'study_records'
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey('study_sessions.id'))
+    user_flashcard_id = Column(Integer, ForeignKey('user_flashcards.id'))
+    rating = Column(Integer, nullable=True)  # Ocena użytkownika (0-5)
+    reviewed_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("StudySession", back_populates="study_records")
+    user_flashcard = relationship("UserFlashcard", back_populates="study_records")

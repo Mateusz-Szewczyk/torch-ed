@@ -72,3 +72,30 @@ interface ExamResultAnswerRead {
   is_correct: boolean;
   answer_time: string;
 }
+
+
+export interface UserFlashcard {
+  id: number;
+  flashcard: Flashcard;
+  ef: number;
+  interval: number;
+  repetitions: number;
+  next_review: string;
+}
+
+
+export interface StudySession {
+  id: number;
+  user_id: string;
+  deck_id: number;
+  started_at: string;
+  completed_at?: string;
+}
+
+export interface StudyRecord {
+  id: number;
+  session_id: number;
+  user_flashcard_id: number;
+  rating?: number;
+  reviewed_at: string;
+}

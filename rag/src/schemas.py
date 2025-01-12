@@ -28,6 +28,49 @@ class FlashcardRead(FlashcardBase):
     class Config:
         orm_mode = True
 
+class UserFlashcardRead(BaseModel):
+    id: int
+    flashcard: FlashcardRead
+    ef: float
+    interval: int
+    repetitions: int
+    next_review: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class StudySessionCreate(BaseModel):
+    deck_id: int
+
+class StudySessionRead(BaseModel):
+    id: int
+    user_id: str
+    deck_id: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+class StudyRecordCreate(BaseModel):
+    user_flashcard_id: int
+    rating: int  # 0 to 5
+
+class StudyRecordRead(BaseModel):
+    id: int
+    session_id: int
+    user_flashcard_id: int
+    rating: Optional[int] = None
+    reviewed_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class StudySessionUpdate(BaseModel):
+    completed_at: Optional[datetime] = None
+
+
 class DeckBase(BaseModel):
     name: str
     description: Optional[str] = None
@@ -219,3 +262,5 @@ class ExamResultRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+

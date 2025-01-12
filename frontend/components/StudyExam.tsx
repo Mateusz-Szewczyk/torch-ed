@@ -218,8 +218,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
       const result: ExamResultRead = await response.json();
       console.log('Wynik egzaminu został zapisany:', result);
 
-      // Opcjonalnie, możesz zaktualizować stan lub przekierować użytkownika
-      alert('Wynik egzaminu został zapisany pomyślnie!');
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error('Error submitting exam result:', error.message);
