@@ -23,11 +23,17 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False, default='user')
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Relacje do innych tabel:
-    user_flashcards = relationship("UserFlashcard", back_populates="user", cascade="all, delete-orphan")
-    study_sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
+    user_flashcards = relationship(
+        "UserFlashcard",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    study_sessions = relationship(
+        "StudySession",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
 
     @staticmethod
     def get_user(session: scoped_session, user_name: str) -> Optional['User'] | None:
-        user: Optional['User'] | None = session.query(User).filter_by(user_name=user_name).first()
-        return user
+        return session.query(User).filter_by(user_name=user_name).first()

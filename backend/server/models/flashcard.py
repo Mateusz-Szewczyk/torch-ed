@@ -35,7 +35,12 @@ class Flashcard(Base):
     answer = Column(String, nullable=False)
     deck_id = Column(Integer, ForeignKey('decks.id'), nullable=False)
 
-    deck = relationship("Deck", back_populates="flashcards")
-
-    study_records = relationship("StudyRecord", back_populates="flashcard", cascade="all, delete-orphan")
-    user_flashcards = relationship("UserFlashcard", back_populates="flashcard", cascade="all, delete-orphan")
+    deck = relationship(
+        "Deck",
+        back_populates="flashcards"
+    )
+    user_flashcards = relationship(
+        "UserFlashcard",
+        back_populates="flashcard",
+        cascade="all, delete-orphan"
+    )

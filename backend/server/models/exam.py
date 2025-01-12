@@ -19,12 +19,13 @@ class Exam(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    # Zmieniamy na Integer + ForeignKey do users.id_
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
 
-    # Relacja do pytań w egzaminie
-    questions = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")
-
+    questions = relationship(
+        "ExamQuestion",
+        back_populates="exam",
+        cascade="all, delete-orphan"
+    )
 
 class ExamQuestion(Base):
     __tablename__ = 'exam_questions'
@@ -33,11 +34,15 @@ class ExamQuestion(Base):
     text = Column(String, nullable=False)
     exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
 
-    # Relacja do egzaminu
-    exam = relationship("Exam", back_populates="questions")
-
-    # Relacja do odpowiedzi
-    answers = relationship("ExamAnswer", back_populates="question", cascade="all, delete-orphan")
+    exam = relationship(
+        "Exam",
+        back_populates="questions"
+    )
+    answers = relationship(
+        "ExamAnswer",
+        back_populates="question",
+        cascade="all, delete-orphan"
+    )
 
 
 class ExamAnswer(Base):
@@ -48,5 +53,7 @@ class ExamAnswer(Base):
     is_correct = Column(Boolean, nullable=False, default=False)
     question_id = Column(Integer, ForeignKey('exam_questions.id'), nullable=False)
 
-    # Relacja do pytania
-    question = relationship("ExamQuestion", back_populates="answers")
+    question = relationship(
+        "ExamQuestion",
+        back_populates="answers"
+    )
