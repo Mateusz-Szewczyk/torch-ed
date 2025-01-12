@@ -243,5 +243,9 @@
     "neutral": "Neutralny",
     "your_feedback": "Twoja opinia",
     "close": "Zamknij",
-    "loading_exams": "Ładowanie egzaminów..."
+    "loading_exams": "Ładowanie egzaminów...",
+    "no_answers_to_submit": "Brak odpowiedzi do wysłania.",
+    "save_attempt": "Zapisz próbę",
+    "submitting_results": "Wysyłanie wyników...",
+    "error_submitting_results": "Wystąpił błąd podczas wysyłania wyników."
 }

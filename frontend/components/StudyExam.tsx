@@ -5,7 +5,13 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronLeft, CheckCircle, XCircle, MessageCircle } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronLeft,
+  CheckCircle,
+  XCircle,
+  MessageCircle,
+} from 'lucide-react';
 import * as Slider from '@radix-ui/react-slider';
 import Chat from '@/components/Chat'; // <-- import czatu
 import { Loader2 } from 'lucide-react'; // Dodaj import Loader2
@@ -63,6 +69,12 @@ interface ExamResultAnswerRead {
   answer_time: string;
 }
 
+interface UserAnswer {
+  question_id: number;
+  selected_answer_id: number | null;
+  answer_time: string | null;
+}
+
 export function StudyExam({ exam, onExit }: StudyExamProps) {
   const { t } = useTranslation();
 
@@ -77,19 +89,24 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
   const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
   const [score, setScore] = useState<number>(0);
-  const [userAnswers, setUserAnswers] = useState<{
-    question_id: number;
-    selected_answer_id: number;
-    answer_time: string;
-  }[]>([]);
+  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
   const [isExamCompleted, setIsExamCompleted] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+
+  // Filtruj tylko odpowiedzi, które zostały udzielone
+  const answeredQuestions = userAnswers.filter(
+    (answer) => answer.selected_answer_id !== null
+  );
 
   // Funkcja losująca pytania
-  const selectRandomQuestions = (allQuestions: Question[], count: number): Question[] => {
+  const selectRandomQuestions = (
+    allQuestions: Question[],
+    count: number
+  ): Question[] => {
     const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, count);
   };
@@ -103,7 +120,10 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value)) {
-      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length);
+      const clampedValue = Math.min(
+        Math.max(value, 1),
+        exam.questions.length
+      );
       setNumQuestions(clampedValue);
     }
   };
@@ -112,14 +132,22 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
   const startExam = () => {
     const questions = selectRandomQuestions(exam.questions, numQuestions);
     setSelectedQuestions(questions);
-    setUserAnswers(Array(questions.length).fill(null));
+    setUserAnswers(
+      questions.map((q) => ({
+        question_id: q.id,
+        selected_answer_id: null,
+        answer_time: null,
+      }))
+    );
     setIsSelectionStep(false);
   };
 
   // Odpowiedź na pytanie
   const handleAnswerSelect = (answerId: number) => {
     const currentQuestion = selectedQuestions[currentQuestionIndex];
-    const selectedAnswer = currentQuestion.answers.find(a => a.id === answerId);
+    const selectedAnswer = currentQuestion.answers.find(
+      (a) => a.id === answerId
+    );
 
     const answerTime = new Date().toISOString(); // Zapisz czas odpowiedzi
 
@@ -132,11 +160,11 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     setUserAnswers(updatedUserAnswers);
 
     if (selectedAnswer && selectedAnswer.is_correct) {
-      setScore(prevScore => prevScore + 1);
+      setScore((prevScore) => prevScore + 1);
     }
 
     if (currentQuestionIndex < selectedQuestions.length - 1) {
-      setCurrentQuestionIndex(prevIndex => prevIndex + 1);
+      setCurrentQuestionIndex((prevIndex) => prevIndex + 1);
     } else {
       setIsExamCompleted(true);
     }
@@ -152,12 +180,18 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
 
   // Funkcja do przesyłania wyników egzaminu
   const submitExamResult = async () => {
+    if (answeredQuestions.length === 0) {
+      alert(t('no_answers_to_submit'));
+      return;
+    }
+
+    // Mapuj odpowiedzi do formatu wymaganego przez backend
     const examResult: ExamResultCreate = {
       exam_id: exam.id,
-      answers: userAnswers.map(answer => ({
+      answers: answeredQuestions.map((answer) => ({
         question_id: answer.question_id,
-        selected_answer_id: answer.selected_answer_id,
-        answer_time: answer.answer_time,
+        selected_answer_id: answer.selected_answer_id as number, // Bezpieczne rzutowanie, ponieważ filtrujemy null
+        answer_time: answer.answer_time as string,
       })),
     };
 
@@ -167,7 +201,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
 
       const response = await fetch(`${API_BASE_URL}/submit/`, {
         method: 'POST',
-        credentials: 'include',
+        credentials: 'include', // Upewnij się, że przesyłasz ciasteczka dla autoryzacji
         headers: {
           'Content-Type': 'application/json',
         },
@@ -176,7 +210,9 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Błąd podczas przesyłania wyników egzaminu.');
+        throw new Error(
+          errorData.detail || 'Błąd podczas przesyłania wyników egzaminu.'
+        );
       }
 
       const result: ExamResultRead = await response.json();
@@ -190,7 +226,9 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
         setSubmitError(error.message);
       } else {
         console.error('Unknown error submitting exam result');
-        setSubmitError('Wystąpił nieznany błąd podczas przesyłania wyników egzaminu.');
+        setSubmitError(
+          'Wystąpił nieznany błąd podczas przesyłania wyników egzaminu.'
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -202,7 +240,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     if (isExamCompleted) {
       submitExamResult();
     }
-  }, [isExamCompleted]);
+  }, [isExamCompleted]); // Usunięto submitExamResult z zależności, aby uniknąć nieskończonych pętli
 
   // ---------------
   // RENDEROWANIE
@@ -360,7 +398,8 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
               <div className="grid grid-cols-1 gap-4">
                 {currentQuestion.answers.map((answer) => {
                   const isSelected =
-                    userAnswers[currentQuestionIndex]?.selected_answer_id === answer.id;
+                    userAnswers[currentQuestionIndex]?.selected_answer_id ===
+                    answer.id;
                   const isCorrect = answer.is_correct;
 
                   return (
@@ -374,11 +413,17 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                           : 'outline'
                       }
                       onClick={() => {
-                        if (userAnswers[currentQuestionIndex] === undefined) {
+                        if (
+                          userAnswers[currentQuestionIndex]?.selected_answer_id ===
+                          null
+                        ) {
                           handleAnswerSelect(answer.id);
                         }
                       }}
-                      disabled={userAnswers[currentQuestionIndex] !== undefined}
+                      disabled={
+                        userAnswers[currentQuestionIndex]?.selected_answer_id !==
+                        null
+                      }
                       className="w-full flex items-center justify-center space-x-2"
                     >
                       {isSelected && isCorrect && (
@@ -393,7 +438,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 })}
               </div>
             </div>
-            {/* Nawigacja pytaniami */}
+            {/* Nawigacja pytaniami i przycisk "Zapisz podejście" */}
             <div className="flex justify-between mt-6">
               <Button
                 onClick={() =>
@@ -406,28 +451,56 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 <ChevronLeft className="h-5 w-5" />
                 <span>{t('previous')}</span>
               </Button>
-              <Button
-                variant="default"
-                onClick={() => {
-                  if (userAnswers[currentQuestionIndex] !== undefined) {
-                    if (currentQuestionIndex < selectedQuestions.length - 1) {
-                      setCurrentQuestionIndex(currentQuestionIndex + 1);
-                    } else {
-                      setIsExamCompleted(true);
+              <div className="flex space-x-2">
+                <Button
+                  variant="secondary"
+                  onClick={submitExamResult}
+                  disabled={isSubmitting || answeredQuestions.length === 0}
+                  className="flex items-center space-x-2"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  <span>{t('save_attempt')}</span>
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    if (
+                      userAnswers[currentQuestionIndex]?.selected_answer_id !==
+                      null
+                    ) {
+                      if (currentQuestionIndex < selectedQuestions.length - 1) {
+                        setCurrentQuestionIndex(currentQuestionIndex + 1);
+                      } else {
+                        setIsExamCompleted(true);
+                      }
                     }
+                  }}
+                  disabled={
+                    userAnswers[currentQuestionIndex]?.selected_answer_id === null
                   }
-                }}
-                disabled={userAnswers[currentQuestionIndex] === undefined}
-                className="flex items-center space-x-2"
-              >
-                <span>
-                  {currentQuestionIndex < selectedQuestions.length - 1
-                    ? t('next')
-                    : t('finish')}
-                </span>
-                <ChevronRight className="h-5 w-5" />
-              </Button>
+                  className="flex items-center space-x-2"
+                >
+                  <span>
+                    {currentQuestionIndex < selectedQuestions.length - 1
+                      ? t('next')
+                      : t('finish')}
+                  </span>
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
+            {/* Wskaźnik ładowania i komunikat o błędzie */}
+            {isSubmitting && (
+              <div className="flex items-center justify-center space-x-2 mt-4">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span>{t('submitting_results')}</span>
+              </div>
+            )}
+            {submitError && (
+              <p className="text-destructive mt-4">
+                {t('error_submitting_results')}: {submitError}
+              </p>
+            )}
             {/* Wyjście z egzaminu */}
             <Button
               variant="destructive"
