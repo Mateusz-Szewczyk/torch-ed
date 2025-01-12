@@ -89,7 +89,7 @@ app.include_router(query.router, prefix="/api/query", tags=["Query"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])
 app.include_router(exams.router, prefix="/api/exams", tags=["Exams"])
 app.include_router(study_sessions.router, prefix="/api/study_sessions", tags=["Study Sessions"])
-app.include_router(user_flashcards.router, prefix="/user_flashcards", tags=["User Flashcards"])
+app.include_router(user_flashcards.router, prefix="/api/user_flashcards", tags=["User Flashcards"])
 
 # Uruchomienie aplikacji
 if __name__ == "__main__":
