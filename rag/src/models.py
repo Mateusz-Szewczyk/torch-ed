@@ -1,7 +1,10 @@
 # src/models.py
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, func, Float, UniqueConstraint
+from sqlalchemy import (
+    Column, Integer, String, DateTime, ForeignKey, Boolean,
+    func, Float, UniqueConstraint
+)
 from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session
 from .database import Base
 from datetime import datetime
@@ -11,8 +14,13 @@ class Conversation(Base):
     __tablename__ = 'conversations'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String, index=True, nullable=False)  # Użytkownik, do którego należy rozmowa
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)  # Data i czas rozpoczęcia rozmowy
+    # Zmieniamy na Integer, klucz obcy do users.id_ (jeśli chcesz relację do User).
+    # Jeżeli konwersacje rzeczywiście mają odwzorowywać user_id -> users.id_,
+    # dodaj ForeignKey('users.id_'). Jeśli to pole nie jest kluczem obcym, możesz je pozostawić,
+    # jednak większość przypadków zakłada związek z User.
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     title = Column(String, nullable=True)
 
     # Relacja do wiadomości
@@ -22,7 +30,7 @@ class Conversation(Base):
 class Message(Base):
     __tablename__ = 'messages'
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     conversation_id = Column(Integer, ForeignKey('conversations.id'))
     sender = Column(String, nullable=False)
     text = Column(String, nullable=False)
@@ -37,7 +45,8 @@ class ORMFile(Base):
     __tablename__ = 'files'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String, index=True, nullable=False)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     description = Column(String, nullable=True)
@@ -48,10 +57,14 @@ class Deck(Base):
     __tablename__ = 'decks'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String, index=True, nullable=False)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+
     flashcards = relationship("Flashcard", back_populates="deck", cascade="all, delete-orphan")
+    # Jeżeli deck jest używany w StudySession, warto mieć relację odwrotną
+    study_sessions = relationship("StudySession", back_populates="deck", cascade="all, delete-orphan")
 
 
 class Flashcard(Base):
@@ -61,18 +74,21 @@ class Flashcard(Base):
     question = Column(String, nullable=False)
     answer = Column(String, nullable=False)
     deck_id = Column(Integer, ForeignKey('decks.id'), nullable=False)
+
     deck = relationship("Deck", back_populates="flashcards")
 
     study_records = relationship("StudyRecord", back_populates="flashcard", cascade="all, delete-orphan")
     user_flashcards = relationship("UserFlashcard", back_populates="flashcard", cascade="all, delete-orphan")
 
 
-
 class UserFlashcard(Base):
     __tablename__ = 'user_flashcards'
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, ForeignKey('users.id_'))
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True)
     flashcard_id = Column(Integer, ForeignKey('flashcards.id'))
+
     ef = Column(Float, default=2.5)  # Easiness Factor
     interval = Column(Integer, default=0)  # Interval in days
     repetitions = Column(Integer, default=0)  # Number of repetitions
@@ -96,7 +112,8 @@ class Exam(Base):
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    user_id = Column(String, index=True, nullable=False)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
 
     # Relacja do pytań w egzaminie
     questions = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")
@@ -139,25 +156,33 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False, default='user')
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Relacje do innych tabel:
+    user_flashcards = relationship("UserFlashcard", back_populates="user", cascade="all, delete-orphan")
+    study_sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
+
     @staticmethod
     def get_user(session: scoped_session, user_name: str) -> Optional['User'] | None:
         user: Optional['User'] | None = session.query(User).filter_by(user_name=user_name).first()
         return user
+
 
 class ExamResult(Base):
     __tablename__ = 'exam_results'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
-    user_id = Column(String, index=True, nullable=False)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     score = Column(Float, nullable=True)  # Wynik procentowy
 
     # Relacja do egzaminu
     exam = relationship("Exam", backref="results")
+
     # Relacja do odpowiedzi użytkownika
     answers = relationship("ExamResultAnswer", back_populates="exam_result", cascade="all, delete-orphan")
+
 
 class ExamResultAnswer(Base):
     __tablename__ = 'exam_result_answers'
@@ -177,8 +202,9 @@ class ExamResultAnswer(Base):
 
 class StudySession(Base):
     __tablename__ = 'study_sessions'
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String, ForeignKey('users.id_'))
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True)
     deck_id = Column(Integer, ForeignKey('decks.id'))
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
@@ -187,9 +213,10 @@ class StudySession(Base):
     deck = relationship("Deck", back_populates="study_sessions")
     study_records = relationship("StudyRecord", back_populates="session", cascade="all, delete-orphan")
 
+
 class StudyRecord(Base):
     __tablename__ = 'study_records'
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     session_id = Column(Integer, ForeignKey('study_sessions.id'))
     user_flashcard_id = Column(Integer, ForeignKey('user_flashcards.id'))
     rating = Column(Integer, nullable=True)  # Ocena użytkownika (0-5)
