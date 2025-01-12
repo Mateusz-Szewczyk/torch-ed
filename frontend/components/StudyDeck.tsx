@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import Chat from '@/components/Chat';
 import Image from 'next/image';
 import { Flashcard, Deck, StudySession, StudyRecord, UserFlashcard } from '@/types';
-import { fetchJson } from '@/utils/fetchJson';
+import { fetchJson } from '@/utils/fetchJson'; // import własnej funkcji fetchJson
 
 interface StudyDeckProps {
   deck: Deck;
@@ -38,13 +38,18 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   useEffect(() => {
     const initializeSession = async () => {
       try {
-        const response = await fetchJson<StudySession>(`${API_BASE_URL}/study_sessions/`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ deck_id: deck.id }),
-        });
+        // Tworzymy nową sesję nauki (POST /study_sessions)
+        const response = await fetchJson<StudySession>(
+          `${API_BASE_URL}/study_sessions/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ deck_id: deck.id }),
+            credentials: 'include',  // <--- dopilnuj, by przesyłać ciasteczka
+          }
+        );
         setSessionId(response.id);
         fetchNextFlashcard(response.id);
       } catch (error) {
@@ -62,9 +67,14 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   // Funkcja do pobrania następnej fiszki
   const fetchNextFlashcard = async (sessionId: number) => {
     try {
-      const flashcard = await fetchJson<Flashcard>(`${API_BASE_URL}/study_sessions/next_flashcard/${sessionId}/`, {
-        method: 'GET',
-      });
+      // GET /study_sessions/next_flashcard/{sessionId}
+      const flashcard = await fetchJson<Flashcard>(
+        `${API_BASE_URL}/study_sessions/next_flashcard/${sessionId}/`,
+        {
+          method: 'GET',
+          credentials: 'include', // <--- przesyłaj ciasteczka
+        }
+      );
       setCurrentFlashcard(flashcard);
       setIsFlipped(false);
     } catch (error) {
@@ -85,21 +95,30 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       setIsSubmitting(true);
       setSubmitError(null);
 
-      // Pobierz UserFlashcard ID dla bieżącej fiszki
-      const userFlashcard = await fetchJson<UserFlashcard>(`${API_BASE_URL}/user_flashcards/by_flashcard/${currentFlashcard.id}/`, {
-        method: 'GET',
-      });
+      // Pobierz UserFlashcard ID dla bieżącej fiszki (GET /user_flashcards/by_flashcard/{flashcardId})
+      const userFlashcard = await fetchJson<UserFlashcard>(
+        `${API_BASE_URL}/user_flashcards/by_flashcard/${currentFlashcard.id}/`,
+        {
+          method: 'GET',
+          credentials: 'include', // <--- przesyłaj ciasteczka
+        }
+      );
 
-      await fetchJson<StudyRecord>(`${API_BASE_URL}/study_sessions/record_review/${sessionId}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_flashcard_id: userFlashcard.id,
-          rating: rating,
-        }),
-      });
+      // Zarejestruj ocenę (POST /study_sessions/record_review/{sessionId})
+      await fetchJson<StudyRecord>(
+        `${API_BASE_URL}/study_sessions/record_review/${sessionId}/`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // <--- przesyłaj ciasteczka
+          body: JSON.stringify({
+            user_flashcard_id: userFlashcard.id,
+            rating: rating,
+          }),
+        }
+      );
 
       // Pobierz następną fiszkę
       fetchNextFlashcard(sessionId);
@@ -123,14 +142,19 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
     try {
       setIsSubmitting(true);
       setSubmitError(null);
-      // Tworzenie nowej sesji
-      const response = await fetchJson<StudySession>(`${API_BASE_URL}/study_sessions/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ deck_id: deck.id }),
-      });
+
+      // Tworzenie nowej sesji (POST /study_sessions)
+      const response = await fetchJson<StudySession>(
+        `${API_BASE_URL}/study_sessions/`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include', // <--- przesyłaj ciasteczka
+          body: JSON.stringify({ deck_id: deck.id }),
+        }
+      );
       setSessionId(response.id);
       fetchNextFlashcard(response.id);
     } catch (error) {
@@ -146,11 +170,12 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
     }
   };
 
-  // Flipping flashcard
+  // Obracanie karty
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
   };
 
+  // Jeśli nie ma sessionId => sesja w trakcie inicjalizacji
   if (!sessionId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
@@ -160,6 +185,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
     );
   }
 
+  // Jeśli nie ma currentFlashcard => brak fiszek (koniec nauki?)
   if (!currentFlashcard) {
     return (
       <div className="h-screen flex items-center justify-center bg-background p-4">
@@ -293,7 +319,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
             )}
           </div>
 
-          {/* Loading Indicator and Error Message */}
+          {/* Loading Indicator & Error Message */}
           {isSubmitting && (
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
