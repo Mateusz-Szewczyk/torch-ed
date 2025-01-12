@@ -2,12 +2,12 @@ import os
 import redis
 from flask import Flask
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from flask_cors import CORS
 
 from .config import Config, TestConfig
-from .models.base import Base
+from .models import *
 
 
 load_dotenv()
