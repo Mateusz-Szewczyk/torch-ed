@@ -17,6 +17,9 @@ interface StudyDeckProps {
   onExit: () => void;
 }
 
+// Pobieramy z env:
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8000/api';
+
 export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   const { t } = useTranslation();
 
@@ -35,7 +38,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   useEffect(() => {
     const initializeSession = async () => {
       try {
-        const response = await fetchJson<StudySession>('/study_sessions/', {
+        const response = await fetchJson<StudySession>(`${API_BASE_URL}/study_sessions/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -59,7 +62,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
   // Funkcja do pobrania następnej fiszki
   const fetchNextFlashcard = async (sessionId: number) => {
     try {
-      const flashcard = await fetchJson<Flashcard>(`/study_sessions/next_flashcard/${sessionId}/`, {
+      const flashcard = await fetchJson<Flashcard>(`${API_BASE_URL}/study_sessions/next_flashcard/${sessionId}/`, {
         method: 'GET',
       });
       setCurrentFlashcard(flashcard);
@@ -83,11 +86,11 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       setSubmitError(null);
 
       // Pobierz UserFlashcard ID dla bieżącej fiszki
-      const userFlashcard = await fetchJson<UserFlashcard>(`/user_flashcards/by_flashcard/${currentFlashcard.id}/`, {
+      const userFlashcard = await fetchJson<UserFlashcard>(`${API_BASE_URL}/user_flashcards/by_flashcard/${currentFlashcard.id}/`, {
         method: 'GET',
       });
 
-      await fetchJson<StudyRecord>(`/study_sessions/record_review/${sessionId}/`, {
+      await fetchJson<StudyRecord>(`${API_BASE_URL}/study_sessions/record_review/${sessionId}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,7 +101,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
         }),
       });
 
-      // Pobierz następna fiszka
+      // Pobierz następną fiszkę
       fetchNextFlashcard(sessionId);
     } catch (error) {
       if (error instanceof Error) {
@@ -121,7 +124,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       setIsSubmitting(true);
       setSubmitError(null);
       // Tworzenie nowej sesji
-      const response = await fetchJson<StudySession>('/study_sessions/', {
+      const response = await fetchJson<StudySession>(`${API_BASE_URL}/study_sessions/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
