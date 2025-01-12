@@ -34,7 +34,7 @@ def create_study_session(
 
     deck = db.query(Deck).filter(
         Deck.id == session_create.deck_id,
-        Deck.user_id == str(current_user.id_)
+        Deck.user_id == current_user.id_  # Usunięto konwersję do str
     ).first()
     if not deck:
         logger.error(f"Deck z ID={session_create.deck_id} nie znaleziony dla użytkownika.")
@@ -42,7 +42,7 @@ def create_study_session(
 
     # Inicjalizacja UserFlashcard dla użytkownika, jeśli jeszcze nie istnieje
     user_flashcards = db.query(UserFlashcard).filter(
-        UserFlashcard.user_id == str(current_user.id_),
+        UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
 
@@ -90,7 +90,7 @@ def get_next_flashcard(
 
     session = db.query(StudySession).filter(
         StudySession.id == session_id,
-        StudySession.user_id == str(current_user.id_)
+        StudySession.user_id == current_user.id_
     ).first()
     if not session:
         logger.error(f"Sesja z ID={session_id} nie znaleziono dla użytkownika.")
@@ -101,7 +101,7 @@ def get_next_flashcard(
     user_flashcard = (
         db.query(UserFlashcard)
         .filter(
-            UserFlashcard.user_id == str(current_user.id_),
+            UserFlashcard.user_id == current_user.id_,
             UserFlashcard.flashcard_id.in_([fc.id for fc in session.deck.flashcards]),
             UserFlashcard.next_review <= today
         )
@@ -114,6 +114,10 @@ def get_next_flashcard(
         raise HTTPException(status_code=404, detail="Nie ma więcej fiszek do nauki na dziś.")
 
     flashcard = db.query(Flashcard).filter(Flashcard.id == user_flashcard.flashcard_id).first()
+
+    if not flashcard:
+        logger.error(f"Fiszka z ID={user_flashcard.flashcard_id} nie istnieje.")
+        raise HTTPException(status_code=404, detail="Fiszka nie znaleziona.")
 
     logger.debug(f"Pobrano fiszkę ID={flashcard.id} do nauki.")
     return flashcard  # FastAPI automatycznie zrzutuje to do FlashcardRead (dzięki orm_mode).
@@ -136,7 +140,7 @@ def record_flashcard_review(
 
     session = db.query(StudySession).filter(
         StudySession.id == session_id,
-        StudySession.user_id == str(current_user.id_)
+        StudySession.user_id == current_user.id_
     ).first()
     if not session:
         logger.error(f"Sesja z ID={session_id} nie znaleziono dla użytkownika.")
@@ -144,7 +148,7 @@ def record_flashcard_review(
 
     user_flashcard = db.query(UserFlashcard).filter(
         UserFlashcard.id == record_create.user_flashcard_id,
-        UserFlashcard.user_id == str(current_user.id_),
+        UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in session.deck.flashcards])
     ).first()
     if not user_flashcard:
@@ -201,7 +205,7 @@ def get_study_sessions(
     Pobiera wszystkie sesje nauki użytkownika.
     """
     logger.info(f"Pobieranie wszystkich sesji nauki dla user_id={current_user.id_}")
-    sessions = db.query(StudySession).filter(StudySession.user_id == str(current_user.id_)).all()
+    sessions = db.query(StudySession).filter(StudySession.user_id == current_user.id_).all()
     return sessions
 
 
@@ -217,7 +221,7 @@ def get_study_records(
     logger.info(f"Pobieranie rekordów przeglądu dla sesji_id={session_id} przez user_id={current_user.id_}")
     session = db.query(StudySession).filter(
         StudySession.id == session_id,
-        StudySession.user_id == str(current_user.id_)
+        StudySession.user_id == current_user.id_
     ).first()
     if not session:
         logger.error(f"Sesja z ID={session_id} nie znaleziono dla użytkownika.")

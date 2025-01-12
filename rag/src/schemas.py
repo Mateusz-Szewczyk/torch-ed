@@ -45,7 +45,7 @@ class StudySessionCreate(BaseModel):
 
 class StudySessionRead(BaseModel):
     id: int
-    user_id: str
+    user_id: int  # Zmieniono z str na int
     deck_id: int
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -84,10 +84,11 @@ class DeckCreate(DeckBase):
             raise ValueError('Deck name cannot be empty')
         return v
 
-class DeckRead(DeckBase):
+class DeckRead(BaseModel):
     id: int
-    # user_id is read-only, so we can show it in DeckRead
-    user_id: str
+    user_id: int  # Zmieniono z str na int
+    name: str
+    description: Optional[str] = None
     flashcards: List[FlashcardRead]
 
     class Config:
@@ -105,7 +106,7 @@ class UploadedFileRead(BaseModel):
 class UploadResponse(BaseModel):
     message: str
     uploaded_files: List[UploadedFileRead]  # Poprawnie zdefiniowany UploadedFileRead
-    user_id: str
+    user_id: int  # Zmieniono z str na int
     file_name: str
     file_description: Optional[str]
     category: Optional[str]
@@ -115,12 +116,12 @@ class QueryRequest(BaseModel):
     conversation_id: int
 
 class QueryResponse(BaseModel):
-    user_id: str
+    user_id: int  # Zmieniono z str na int
     query: str
     answer: str
 
 class DeleteKnowledgeRequest(BaseModel):
-    user_id: str
+    user_id: int  # Zmieniono z str na int
     file_name: str
 
 class DeleteKnowledgeResponse(BaseModel):
@@ -128,7 +129,7 @@ class DeleteKnowledgeResponse(BaseModel):
     deleted_from_vector_store: bool
 
 class ListFilesRequest(BaseModel):
-    user_id: str
+    user_id: int  # Zmieniono z str na int
 
 class ConversationBase(BaseModel):
     user_id: int
@@ -137,8 +138,10 @@ class ConversationBase(BaseModel):
 class ConversationCreate(ConversationBase):
     pass
 
-class ConversationRead(ConversationBase):
+class ConversationRead(BaseModel):
     id: int
+    user_id: int  # Zmieniono z int na int (bez zmian)
+    title: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -171,8 +174,10 @@ class ExamAnswerCreate(BaseModel):
     text: str = Field(..., example="3.14")
     is_correct: bool = Field(..., example=True)
 
-class ExamAnswerRead(ExamAnswerCreate):
+class ExamAnswerRead(BaseModel):
     id: int
+    text: str
+    is_correct: bool
 
     class Config:
         orm_mode = True
@@ -249,18 +254,16 @@ class ExamResultAnswerRead(BaseModel):
     answer_time: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class ExamResultRead(BaseModel):
     id: int
     exam_id: int
-    user_id: str
+    user_id: int  # Zmieniono z str na int
     started_at: datetime
     completed_at: Optional[datetime]
     score: Optional[float]
     answers: List[ExamResultAnswerRead]
 
     class Config:
-        from_attributes = True
-
-
+        orm_mode = True
