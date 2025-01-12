@@ -48,7 +48,7 @@ def create_study_session(
     # Szukamy Deck należącego do user_id (Integer!)
     deck = db.query(Deck).filter(
         Deck.id == session_create.deck_id,
-        Deck.user_id == current_user.id_  # <-- int to int
+        Deck.user_id == str(current_user.id_)
     ).first()
     if not deck:
         logger.error(f"Deck z ID={session_create.deck_id} nie znaleziony dla user_id={current_user.id_}.")
