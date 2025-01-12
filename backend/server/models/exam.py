@@ -1,53 +1,52 @@
-from typing import List
 from sqlalchemy import (
     Integer,
     String,
     DateTime,
     ForeignKey,
-    Boolean,
+    Boolean, Column,
 )
 from sqlalchemy.orm import (
-    mapped_column,
-    Mapped,
     relationship,
 )
-from datetime import datetime, timezone
+from datetime import datetime
 from .base import Base
 
 
 class Exam(Base):
     __tablename__ = 'exams'
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=True)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Zmieniamy na Integer + ForeignKey do users.id_
+    user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
 
     # Relacja do pytań w egzaminie
-    questions: Mapped[List['ExamQuestion']] = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")
+    questions = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")
 
 
 class ExamQuestion(Base):
     __tablename__ = 'exam_questions'
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
-    text: Mapped[str] = mapped_column(String, nullable=False)
-    exam_id: Mapped[int] = mapped_column(Integer, ForeignKey('exams.id'), nullable=False)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    text = Column(String, nullable=False)
+    exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
 
     # Relacja do egzaminu
-    exam: Mapped[List['Exam']] = relationship("Exam", back_populates="questions")
+    exam = relationship("Exam", back_populates="questions")
 
     # Relacja do odpowiedzi
-    answers: Mapped[List['ExamAnswer']] = relationship("ExamAnswer", back_populates="question", cascade="all, delete-orphan")
+    answers = relationship("ExamAnswer", back_populates="question", cascade="all, delete-orphan")
 
 
 class ExamAnswer(Base):
     __tablename__ = 'exam_answers'
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
-    text: Mapped[str] = mapped_column(String, nullable=False)
-    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    question_id: Mapped[int] = mapped_column(Integer, ForeignKey('exam_questions.id'), nullable=False)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    text = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=False, default=False)
+    question_id = Column(Integer, ForeignKey('exam_questions.id'), nullable=False)
 
     # Relacja do pytania
-    question: Mapped[List['ExamQuestion']] = relationship("ExamQuestion", back_populates="answers")
+    question = relationship("ExamQuestion", back_populates="answers")

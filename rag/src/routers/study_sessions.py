@@ -51,7 +51,7 @@ def create_study_session(
     for flashcard in deck.flashcards:
         if flashcard.id not in existing_flashcard_ids:
             new_uf = UserFlashcard(
-                user_id=str(current_user.id_),
+                user_id=current_user.id_,
                 flashcard_id=flashcard.id,
                 ef=2.5,
                 interval=0,
@@ -65,7 +65,7 @@ def create_study_session(
 
     # Tworzenie nowej sesji
     new_session = StudySession(
-        user_id=str(current_user.id_),
+        user_id=current_user.id_,
         deck_id=deck.id,
         started_at=datetime.utcnow()
     )
