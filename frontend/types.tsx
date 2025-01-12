@@ -43,3 +43,32 @@ export interface Message {
   isNew?: boolean;
   isError?: boolean;
 }
+
+interface ExamResultAnswerCreate {
+  question_id: number;
+  selected_answer_id: number;
+  answer_time: string; // ISO string
+}
+
+interface ExamResultCreate {
+  exam_id: number;
+  answers: ExamResultAnswerCreate[];
+}
+
+interface ExamResultRead {
+  id: number;
+  exam_id: number;
+  user_id: string;
+  started_at: string;
+  completed_at: string | null;
+  score: number | null;
+  answers: ExamResultAnswerRead[];
+}
+
+interface ExamResultAnswerRead {
+  id: number;
+  question_id: number;
+  selected_answer_id: number;
+  is_correct: boolean;
+  answer_time: string;
+}

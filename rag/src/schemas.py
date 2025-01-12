@@ -187,3 +187,35 @@ class ExamUpdate(BaseModel):
             if len(v) == 0:
                 raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
         return v
+
+
+class ExamResultAnswerCreate(BaseModel):
+    question_id: int
+    selected_answer_id: int
+    answer_time: datetime
+
+class ExamResultCreate(BaseModel):
+    exam_id: int
+    answers: List[ExamResultAnswerCreate]
+
+class ExamResultAnswerRead(BaseModel):
+    id: int
+    question_id: int
+    selected_answer_id: int
+    is_correct: bool
+    answer_time: datetime
+
+    class Config:
+        from_attributes = True
+
+class ExamResultRead(BaseModel):
+    id: int
+    exam_id: int
+    user_id: str
+    started_at: datetime
+    completed_at: Optional[datetime]
+    score: Optional[float]
+    answers: List[ExamResultAnswerRead]
+
+    class Config:
+        from_attributes = True

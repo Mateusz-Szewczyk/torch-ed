@@ -1,7 +1,7 @@
 # src/models.py
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, func
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, func, Float
 from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session
 from .database import Base
 from datetime import datetime
@@ -120,3 +120,33 @@ class User(Base):
     def get_user(session: scoped_session, user_name: str) -> Optional['User'] | None:
         user: Optional['User'] | None = session.query(User).filter_by(user_name=user_name).first()
         return user
+
+class ExamResult(Base):
+    __tablename__ = 'exam_results'
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
+    user_id = Column(String, index=True, nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    score = Column(Float, nullable=True)  # Wynik procentowy
+
+    # Relacja do egzaminu
+    exam = relationship("Exam", backref="results")
+    # Relacja do odpowiedzi użytkownika
+    answers = relationship("ExamResultAnswer", back_populates="exam_result", cascade="all, delete-orphan")
+
+class ExamResultAnswer(Base):
+    __tablename__ = 'exam_result_answers'
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    exam_result_id = Column(Integer, ForeignKey('exam_results.id'), nullable=False)
+    question_id = Column(Integer, ForeignKey('exam_questions.id'), nullable=False)
+    selected_answer_id = Column(Integer, ForeignKey('exam_answers.id'), nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+    answer_time = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relacje
+    exam_result = relationship("ExamResult", back_populates="answers")
+    question = relationship("ExamQuestion")
+    selected_answer = relationship("ExamAnswer")
