@@ -246,7 +246,7 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int):
     logger.debug(f"Next review scheduled for {user_flashcard.next_review}")
 
 
-@router.post("/bulk_record", status_code=201)
+@router.post("/bulk_record", response_model=dict, status_code=201)
 def bulk_record(
     data: BulkRecordData,
     db: Session = Depends(get_db),
@@ -260,7 +260,7 @@ def bulk_record(
     # -- (1) Validate deck ownership
     deck = db.query(Deck).filter(
         Deck.id == data.deck_id,
-        cast(Deck.user_id, Integer) == current_user.id_
+        Deck.user_id == current_user.id_
     ).first()
     if not deck:
         logger.error(f"Deck id={data.deck_id} not found or does not belong to user_id={current_user.id_}")
@@ -288,9 +288,34 @@ def bulk_record(
     ).all()
     logger.debug(f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
 
+    # Mapowanie flashcard_id -> UserFlashcard
     uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
 
-    # -- (4) Dla każdej oceny twórz StudyRecord & aktualizuj SM2
+    # -- (4) Inicjalizacja brakujących UserFlashcard
+    missing_flashcard_ids = [fc.id for fc in deck.flashcards if fc.id not in uf_map]
+    if missing_flashcard_ids:
+        logger.info(f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
+        new_ufs = []
+        for fc_id in missing_flashcard_ids:
+            new_uf = UserFlashcard(
+                user_id=current_user.id_,
+                flashcard_id=fc_id,
+                ef=2.5,
+                interval=0,
+                repetitions=0,
+                next_review=datetime.utcnow()
+            )
+            db.add(new_uf)
+            new_ufs.append(new_uf)
+            logger.debug(f"Added new UserFlashcard: {new_uf}")
+        db.flush()  # Persist new UserFlashcards
+        # Aktualizuj mapę
+        user_flashcards += new_ufs
+        for uf in new_ufs:
+            uf_map[uf.flashcard_id] = uf
+        logger.info(f"Persisted {len(new_ufs)} new UserFlashcard entries.")
+
+    # -- (5) Dla każdej oceny twórz StudyRecord & aktualizuj SM2
     for item in data.ratings:
         uf = uf_map.get(item.flashcard_id)
         if not uf:
@@ -308,7 +333,7 @@ def bulk_record(
         db.add(study_record)
         logger.debug(f"Added StudyRecord: {study_record}")
 
-        # zaktualizuj EF, interval itd.
+        # Zaktualizuj EF, interval itd.
         _update_sm2(uf, item.rating)
         logger.debug(f"Updated UserFlashcard after SM2: {uf}")
 
@@ -316,7 +341,7 @@ def bulk_record(
         db.add(uf)
 
     try:
-        # flush + commit
+        # Flush + commit
         db.flush()
         db.commit()
         logger.info(f"Bulk record saved. session_id={new_session.id}")

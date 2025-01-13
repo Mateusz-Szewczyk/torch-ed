@@ -45,7 +45,7 @@ async def query_knowledge(
     Odpowiada na zapytania użytkownika, opierając się na agent_response().
     user_id pobieramy z current_user, a conversation_id z requestu.
     """
-    user_id = str(current_user.id_)  # Dekodowane z tokenu
+    user_id = current_user.id_  # Dekodowane z tokenu
     query = request.query
     conversation_id = request.conversation_id
 
