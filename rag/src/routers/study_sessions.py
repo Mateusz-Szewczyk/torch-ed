@@ -1,33 +1,34 @@
-# src/routers/study_sessions.py
-
-import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from typing import List
+import logging
 
-from ..models import StudySession, StudyRecord, UserFlashcard, Flashcard, Deck
-from ..schemas import (
-    StudySessionCreate, StudySessionRead,
-    StudyRecordCreate, StudyRecordRead,
-    FlashcardRead
-)
 from ..dependencies import get_db
 from ..auth import get_current_user
-from ..models import User
+from ..models import (
+    StudySession, StudyRecord, UserFlashcard,
+    Flashcard, Deck, User
+)
+from ..schemas import (
+    StudySessionCreate, StudySessionRead,
+    StudyRecordCreate, StudyRecordRead, FlashcardRead
+)
 from pydantic import BaseModel
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Modele do hurtowego zapisu
+
 class BulkRatingItem(BaseModel):
+    """Single rating item for bulk SM2 update."""
     flashcard_id: int
     rating: int
     answered_at: datetime
 
+
 class BulkRecordData(BaseModel):
+    """The shape of the JSON for bulk_record."""
     deck_id: int
     ratings: List[BulkRatingItem]
 
@@ -39,19 +40,18 @@ def create_study_session(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Tworzy nową sesję nauki dla użytkownika i wybranego decka.
-    (Opcjonalne, jeśli ktoś chce natychmiastowy tryb SM2)
+    Creates a new study session for the given deck (optional immediate SM2 usage).
     """
-    logger.info(f"Tworzenie sesji nauki deck_id={session_create.deck_id}, user_id={current_user.id_}")
+    logger.info(f"Creating study session for deck_id={session_create.deck_id}, user_id={current_user.id_}")
 
     deck = db.query(Deck).filter(
         Deck.id == session_create.deck_id,
-        Deck.user_id == str(current_user.id_)
+        Deck.user_id == str(current_user.id_)  # watch out for str vs int mismatch
     ).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck nie znaleziony")
+        raise HTTPException(status_code=404, detail="Deck not found.")
 
-    # Inicjalizacja userFlashcards
+    # Initialize userFlashcards if they don’t exist
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
@@ -88,7 +88,7 @@ def get_next_flashcard(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Pobiera następną fiszkę do nauki w trybie natychmiastowym.
+    Gets the next flashcard for immediate SM2 usage (optional endpoint).
     """
     logger.info(f"next_flashcard session={session_id}, user_id={current_user.id_}")
 
@@ -97,11 +97,11 @@ def get_next_flashcard(
         StudySession.user_id == current_user.id_
     ).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sesja nie znaleziona")
+        raise HTTPException(status_code=404, detail="Session not found.")
 
     deck = session.deck
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck nie znaleziony")
+        raise HTTPException(status_code=404, detail="Deck not found.")
 
     now = datetime.utcnow()
     uf = db.query(UserFlashcard).filter(
@@ -111,11 +111,11 @@ def get_next_flashcard(
     ).order_by(UserFlashcard.next_review.asc()).first()
 
     if not uf:
-        raise HTTPException(status_code=404, detail="Nie ma więcej fiszek do nauki na dziś.")
+        raise HTTPException(status_code=404, detail="No more cards to study today.")
 
     flashcard = db.query(Flashcard).filter(Flashcard.id == uf.flashcard_id).first()
     if not flashcard:
-        raise HTTPException(status_code=404, detail="Fiszka nie znaleziona")
+        raise HTTPException(status_code=404, detail="Flashcard not found.")
     return flashcard
 
 
@@ -127,7 +127,7 @@ def record_flashcard_review(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Natychmiastowy zapis oceny jednej fiszki
+    Saves rating for a single flashcard in immediate mode.
     """
     logger.info(f"record_review session={session_id}, user_id={current_user.id_}, rating={record_create.rating}")
 
@@ -136,11 +136,11 @@ def record_flashcard_review(
         StudySession.user_id == current_user.id_
     ).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Sesja nie znaleziona")
+        raise HTTPException(status_code=404, detail="Session not found")
 
     deck = session.deck
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck nie znaleziony")
+        raise HTTPException(status_code=404, detail="Deck not found")
 
     uf = db.query(UserFlashcard).filter(
         UserFlashcard.id == record_create.user_flashcard_id,
@@ -148,7 +148,7 @@ def record_flashcard_review(
         UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards])
     ).first()
     if not uf:
-        raise HTTPException(status_code=404, detail="Fiszka nie znaleziona")
+        raise HTTPException(status_code=404, detail="Flashcard not found for this user/deck")
 
     study_record = StudyRecord(
         session_id=session.id,
@@ -157,7 +157,6 @@ def record_flashcard_review(
         reviewed_at=datetime.utcnow()
     )
     db.add(study_record)
-
     _update_sm2(uf, record_create.rating)
     db.commit()
     db.refresh(study_record)
@@ -171,17 +170,19 @@ def bulk_record(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Hurtowy zapis ocen i aktualizacja SM2
+    Bulk save ratings & update SM2 for the given deck.
     """
     logger.info(f"bulk_record deck_id={data.deck_id}, user_id={current_user.id_}")
 
+    # 1. Validate deck ownership
     deck = db.query(Deck).filter(
         Deck.id == data.deck_id,
         Deck.user_id == str(current_user.id_)
     ).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck nie znaleziony")
+        raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
 
+    # 2. Create a new study session
     new_session = StudySession(
         user_id=current_user.id_,
         deck_id=deck.id,
@@ -191,17 +192,20 @@ def bulk_record(
     db.add(new_session)
     db.flush()
 
-    # Mapa flashcard_id -> userFlashcard
+    # 3. Map flashcard_id -> userFlashcard
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards])
     ).all()
     uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
 
+    # 4. For each rating item, create a StudyRecord & update SM2
     for item in data.ratings:
         uf = uf_map.get(item.flashcard_id)
         if not uf:
-            logger.warning(f"Fiszka {item.flashcard_id} nie należy do user_id={current_user.id_}")
+            logger.warning(
+                f"Flashcard {item.flashcard_id} does not belong to user_id={current_user.id_}, skipping..."
+            )
             continue
 
         study_record = StudyRecord(
@@ -214,18 +218,27 @@ def bulk_record(
         _update_sm2(uf, item.rating)
 
     db.commit()
-    logger.info(f"Hurtowy zapis zakończony, session_id={new_session.id}")
-    return {"message": "Bulk record saved", "study_session_id": new_session.id}
+    logger.info(f"Bulk record saved. session_id={new_session.id}")
+    return {
+        "message": "Bulk record saved",
+        "study_session_id": new_session.id
+    }
 
 
 def _update_sm2(user_flashcard: UserFlashcard, rating: int):
     """
-    Prosty SM2: rating<3 reset, >=3 => interval rośnie, EF rośnie/spada
+    Simple SM2-like update:
+      - if rating <3: reset to interval=1, repetitions=0
+      - else repetitions++ and interval grows
+      - EF adjusted
+      - next_review = now + interval days
     """
     if rating < 3:
+        # "Hard"
         user_flashcard.repetitions = 0
         user_flashcard.interval = 1
     else:
+        # "Good" or "Easy"
         if user_flashcard.repetitions == 0:
             user_flashcard.interval = 1
         elif user_flashcard.repetitions == 1:
@@ -234,7 +247,8 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int):
             user_flashcard.interval = int(user_flashcard.interval * user_flashcard.ef)
         user_flashcard.repetitions += 1
 
-    user_flashcard.ef += (0.1 - (5 - rating)*(0.08 + (5 - rating)*0.02))
+    # EF adjust
+    user_flashcard.ef += (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02))
     if user_flashcard.ef < 1.3:
         user_flashcard.ef = 1.3
 
@@ -248,14 +262,14 @@ def get_next_review_date(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Zwraca najwcześniejszy next_review w danym decku
+    Returns the earliest next_review date among all userFlashcards in the deck.
     """
     deck = db.query(Deck).filter(
         Deck.id == deck_id,
         Deck.user_id == str(current_user.id_)
     ).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
+        raise HTTPException(status_code=404, detail="Deck not found.")
 
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
@@ -268,36 +282,48 @@ def get_next_review_date(
     return {"next_review": earliest.isoformat()}
 
 
-@router.get("/retake_cards")
+@router.get("/retake_cards/{deck_id}")
 def retake_cards(
     deck_id: int,
-    max_ef: float,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Zwraca listę fiszek (Flashcard) z EF <= max_ef,
-    by user mógł je przećwiczyć dobrowolnie
+    Returns all flashcards in that deck whose EF <= 'the second smallest EF' in the deck.
+      e.g. if EFs are [1.5, 1.7, 1.8, 2.4], second smallest is 1.7 => we return EF <= 1.7
     """
     deck = db.query(Deck).filter(
         Deck.id == deck_id,
         Deck.user_id == str(current_user.id_)
     ).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found")
+        raise HTTPException(status_code=404, detail="Deck not found.")
 
-    # Znajdź userFlashcards z EF <= max_ef
+    # fetch user flashcards
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
-        UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards]),
-        UserFlashcard.ef <= max_ef
+        UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
+
     if not user_flashcards:
         return []
 
-    flashcard_ids = [uf.flashcard_id for uf in user_flashcards]
+    # sort by EF ascending
+    sorted_uf = sorted(user_flashcards, key=lambda uf: uf.ef)
+    if len(sorted_uf) == 1:
+        # only one card => second smallest does not exist, fallback = that single EF
+        threshold = sorted_uf[0].ef
+    else:
+        threshold = sorted_uf[1].ef  # second smallest EF
+
+    # filter by EF <= threshold
+    chosen = [uf for uf in user_flashcards if uf.ef <= threshold]
+
+    # gather flashcards
+    flashcard_ids = [uf.flashcard_id for uf in chosen]
     cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
+    # build a consistent JSON structure
     result = []
     for c in cards:
         result.append({
@@ -305,6 +331,7 @@ def retake_cards(
             "question": c.question,
             "answer": c.answer,
             "deck_id": c.deck_id,
-            "media_url": c.media_url  # jeśli w modelu jest media_url
+            # if your Flashcard model has a 'media_url', add it:
+            "media_url": getattr(c, 'media_url', None)
         })
     return result
