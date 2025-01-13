@@ -15,7 +15,7 @@ import { fetchJson } from '@/utils/fetchJson';
 type LocalRating = {
   flashcard_id: number;  // rating: 0=hard, 3=good, 5=easy
   rating: number;
-  answeredAt: string;   // ISO
+  answered_at: string;   // ISO
 };
 
 type CardSeenCount = { [flashcardId: number]: number };
@@ -121,7 +121,7 @@ export function StudyDeck({ deck, onExit }: StudyDeckProps) {
       {
         flashcard_id: currentCard.id,
         rating,
-        answeredAt: new Date().toISOString(),
+        answered_at: new Date().toISOString(),
       }
     ]);
 
