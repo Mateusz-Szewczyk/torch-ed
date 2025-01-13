@@ -83,5 +83,6 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found."
         )
+    print(f"User_id: {user}, user_id: {user_id}")
 
     return user
