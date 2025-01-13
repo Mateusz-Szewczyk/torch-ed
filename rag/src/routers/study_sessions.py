@@ -221,15 +221,21 @@ def bulk_record(
     """
     logger.info(f"bulk_record deck_id={data.deck_id}, user_id={current_user.id_}")
 
-    # 1. Validate deck ownership
+    # -- (1) Validate deck ownership
+    # Sprawdź, czy deck istnieje i należy do aktualnie zalogowanego usera.
+    # Jeśli current_user.id_ jest już int, rzutowanie niepotrzebne.
+    # Gdyby był string, zrób: int(current_user.id_)
     deck = db.query(Deck).filter(
         Deck.id == data.deck_id,
-        Deck.user_id == str(current_user.id_)
+        Deck.user_id == current_user.id_  # zakładamy, że to int
     ).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
+        raise HTTPException(
+            status_code=404,
+            detail="Deck not found or doesn't belong to user."
+        )
 
-    # 2. Create a new study session
+    # -- (2) Create a new study session
     new_session = StudySession(
         user_id=current_user.id_,
         deck_id=deck.id,
@@ -237,16 +243,18 @@ def bulk_record(
         completed_at=datetime.utcnow()
     )
     db.add(new_session)
-    db.flush()  # flush so new_session.id is available
+    db.flush()  # wypełni new_session.id
 
-    # 3. Map flashcard_id -> userFlashcard
+    # -- (3) Pobierz userFlashcards (mapowanie flashcard_id -> userFlashcard).
+    # Klucz: porównanie user_id do current_user.id_
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards])
     ).all()
+
     uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
 
-    # 4. For each rating item, create a StudyRecord & update SM2
+    # -- (4) Dla każdej oceny twórz StudyRecord & aktualizuj SM2
     for item in data.ratings:
         uf = uf_map.get(item.flashcard_id)
         if not uf:
@@ -255,7 +263,6 @@ def bulk_record(
             )
             continue
 
-        # Create a new record
         study_record = StudyRecord(
             session_id=new_session.id,
             user_flashcard_id=uf.id,
@@ -264,17 +271,17 @@ def bulk_record(
         )
         db.add(study_record)
 
-        # Update SM2
+        # zaktualizuj EF, interval itd.
         _update_sm2(uf, item.rating)
-        db.add(uf)  # <--- ensure changes on the user_flashcard are recognized
 
-    # flush changes so user_flashcards & study_records get updated in DB
+        # Upewnij się, że SQLAlchemy widzi zmiany w uf
+        db.add(uf)
+
+    # flush + commit
     db.flush()
-
-    # finally commit
     db.commit()
-    logger.info(f"Bulk record saved. session_id={new_session.id}")
 
+    logger.info(f"Bulk record saved. session_id={new_session.id}")
     return {
         "message": "Bulk record saved",
         "study_session_id": new_session.id
