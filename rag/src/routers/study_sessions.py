@@ -180,6 +180,36 @@ def record_flashcard_review(
     return study_record
 
 
+def _update_sm2(user_flashcard: UserFlashcard, rating: int):
+    """
+    Simple SM2-like update:
+      - if rating <3: reset to interval=1, repetitions=0
+      - else repetitions++ and interval grows
+      - EF adjusted
+      - next_review = now + interval days
+    """
+    if rating < 3:
+        # "Hard"
+        user_flashcard.repetitions = 0
+        user_flashcard.interval = 1
+    else:
+        # "Good" or "Easy"
+        if user_flashcard.repetitions == 0:
+            user_flashcard.interval = 1
+        elif user_flashcard.repetitions == 1:
+            user_flashcard.interval = 6
+        else:
+            user_flashcard.interval = int(user_flashcard.interval * user_flashcard.ef)
+        user_flashcard.repetitions += 1
+
+    # EF adjust
+    user_flashcard.ef += (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02))
+    if user_flashcard.ef < 1.3:
+        user_flashcard.ef = 1.3
+
+    user_flashcard.next_review = datetime.utcnow() + timedelta(days=user_flashcard.interval)
+
+
 @router.post("/bulk_record", status_code=201)
 def bulk_record(
     data: BulkRecordData,
@@ -251,36 +281,6 @@ def bulk_record(
     }
 
 
-def _update_sm2(user_flashcard: UserFlashcard, rating: int):
-    """
-    Simple SM2-like update:
-      - if rating <3: reset to interval=1, repetitions=0
-      - else repetitions++ and interval grows
-      - EF adjusted
-      - next_review = now + interval days
-    """
-    if rating < 3:
-        # "Hard"
-        user_flashcard.repetitions = 0
-        user_flashcard.interval = 1
-    else:
-        # "Good" or "Easy"
-        if user_flashcard.repetitions == 0:
-            user_flashcard.interval = 1
-        elif user_flashcard.repetitions == 1:
-            user_flashcard.interval = 6
-        else:
-            user_flashcard.interval = int(user_flashcard.interval * user_flashcard.ef)
-        user_flashcard.repetitions += 1
-
-    # EF adjust
-    user_flashcard.ef += (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02))
-    if user_flashcard.ef < 1.3:
-        user_flashcard.ef = 1.3
-
-    user_flashcard.next_review = datetime.utcnow() + timedelta(days=user_flashcard.interval)
-
-
 @router.get("/next_review_date")
 def get_next_review_date(
     deck_id: int,
@@ -341,7 +341,7 @@ def retake_cards(
         threshold = sorted_uf[1].ef  # second smallest EF
 
     # filter by EF <= threshold
-    chosen = [uf for uf in user_flashcards if uf.ef <= threshold]
+    chosen = [uf for uf in user_flashcards if uf.ef <= threshold + 0.1]
 
     # gather flashcards
     flashcard_ids = [uf.flashcard_id for uf in chosen]

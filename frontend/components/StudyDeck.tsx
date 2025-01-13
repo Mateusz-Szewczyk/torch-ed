@@ -13,9 +13,9 @@ import { Flashcard, Deck } from '@/types';
 import { fetchJson } from '@/utils/fetchJson';
 
 type LocalRating = {
-  flashcard_id: number;  // rating: 0=hard, 3=good, 5=easy
+  flashcard_id: number;
   rating: number;
-  answered_at: string;   // ISO
+  answered_at: string;
 };
 
 type CardSeenCount = { [flashcardId: number]: number };
