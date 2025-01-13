@@ -222,9 +222,21 @@ def get_next_review_date(
     logger.debug(f"Earliest next_review date: {earliest}")
     return {"next_review": earliest.isoformat()}
 
-@router.post("/start", response_model=dict, status_code=201)
+
+class StartStudySessionRequest(BaseModel):
+    """Request model for starting a study session."""
+    deck_id: int
+
+
+class StudySessionResponse(BaseModel):
+    """Response model for starting a study session."""
+    study_session_id: int
+    available_cards: List[dict]
+
+
+@router.post("/start", response_model=StudySessionResponse, status_code=201)
 def start_study_session(
-    deck_id: int,
+    request: StartStudySessionRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -232,9 +244,10 @@ def start_study_session(
     Starts a new study session for the given deck.
     Returns the session_id and available cards to study.
     """
+    deck_id = request.deck_id
     logger.info(f"Starting study session for deck_id={deck_id}, user_id={current_user.id_}")
 
-    # Validate deck ownership
+    # -- (1) Validate deck ownership
     deck = db.query(Deck).filter(
         Deck.id == deck_id,
         Deck.user_id == current_user.id_
@@ -243,12 +256,19 @@ def start_study_session(
         logger.error(f"Deck id={deck_id} not found or does not belong to user_id={current_user.id_}")
         raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
 
-    # Initialize missing UserFlashcards
+    logger.debug(f"Deck found: {deck}")
+
+    # -- (2) Initialize missing UserFlashcards
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
+    logger.debug(f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
+
+    # Map flashcard_id -> UserFlashcard
     uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
+
+    # -- (3) Initialize missing UserFlashcards
     missing_flashcard_ids = [fc.id for fc in deck.flashcards if fc.id not in uf_map]
     if missing_flashcard_ids:
         logger.info(f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
@@ -265,17 +285,23 @@ def start_study_session(
             db.add(new_uf)
             new_ufs.append(new_uf)
             logger.debug(f"Added new UserFlashcard: {new_uf}")
-        db.flush()
+        db.flush()  # Persist new UserFlashcards
+        # Update map
         user_flashcards += new_ufs
-        uf_map.update({uf.flashcard_id: uf for uf in new_ufs})
+        for uf in new_ufs:
+            uf_map[uf.flashcard_id] = uf
         logger.info(f"Persisted {len(new_ufs)} new UserFlashcard entries.")
 
-    # Fetch available flashcards: next_review <= now()
+    # -- (4) Fetch available flashcards: next_review <= now()
     now = datetime.utcnow()
     available_ufs = [uf for uf in user_flashcards if uf.next_review <= now]
     logger.debug(f"Found {len(available_ufs)} available UserFlashcards for study.")
 
-    # Create a new StudySession
+    if not available_ufs:
+        logger.info("No available flashcards to study at this time.")
+        raise HTTPException(status_code=200, detail="No available flashcards to study at this time.")
+
+    # -- (5) Create a new StudySession
     new_session = StudySession(
         user_id=current_user.id_,
         deck_id=deck.id,
@@ -283,23 +309,24 @@ def start_study_session(
         completed_at=now  # Will be updated when session is completed
     )
     db.add(new_session)
-    db.flush()
+    db.flush()  # Flush to get new_session.id
     logger.debug(f"Created StudySession with id={new_session.id}")
 
-    # Convert available UserFlashcards to Flashcards
+    # -- (6) Convert available UserFlashcards to Flashcards
     flashcard_ids = [uf.flashcard_id for uf in available_ufs]
     available_cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
-    # Build the response
+    # -- (7) Build the response
     result = []
     for c in available_cards:
-        result.append({
+        card_dict = {
             "id": c.id,
             "question": c.question,
             "answer": c.answer,
             "deck_id": c.deck_id,
             "media_url": getattr(c, 'media_url', None)
-        })
+        }
+        result.append(card_dict)
     logger.debug(f"Available cards for study session {new_session.id}: {result}")
 
     return {
