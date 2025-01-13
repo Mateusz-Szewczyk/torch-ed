@@ -1,9 +1,9 @@
-// app/flashcards/page.tsx
+// src/app/flashcards/page.tsx
 
 'use client';
 
 import React, { useState, useEffect, useCallback, FormEvent, MouseEvent } from 'react';
-import * as Dialog from '@radix-ui/react-dialog'; // Poprawny import Radix Dialog
+import * as Dialog from '@radix-ui/react-dialog';
 import { EditDeckDialog } from '@/components/EditDeckDialog';
 import { Button } from "@/components/ui/button";
 import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2, Upload } from 'lucide-react';
@@ -24,14 +24,13 @@ import { StudyDeck } from '@/components/StudyDeck';
 import { CustomTooltip } from '@/components/CustomTooltip';
 import { useTranslation } from 'react-i18next';
 
-import { Deck, Flashcard } from '@/types';
+import { Deck, Flashcard, ErrorResponse } from '@/types';
 
 export default function FlashcardsPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Zmieniamy typ `studyingDeck`, aby przechowywał również `available_cards`.
   const [studyingDeck, setStudyingDeck] = useState<{
     deck: Deck;
     study_session_id: number;
@@ -63,8 +62,8 @@ export default function FlashcardsPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Nie udało się pobrać decków.');
+        const errorData: ErrorResponse = await response.json();
+        throw new Error(errorData.detail as string || 'Nie udało się pobrać decków.');
       }
 
       const data: Deck[] = await response.json();
@@ -110,8 +109,8 @@ export default function FlashcardsPage() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Nie udało się stworzyć decka.');
+          const errorData: ErrorResponse = await response.json();
+          throw new Error(errorData.detail as string || 'Nie udało się stworzyć decka.');
         }
 
         const newDeck: Deck = await response.json();
@@ -135,8 +134,8 @@ export default function FlashcardsPage() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Nie udało się zaktualizować decka.');
+          const errorData: ErrorResponse = await response.json();
+          throw new Error(errorData.detail as string || 'Nie udało się zaktualizować decka.');
         }
 
         const updatedDeckFromServer: Deck = await response.json();
@@ -170,8 +169,8 @@ export default function FlashcardsPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Nie udało się usunąć decka.');
+        const errorData: ErrorResponse = await response.json();
+        throw new Error(errorData.detail as string || 'Nie udało się usunąć decka.');
       }
 
       setDecks(prev => prev.filter(deck => deck.id !== deckId));
@@ -201,8 +200,15 @@ export default function FlashcardsPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Nie udało się rozpocząć sesji nauki.');
+        const errorData: ErrorResponse = await response.json();
+        // Jeśli errorData.detail jest listą, skonwertuj ją na string
+        let errorMessage = 'Nie udało się rozpocząć sesji nauki.';
+        if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail.map((err) => (typeof err === 'object' && 'msg' in err ? err.msg : String(err))).join(', ');
+        } else if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -245,10 +251,6 @@ export default function FlashcardsPage() {
     const formData = new FormData(e.currentTarget);
     const file = formData.get('file') as File;
 
-    // Usuwamy przypisania do 'deck_name' i 'deck_description', ponieważ są one częścią FormData
-    // const deck_name = formData.get('deck_name') as string || undefined;
-    // const deck_description = formData.get('deck_description') as string || undefined;
-
     if (!file) {
       setImportError(t('no_file_selected'));
       return;
@@ -263,12 +265,19 @@ export default function FlashcardsPage() {
         method: 'POST',
         credentials: 'include',
         body: formData,
-        // Nie ustawiamy 'Content-Type': 'application/json', gdy wysyłamy FormData
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Nie udało się zaimportować fiszek.');
+        const errorData: ErrorResponse = await response.json();
+        let errorMessage = 'Nie udało się zaimportować fiszek.';
+        if (errorData.detail) {
+          if (Array.isArray(errorData.detail)) {
+            errorMessage = errorData.detail.map((err) => (typeof err === 'object' && 'msg' in err ? err.msg : String(err))).join(', ');
+          } else if (typeof errorData.detail === 'string') {
+            errorMessage = errorData.detail;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       setImportSuccess(t('import_success'));

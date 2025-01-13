@@ -234,6 +234,17 @@ class StudySessionResponse(BaseModel):
     available_cards: List[dict]
 
 
+class StartStudySessionRequest(BaseModel):
+    """Request model for starting a study session."""
+    deck_id: int
+
+
+class StudySessionResponse(BaseModel):
+    """Response model for starting a study session."""
+    study_session_id: int
+    available_cards: List[dict]
+
+
 @router.post("/start", response_model=StudySessionResponse, status_code=201)
 def start_study_session(
     request: StartStudySessionRequest,
@@ -306,7 +317,7 @@ def start_study_session(
         user_id=current_user.id_,
         deck_id=deck.id,
         started_at=now,
-        completed_at=now  # Will be updated when session is completed
+        completed_at=None
     )
     db.add(new_session)
     db.flush()  # Flush to get new_session.id
@@ -333,6 +344,7 @@ def start_study_session(
         "study_session_id": new_session.id,
         "available_cards": result
     }
+
 
 @router.get("/session/{session_id}/retake_cards", response_model=List[dict], status_code=200)
 def retake_cards_for_session(

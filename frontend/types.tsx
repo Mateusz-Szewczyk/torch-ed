@@ -34,3 +34,28 @@ export interface Deck {
   flashcards: Flashcard[];
 }
 
+export interface ErrorDetail {
+  loc: string[];
+  msg: string;
+  type: string;
+}
+
+export interface ErrorResponse {
+  detail: string | ErrorDetail[];
+}
+
+export interface BulkRecordRating {
+  flashcard_id: number;
+  rating: number;
+  answered_at: string; // ISO string
+}
+
+export interface BulkRecordRequest {
+  session_id: number;
+  deck_id: number;
+  ratings: BulkRecordRating[];
+}
+
+export interface BulkRecordResponse {
+  message: string;
+}
