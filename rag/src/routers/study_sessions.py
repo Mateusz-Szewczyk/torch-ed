@@ -44,19 +44,21 @@ def create_study_session(
     """
     logger.info(f"Creating study session for deck_id={session_create.deck_id}, user_id={current_user.id_}")
 
+    # Ensure deck belongs to user. Watch out if deck.user_id is TEXT in DB
     deck = db.query(Deck).filter(
         Deck.id == session_create.deck_id,
-        Deck.user_id == str(current_user.id_)  # watch out for str vs int mismatch
+        Deck.user_id == str(current_user.id_)
     ).first()
     if not deck:
-        raise HTTPException(status_code=404, detail="Deck not found.")
+        raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
 
-    # Initialize userFlashcards if they don’t exist
+    # Initialize userFlashcards if needed
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
     existing_ids = {uf.flashcard_id for uf in user_flashcards}
+    new_ufs = []
     for fc in deck.flashcards:
         if fc.id not in existing_ids:
             new_uf = UserFlashcard(
@@ -68,8 +70,11 @@ def create_study_session(
                 next_review=datetime.utcnow()
             )
             db.add(new_uf)
-    db.commit()
+            new_ufs.append(new_uf)
 
+    db.commit()  # to persist any new user_flashcards
+
+    # Create new session
     new_session = StudySession(
         user_id=current_user.id_,
         deck_id=deck.id,
@@ -78,6 +83,8 @@ def create_study_session(
     db.add(new_session)
     db.commit()
     db.refresh(new_session)
+
+    logger.info(f"StudySession created, ID={new_session.id}")
     return new_session
 
 
@@ -116,6 +123,7 @@ def get_next_flashcard(
     flashcard = db.query(Flashcard).filter(Flashcard.id == uf.flashcard_id).first()
     if not flashcard:
         raise HTTPException(status_code=404, detail="Flashcard not found.")
+
     return flashcard
 
 
@@ -150,6 +158,7 @@ def record_flashcard_review(
     if not uf:
         raise HTTPException(status_code=404, detail="Flashcard not found for this user/deck")
 
+    # Create StudyRecord
     study_record = StudyRecord(
         session_id=session.id,
         user_flashcard_id=uf.id,
@@ -157,9 +166,17 @@ def record_flashcard_review(
         reviewed_at=datetime.utcnow()
     )
     db.add(study_record)
+
+    # Update SM2
     _update_sm2(uf, record_create.rating)
+
+    # Make sure SQLAlchemy sees the changes on user_flashcards
+    db.add(uf)  # <--- ensure we re-attach if not recognized
+
     db.commit()
     db.refresh(study_record)
+
+    logger.info(f"record_review saved. study_record_id={study_record.id}, updated user_flashcard_id={uf.id}")
     return study_record
 
 
@@ -190,7 +207,7 @@ def bulk_record(
         completed_at=datetime.utcnow()
     )
     db.add(new_session)
-    db.flush()
+    db.flush()  # flush so new_session.id is available
 
     # 3. Map flashcard_id -> userFlashcard
     user_flashcards = db.query(UserFlashcard).filter(
@@ -208,6 +225,7 @@ def bulk_record(
             )
             continue
 
+        # Create a new record
         study_record = StudyRecord(
             session_id=new_session.id,
             user_flashcard_id=uf.id,
@@ -215,10 +233,18 @@ def bulk_record(
             reviewed_at=item.answered_at
         )
         db.add(study_record)
-        _update_sm2(uf, item.rating)
 
+        # Update SM2
+        _update_sm2(uf, item.rating)
+        db.add(uf)  # <--- ensure changes on the user_flashcard are recognized
+
+    # flush changes so user_flashcards & study_records get updated in DB
+    db.flush()
+
+    # finally commit
     db.commit()
     logger.info(f"Bulk record saved. session_id={new_session.id}")
+
     return {
         "message": "Bulk record saved",
         "study_session_id": new_session.id
@@ -299,12 +325,10 @@ def retake_cards(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found.")
 
-    # fetch user flashcards
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
-
     if not user_flashcards:
         return []
 
@@ -323,7 +347,7 @@ def retake_cards(
     flashcard_ids = [uf.flashcard_id for uf in chosen]
     cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
-    # build a consistent JSON structure
+    # build JSON
     result = []
     for c in cards:
         result.append({
