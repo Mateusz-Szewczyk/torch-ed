@@ -34,7 +34,7 @@ async def create_deck(
     try:
         # Tworzenie nowego decka przypisanego do użytkownika
         new_deck = Deck(
-            user_id=str(current_user.id_),  # Przypisanie user_id
+            user_id=current_user.id_,  # Przypisanie user_id
             name=deck.name,
             description=deck.description
         )
@@ -74,7 +74,7 @@ async def get_decks(
         decks = (
             db.query(Deck)
             .options(joinedload(Deck.flashcards))
-            .filter(Deck.user_id == str(current_user.id_))
+            .filter(Deck.user_id == current_user.id_)
             .all()
         )
         logger.debug(f"Pobrano decki: {decks}")
@@ -98,7 +98,7 @@ async def get_deck(
         deck = (
             db.query(Deck)
             .options(joinedload(Deck.flashcards))
-            .filter(Deck.id == deck_id, Deck.user_id == str(current_user.id_))
+            .filter(Deck.id == deck_id, Deck.user_id == current_user.id_)
             .first()
         )
         if not deck:
@@ -126,7 +126,7 @@ async def update_deck(
         existing_deck = (
             db.query(Deck)
             .options(joinedload(Deck.flashcards))
-            .filter(Deck.id == deck_id, Deck.user_id == str(current_user.id_))
+            .filter(Deck.id == deck_id, Deck.user_id == current_user.id_)
             .first()
         )
         if not existing_deck:
@@ -209,7 +209,7 @@ async def delete_deck(
     try:
         deck = (
             db.query(Deck)
-            .filter(Deck.id == deck_id, Deck.user_id == str(current_user.id_))
+            .filter(Deck.id == deck_id, Deck.user_id == current_user.id_)
             .first()
         )
         if not deck:
@@ -497,7 +497,7 @@ async def import_flashcards(
         try:
             # Tworzenie nowego decka przypisanego do użytkownika
             new_deck = Deck(
-                user_id=str(current_user.id_),
+                user_id=current_user.id_,
                 name=deck_name if deck_name else "Imported Deck",
                 description=deck_description
             )

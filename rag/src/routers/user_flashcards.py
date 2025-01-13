@@ -26,7 +26,7 @@ def get_user_flashcard_by_flashcard(
     """
     logger.info(f"Pobieranie UserFlashcard dla flashcard_id={flashcard_id} przez user_id={current_user.id_}")
     user_flashcard = db.query(UserFlashcard).filter(
-        UserFlashcard.user_id == str(current_user.id_),
+        UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id == flashcard_id
     ).first()
 

@@ -31,7 +31,7 @@ async def create_conversation(
 
     try:
         new_conversation = Conversation(
-            user_id=str(current_user.id_),
+            user_id=current_user.id_,
             title="New conversation",
         )
         db.add(new_conversation)
@@ -58,7 +58,7 @@ async def get_conversations(
     Pobierz wszystkie konwersacje dla ZALOGOWANEGO użytkownika.
     user_id pobieramy z current_user, nie z query param.
     """
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     logger.info(f"Fetching conversations for user_id: {user_id}")
 
     try:
@@ -88,7 +88,7 @@ async def delete_conversation(
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         # Autoryzacja
-        if str(conversation.user_id) != str(current_user.id_):
+        if str(conversation.user_id) != current_user.id_:
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: You cannot delete a conversation that isn't yours."
@@ -126,7 +126,7 @@ async def create_message(
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         # Autoryzacja
-        if str(conversation.user_id) != str(current_user.id_):
+        if str(conversation.user_id) != current_user.id_:
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: You cannot post messages to a conversation that isn't yours."
@@ -172,7 +172,7 @@ async def get_messages(
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        if str(conversation.user_id) != str(current_user.id_):
+        if str(conversation.user_id) != current_user.id_:
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: You cannot view messages from a conversation that isn't yours."

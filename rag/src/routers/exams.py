@@ -26,7 +26,7 @@ async def create_exam(
     """
     logger.info(f"Creating a new exam with name: {exam.name}")
     logger.debug(f"Exam data: {exam}")
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     try:
         new_exam = Exam(
             name=exam.name,
@@ -70,7 +70,7 @@ async def get_exams(
     """
     Pobiera wszystkie egzaminy zalogowanego użytkownika.
     """
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     logger.info(f"Fetching all exams for user_id={user_id}.")
     try:
         exams = (
@@ -96,7 +96,7 @@ async def get_exam(
     Pobiera konkretny egzamin (wraz z pytaniami i odpowiedziami) po ID,
     jeśli należy do zalogowanego użytkownika.
     """
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     logger.info(f"Fetching exam with ID={exam_id} for user_id={user_id}")
     try:
         exam = (
@@ -125,7 +125,7 @@ async def update_exam(
     """
     Aktualizuje egzamin o podanym ID, jeśli należy do zalogowanego użytkownika.
     """
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     logger.info(f"Updating exam with ID={exam_id} for user_id={user_id}")
     logger.debug(f"Exam update data: {exam_update}")
     try:
@@ -259,7 +259,7 @@ async def submit_exam_result(
     """
     Zapisuje wynik egzaminu użytkownika.
     """
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     logger.info(f"Submitting exam result for user_id={user_id}, exam_id={result.exam_id}")
 
     try:
@@ -336,7 +336,7 @@ async def get_user_results(
     """
     Pobiera wszystkie wyniki egzaminów dla zalogowanego użytkownika.
     """
-    user_id = str(current_user.id_)
+    user_id = current_user.id_
     logger.info(f"Fetching exam results for user_id={user_id}")
 
     try:
