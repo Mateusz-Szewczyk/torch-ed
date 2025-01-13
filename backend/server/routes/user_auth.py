@@ -168,11 +168,9 @@ def logout() -> Response | tuple:
     print(blacklist.ttl(token))
 
     response = jsonify({'success': True, 'message': 'Successfully logged out'})
-    response.set_cookie(
+    response.delete_cookie(
         COOKIE_AUTH,
-        '',  # Ustawienie pustej wartości
         samesite='None',
-        max_age=0,  # Natychmiastowe wygaśnięcie
         httponly=True,
         secure=True,
         path='/'  # Musi być zgodne z ustawieniem podczas logowania
