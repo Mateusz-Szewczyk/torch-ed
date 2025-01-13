@@ -227,7 +227,7 @@ def bulk_record(
     # Gdyby był string, zrób: int(current_user.id_)
     deck = db.query(Deck).filter(
         Deck.id == data.deck_id,
-        Deck.user_id == current_user.id_  # zakładamy, że to int
+        Deck.user_id == str(current_user.id_)
     ).first()
     if not deck:
         raise HTTPException(
