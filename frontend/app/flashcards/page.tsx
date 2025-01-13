@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter
-} from '@/components/ui/dialog'; // Upewnij się, że te komponenty są z Radix lub odpowiedniej biblioteki
+} from '@/components/ui/dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -24,13 +24,20 @@ import { StudyDeck } from '@/components/StudyDeck';
 import { CustomTooltip } from '@/components/CustomTooltip';
 import { useTranslation } from 'react-i18next';
 
-import { Deck,} from '@/types'; // Import typów z centralnego pliku
+import { Deck, Flashcard } from '@/types';
 
 export default function FlashcardsPage() {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [studyingDeck, setStudyingDeck] = useState<Deck | null>(null);
+
+  // Zmieniamy typ `studyingDeck`, aby przechowywał również `available_cards`.
+  const [studyingDeck, setStudyingDeck] = useState<{
+    deck: Deck;
+    study_session_id: number;
+    available_cards: Flashcard[];
+  } | null>(null);
+
   const [importing, setImporting] = useState<boolean>(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
@@ -40,6 +47,8 @@ export default function FlashcardsPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
   const API_BASE_URL = `${API_URL}/decks/`;
+  const STUDY_SESSIONS_URL = `${API_URL}/study_sessions/`;
+
   /**
    * Funkcja do pobierania decków
    */
@@ -96,6 +105,7 @@ export default function FlashcardsPage() {
         const response = await fetch(API_BASE_URL, {
           method: 'POST',
           credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bodyData),
         });
 
@@ -111,11 +121,12 @@ export default function FlashcardsPage() {
         const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
           method: 'PUT',
           credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: updatedDeck.name,
             description: updatedDeck.description,
             flashcards: updatedDeck.flashcards.map(fc => ({
-              id: fc.id, // id jest teraz wymagane
+              id: fc.id,
               question: fc.question,
               answer: fc.answer,
               media_url: fc.media_url,
@@ -178,10 +189,45 @@ export default function FlashcardsPage() {
   };
 
   /**
-   * Funkcja do studiowania decka
+   * Funkcja do rozpoczęcia nauki decka
    */
-  const handleStudy = (deck: Deck) => {
-    setStudyingDeck(deck);
+  const handleStudy = async (deck: Deck) => {
+    try {
+      const response = await fetch(`${STUDY_SESSIONS_URL}start`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deck_id: deck.id }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Nie udało się rozpocząć sesji nauki.');
+      }
+
+      const data = await response.json();
+      const { study_session_id, available_cards } = data;
+
+      // Jeżeli brak fiszek do nauki
+      if (available_cards.length === 0) {
+        alert(t('no_available_flashcards_to_study'));
+        return;
+      }
+
+      // Ustawiamy stan - przechodzimy do trybu nauki
+      setStudyingDeck({
+        deck,
+        study_session_id,
+        available_cards,
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(`${t('error_starting_study')}: ${err.message}`);
+      } else {
+        setError(t('error_unexpected_starting_study'));
+      }
+      console.error('Error starting study session:', err);
+    }
   };
 
   /**
@@ -199,6 +245,10 @@ export default function FlashcardsPage() {
     const formData = new FormData(e.currentTarget);
     const file = formData.get('file') as File;
 
+    // Usuwamy przypisania do 'deck_name' i 'deck_description', ponieważ są one częścią FormData
+    // const deck_name = formData.get('deck_name') as string || undefined;
+    // const deck_description = formData.get('deck_description') as string || undefined;
+
     if (!file) {
       setImportError(t('no_file_selected'));
       return;
@@ -213,7 +263,7 @@ export default function FlashcardsPage() {
         method: 'POST',
         credentials: 'include',
         body: formData,
-        headers: { 'Content-Type': 'application/json' },
+        // Nie ustawiamy 'Content-Type': 'application/json', gdy wysyłamy FormData
       });
 
       if (!response.ok) {
@@ -272,10 +322,19 @@ export default function FlashcardsPage() {
     );
   }
 
+  // Jeżeli jest aktywna sesja nauki (studyingDeck), renderujemy StudyDeck
   if (studyingDeck) {
-    return <StudyDeck deck={studyingDeck} onExit={handleExitStudy} />;
+    return (
+      <StudyDeck
+        deck={studyingDeck.deck}
+        study_session_id={studyingDeck.study_session_id}
+        available_cards={studyingDeck.available_cards}
+        onExit={handleExitStudy}
+      />
+    );
   }
 
+  // W przeciwnym wypadku pokazujemy listę decków
   return (
     <div className="p-4 max-w-full mx-auto">
       {/* Header section */}
@@ -510,8 +569,8 @@ export default function FlashcardsPage() {
                                 size="sm"
                                 className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80 text-primary"
                                 onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                                  e.stopPropagation(); // Zapobiega propagacji zdarzenia
-                                  setOpenCollapsibles(prev => ({ ...prev, [deck.id]: false })); // Zamknięcie Collapsible
+                                  e.stopPropagation();
+                                  setOpenCollapsibles(prev => ({ ...prev, [deck.id]: false }));
                                 }}
                               >
                                 <Edit2 className="h-4 w-4 mr-2" />
@@ -524,7 +583,7 @@ export default function FlashcardsPage() {
                             size="sm"
                             className="flex items-center justify-start w-full px-4 py-2 text-destructive hover:bg-secondary/80"
                             onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                              e.stopPropagation(); // Zapobiega propagacji zdarzenia
+                              e.stopPropagation();
                               handleDelete(deck.id);
                             }}
                           >

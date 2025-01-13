@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
+# src/routers/study_sessions.py
+
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy import cast, Integer
 from datetime import datetime, timedelta
 from typing import List
 import logging
@@ -12,15 +13,12 @@ from ..models import (
     StudySession, StudyRecord, UserFlashcard,
     Flashcard, Deck, User
 )
-from ..schemas import (
-    StudySessionCreate, StudySessionRead,
-    StudyRecordCreate, StudyRecordRead, FlashcardRead
-)
+
 from pydantic import BaseModel
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Ustaw poziom logowania na DEBUG dla szczegółowych logów
+logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG for detailed logs
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
@@ -32,179 +30,11 @@ class BulkRatingItem(BaseModel):
     rating: int
     answered_at: datetime
 
-
 class BulkRecordData(BaseModel):
     """The shape of the JSON for bulk_record."""
+    session_id: int
     deck_id: int
     ratings: List[BulkRatingItem]
-
-
-@router.post("/", response_model=StudySessionRead, status_code=201)
-def create_study_session(
-    session_create: StudySessionCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Creates a new study session for the given deck (optional immediate SM2 usage).
-    """
-    logger.info(f"Creating study session for deck_id={session_create.deck_id}, user_id={current_user.id_}")
-
-    # Ensure deck belongs to user. Use cast to integer
-    deck = db.query(Deck).filter(
-        Deck.id == session_create.deck_id,
-        cast(Deck.user_id, Integer) == current_user.id_
-    ).first()
-    if not deck:
-        logger.error(f"Deck id={session_create.deck_id} not found for user_id={current_user.id_}")
-        raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
-
-    logger.debug(f"Deck found: {deck}")
-
-    # Initialize userFlashcards if needed
-    user_flashcards = db.query(UserFlashcard).filter(
-        UserFlashcard.user_id == current_user.id_,
-        UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
-    ).all()
-    existing_ids = {uf.flashcard_id for uf in user_flashcards}
-    new_ufs = []
-    for fc in deck.flashcards:
-        if fc.id not in existing_ids:
-            new_uf = UserFlashcard(
-                user_id=current_user.id_,
-                flashcard_id=fc.id,
-                ef=2.5,
-                interval=0,
-                repetitions=0,
-                next_review=datetime.utcnow()
-            )
-            db.add(new_uf)
-            new_ufs.append(new_uf)
-            logger.debug(f"Added new UserFlashcard: {new_uf}")
-
-    db.commit()  # to persist any new user_flashcards
-    logger.info(f"Persisted {len(new_ufs)} new UserFlashcard entries.")
-
-    # Create new session
-    new_session = StudySession(
-        user_id=current_user.id_,
-        deck_id=deck.id,
-        started_at=datetime.utcnow()
-    )
-    db.add(new_session)
-    db.commit()
-    db.refresh(new_session)
-
-    logger.info(f"StudySession created, ID={new_session.id}")
-    return new_session
-
-
-@router.get("/next_flashcard/{session_id}/", response_model=FlashcardRead)
-def get_next_flashcard(
-    session_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Gets the next flashcard for immediate SM2 usage (optional endpoint).
-    """
-    logger.info(f"Fetching next_flashcard for session_id={session_id}, user_id={current_user.id_}")
-
-    session = db.query(StudySession).filter(
-        StudySession.id == session_id,
-        StudySession.user_id == current_user.id_
-    ).first()
-    if not session:
-        logger.error(f"StudySession id={session_id} not found for user_id={current_user.id_}")
-        raise HTTPException(status_code=404, detail="Session not found.")
-
-    deck = session.deck
-    if not deck:
-        logger.error(f"Deck not found for StudySession id={session_id}")
-        raise HTTPException(status_code=404, detail="Deck not found.")
-
-    now = datetime.utcnow()
-    uf = db.query(UserFlashcard).filter(
-        UserFlashcard.user_id == current_user.id_,
-        UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards]),
-        UserFlashcard.next_review <= now
-    ).order_by(UserFlashcard.next_review.asc()).first()
-
-    if not uf:
-        logger.warning(f"No flashcards due for review for user_id={current_user.id_} in session_id={session_id}")
-        raise HTTPException(status_code=404, detail="No more cards to study today.")
-
-    flashcard = db.query(Flashcard).filter(Flashcard.id == uf.flashcard_id).first()
-    if not flashcard:
-        logger.error(f"Flashcard id={uf.flashcard_id} not found.")
-        raise HTTPException(status_code=404, detail="Flashcard not found.")
-
-    logger.debug(f"Next flashcard to study: {flashcard}")
-    return flashcard
-
-
-@router.post("/record_review/{session_id}/", response_model=StudyRecordRead, status_code=201)
-def record_flashcard_review(
-    session_id: int,
-    record_create: StudyRecordCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Saves rating for a single flashcard in immediate mode.
-    """
-    logger.info(f"Recording review for session_id={session_id}, user_id={current_user.id_}, rating={record_create.rating}")
-
-    session = db.query(StudySession).filter(
-        StudySession.id == session_id,
-        StudySession.user_id == current_user.id_
-    ).first()
-    if not session:
-        logger.error(f"StudySession id={session_id} not found for user_id={current_user.id_}")
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    deck = session.deck
-    if not deck:
-        logger.error(f"Deck not found for StudySession id={session_id}")
-        raise HTTPException(status_code=404, detail="Deck not found")
-
-    uf = db.query(UserFlashcard).filter(
-        UserFlashcard.id == record_create.user_flashcard_id,
-        UserFlashcard.user_id == current_user.id_,
-        UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards])
-    ).first()
-    if not uf:
-        logger.error(f"UserFlashcard id={record_create.user_flashcard_id} not found for user_id={current_user.id_} and deck_id={deck.id}")
-        raise HTTPException(status_code=404, detail="Flashcard not found for this user/deck")
-
-    # Create StudyRecord
-    study_record = StudyRecord(
-        session_id=session.id,
-        user_flashcard_id=uf.id,
-        rating=record_create.rating,
-        reviewed_at=datetime.utcnow()
-    )
-    db.add(study_record)
-    logger.debug(f"Added StudyRecord: {study_record}")
-
-    # Update SM2
-    _update_sm2(uf, record_create.rating)
-    logger.debug(f"Updated UserFlashcard after SM2: {uf}")
-
-    # Make sure SQLAlchemy sees the changes on user_flashcards
-    db.add(uf)  # Ensure we re-attach if not recognized
-
-    try:
-        db.commit()
-        db.refresh(study_record)
-        logger.info(f"StudyRecord saved with id={study_record.id}")
-    except SQLAlchemyError as e:
-        logger.error(f"Error committing transaction: {e}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Internal Server Error")
-
-    return study_record
-
 
 def _update_sm2(user_flashcard: UserFlashcard, rating: int):
     """
@@ -245,7 +75,6 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int):
     user_flashcard.next_review = datetime.utcnow() + timedelta(days=user_flashcard.interval)
     logger.debug(f"Next review scheduled for {user_flashcard.next_review}")
 
-
 @router.post("/bulk_record", response_model=dict, status_code=201)
 def bulk_record(
     data: BulkRecordData,
@@ -253,9 +82,9 @@ def bulk_record(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Bulk save ratings & update SM2 for the given deck.
+    Bulk save ratings & update SM2 for the given session and deck.
     """
-    logger.info(f"bulk_record deck_id={data.deck_id}, user_id={current_user.id_}")
+    logger.info(f"bulk_record session_id={data.session_id}, deck_id={data.deck_id}, user_id={current_user.id_}")
 
     # -- (1) Validate deck ownership
     deck = db.query(Deck).filter(
@@ -270,16 +99,19 @@ def bulk_record(
         )
     logger.debug(f"Deck found: {deck}")
 
-    # -- (2) Create a new study session
-    new_session = StudySession(
-        user_id=current_user.id_,
-        deck_id=deck.id,
-        started_at=datetime.utcnow(),
-        completed_at=datetime.utcnow()
-    )
-    db.add(new_session)
-    db.flush()  # Flush so new_session.id is available
-    logger.debug(f"Created StudySession with id={new_session.id}")
+    # -- (2) Validate session
+    session = db.query(StudySession).filter(
+        StudySession.id == data.session_id,
+        StudySession.user_id == current_user.id_,
+        StudySession.deck_id == data.deck_id
+    ).first()
+    if not session:
+        logger.error(f"StudySession id={data.session_id} not found or does not belong to user_id={current_user.id_}")
+        raise HTTPException(
+            status_code=404,
+            detail="Study session not found or doesn't belong to user."
+        )
+    logger.debug(f"StudySession found: {session}")
 
     # -- (3) Pobierz userFlashcards (mapowanie flashcard_id -> userFlashcard).
     user_flashcards = db.query(UserFlashcard).filter(
@@ -325,7 +157,7 @@ def bulk_record(
             continue
 
         study_record = StudyRecord(
-            session_id=new_session.id,
+            session_id=session.id,
             user_flashcard_id=uf.id,
             rating=item.rating,
             reviewed_at=item.answered_at
@@ -341,10 +173,14 @@ def bulk_record(
         db.add(uf)
 
     try:
+        # Update session completed_at
+        session.completed_at = datetime.utcnow()
+        db.add(session)
+
         # Flush + commit
         db.flush()
         db.commit()
-        logger.info(f"Bulk record saved. session_id={new_session.id}")
+        logger.info(f"Bulk record saved. session_id={session.id}")
     except SQLAlchemyError as e:
         logger.error(f"Błąd podczas commitowania transakcji: {e}")
         db.rollback()
@@ -352,9 +188,8 @@ def bulk_record(
 
     return {
         "message": "Bulk record saved",
-        "study_session_id": new_session.id
+        "study_session_id": session.id
     }
-
 
 @router.get("/next_review_date")
 def get_next_review_date(
@@ -369,7 +204,7 @@ def get_next_review_date(
 
     deck = db.query(Deck).filter(
         Deck.id == deck_id,
-        cast(Deck.user_id, Integer) == current_user.id_
+        Deck.user_id == current_user.id_
     ).first()
     if not deck:
         logger.error(f"Deck id={deck_id} not found for user_id={current_user.id_}")
@@ -387,54 +222,150 @@ def get_next_review_date(
     logger.debug(f"Earliest next_review date: {earliest}")
     return {"next_review": earliest.isoformat()}
 
-
-@router.get("/retake_cards/{deck_id}")
-def retake_cards(
+@router.post("/start", response_model=dict, status_code=201)
+def start_study_session(
     deck_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Returns all flashcards in that deck whose EF <= 'the second smallest EF' in the deck.
-      e.g. if EFs are [1.5, 1.7, 1.8, 2.4], second smallest is 1.7 => we return EF <= 1.7
+    Starts a new study session for the given deck.
+    Returns the session_id and available cards to study.
     """
-    logger.info(f"Fetching retake_cards for deck_id={deck_id}, user_id={current_user.id_}")
+    logger.info(f"Starting study session for deck_id={deck_id}, user_id={current_user.id_}")
 
+    # Validate deck ownership
     deck = db.query(Deck).filter(
         Deck.id == deck_id,
-        cast(Deck.user_id, Integer) == current_user.id_
+        Deck.user_id == current_user.id_
     ).first()
     if not deck:
-        logger.error(f"Deck id={deck_id} not found for user_id={current_user.id_}")
-        raise HTTPException(status_code=404, detail="Deck not found.")
+        logger.error(f"Deck id={deck_id} not found or does not belong to user_id={current_user.id_}")
+        raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
 
+    # Initialize missing UserFlashcards
     user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
-    if not user_flashcards:
-        logger.info(f"No UserFlashcards found for deck_id={deck_id} and user_id={current_user.id_}")
+    uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
+    missing_flashcard_ids = [fc.id for fc in deck.flashcards if fc.id not in uf_map]
+    if missing_flashcard_ids:
+        logger.info(f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
+        new_ufs = []
+        for fc_id in missing_flashcard_ids:
+            new_uf = UserFlashcard(
+                user_id=current_user.id_,
+                flashcard_id=fc_id,
+                ef=2.5,
+                interval=0,
+                repetitions=0,
+                next_review=datetime.utcnow()
+            )
+            db.add(new_uf)
+            new_ufs.append(new_uf)
+            logger.debug(f"Added new UserFlashcard: {new_uf}")
+        db.flush()
+        user_flashcards += new_ufs
+        uf_map.update({uf.flashcard_id: uf for uf in new_ufs})
+        logger.info(f"Persisted {len(new_ufs)} new UserFlashcard entries.")
+
+    # Fetch available flashcards: next_review <= now()
+    now = datetime.utcnow()
+    available_ufs = [uf for uf in user_flashcards if uf.next_review <= now]
+    logger.debug(f"Found {len(available_ufs)} available UserFlashcards for study.")
+
+    # Create a new StudySession
+    new_session = StudySession(
+        user_id=current_user.id_,
+        deck_id=deck.id,
+        started_at=now,
+        completed_at=now  # Will be updated when session is completed
+    )
+    db.add(new_session)
+    db.flush()
+    logger.debug(f"Created StudySession with id={new_session.id}")
+
+    # Convert available UserFlashcards to Flashcards
+    flashcard_ids = [uf.flashcard_id for uf in available_ufs]
+    available_cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+
+    # Build the response
+    result = []
+    for c in available_cards:
+        result.append({
+            "id": c.id,
+            "question": c.question,
+            "answer": c.answer,
+            "deck_id": c.deck_id,
+            "media_url": getattr(c, 'media_url', None)
+        })
+    logger.debug(f"Available cards for study session {new_session.id}: {result}")
+
+    return {
+        "study_session_id": new_session.id,
+        "available_cards": result
+    }
+
+@router.get("/session/{session_id}/retake_cards", response_model=List[dict], status_code=200)
+def retake_cards_for_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retake only for flashcards that user saw in this session (id=session_id).
+    With EF <= second smallest EF among them.
+    """
+    logger.info(f"Fetching retake_cards for session_id={session_id}, user_id={current_user.id_}")
+
+    # Find the session
+    session = db.query(StudySession).filter(
+        StudySession.id == session_id,
+        StudySession.user_id == current_user.id_
+    ).first()
+    if not session:
+        logger.error(f"StudySession id={session_id} not found for user_id={current_user.id_}")
+        raise HTTPException(status_code=404, detail="Study session not found or doesn't belong to user.")
+
+    # Fetch study records for this session
+    study_records = db.query(StudyRecord).filter(
+        StudyRecord.session_id == session_id
+    ).all()
+    if not study_records:
+        logger.info(f"No StudyRecords found for session_id={session_id}")
         return []
 
-    # sort by EF ascending
+    # Get UserFlashcard IDs
+    user_flashcard_ids = {sr.user_flashcard_id for sr in study_records}
+
+    # Fetch UserFlashcards
+    user_flashcards = db.query(UserFlashcard).filter(
+        UserFlashcard.id.in_(user_flashcard_ids),
+        UserFlashcard.user_id == current_user.id_
+    ).all()
+
+    if not user_flashcards:
+        return []
+
+    # Sort by EF ascending
     sorted_uf = sorted(user_flashcards, key=lambda uf: uf.ef)
     if len(sorted_uf) == 1:
-        # only one card => second smallest does not exist, fallback = that single EF
         threshold = sorted_uf[0].ef
         logger.debug(f"Only one UserFlashcard found. Using EF threshold={threshold}")
     else:
         threshold = sorted_uf[1].ef  # second smallest EF
         logger.debug(f"Second smallest EF={threshold}")
 
-    # filter by EF <= threshold + 0.1
+    # Filter by EF <= threshold + 0.1
     chosen = [uf for uf in user_flashcards if uf.ef <= threshold + 0.1]
     logger.debug(f"Chosen {len(chosen)} UserFlashcards with EF <= {threshold + 0.1}")
 
-    # gather flashcards
+    # Gather flashcards
     flashcard_ids = [uf.flashcard_id for uf in chosen]
     cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
-    # build JSON
+    # Build JSON
     result = []
     for c in cards:
         result.append({
@@ -442,8 +373,56 @@ def retake_cards(
             "question": c.question,
             "answer": c.answer,
             "deck_id": c.deck_id,
-            # if your Flashcard model has a 'media_url', add it:
             "media_url": getattr(c, 'media_url', None)
         })
-    logger.debug(f"Retake cards: {result}")
+    logger.debug(f"Retake cards for session {session_id}: {result}")
+    return result
+
+@router.get("/retake_hard_cards", response_model=List[dict], status_code=200)
+def retake_hard_cards(
+    deck_id: int = Query(..., description="ID of the deck to retake hard cards from"),
+    max_ef: float = Query(1.8, description="Maximum EF value for hard cards"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retake hard flashcards from the given deck with EF <= max_ef.
+    These flashcards are scheduled for future review (next_review > now()).
+    """
+    logger.info(f"Fetching retake_hard_cards for deck_id={deck_id}, user_id={current_user.id_}, max_ef={max_ef}")
+
+    # Validate deck ownership
+    deck = db.query(Deck).filter(
+        Deck.id == deck_id,
+        Deck.user_id == current_user.id_
+    ).first()
+    if not deck:
+        logger.error(f"Deck id={deck_id} not found or does not belong to user_id={current_user.id_}")
+        raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
+
+    # Fetch UserFlashcards with EF <= max_ef and next_review > now()
+    now = datetime.utcnow()
+    user_flashcards = db.query(UserFlashcard).filter(
+        UserFlashcard.user_id == current_user.id_,
+        UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
+        UserFlashcard.ef <= max_ef,
+        UserFlashcard.next_review > now
+    ).all()
+    logger.debug(f"Found {len(user_flashcards)} hard UserFlashcards for retake.")
+
+    # Gather flashcards
+    flashcard_ids = [uf.flashcard_id for uf in user_flashcards]
+    cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+
+    # Build JSON
+    result = []
+    for c in cards:
+        result.append({
+            "id": c.id,
+            "question": c.question,
+            "answer": c.answer,
+            "deck_id": c.deck_id,
+            "media_url": getattr(c, 'media_url', None)
+        })
+    logger.debug(f"Retake hard cards: {result}")
     return result
