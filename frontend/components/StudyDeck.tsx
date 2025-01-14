@@ -48,6 +48,8 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
   // State for submission
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // State for loading (retake operations)
+  const [isLoading, setIsLoading] = useState(false);
 
   // ConversationId for Chat
   const conversationId = deck.id;
@@ -178,6 +180,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
   // Function to retake hard cards
   const handleRetakeHardCards = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(`${API_BASE_URL}/study_sessions/retake_hard_cards?deck_id=${deck.id}`, {
         method: 'GET',
         credentials: 'include',
@@ -208,12 +211,15 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
         alert(t('error_unexpected_retake_hard_cards'));
       }
       console.error('Error retaking hard cards:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   // Function to retake session (using the latest session)
   const handleRetakeSession = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch(`${API_BASE_URL}/study_sessions/retake_session?deck_id=${deck.id}`, {
         method: 'GET',
         credentials: 'include',
@@ -244,6 +250,8 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
         alert(t('error_unexpected_retake_cards'));
       }
       console.error('Error retaking session cards:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -268,32 +276,55 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
             variant="outline"
             onClick={handleRetakeSession}
             className="mb-2"
+            disabled={isLoading}
           >
-            {t('retake_session')}
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t('retake_session')}
+              </>
+            ) : (
+              t('retake_session')
+            )}
           </Button>
 
           <Button
             variant="outline"
             onClick={handleRetakeHardCards}
             className="mb-4"
+            disabled={isLoading}
           >
-            {t('retake_hard_cards')}
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t('retake_hard_cards')}
+              </>
+            ) : (
+              t('retake_hard_cards')
+            )}
           </Button>
 
           <div className="flex space-x-4">
-            <Button onClick={handleFinish} disabled={isSubmitting}>
-              {t('save_and_exit')}
+            <Button onClick={handleFinish} disabled={isSubmitting || isLoading}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('save_and_exit')}
+                </>
+              ) : (
+                t('save_and_exit')
+              )}
             </Button>
-            <Button onClick={onExit} variant="outline">
+            <Button onClick={onExit} variant="outline" disabled={isLoading}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               {t('back_to_decks')}
             </Button>
           </div>
 
-          {isSubmitting && (
+          {(isSubmitting || isLoading) && (
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              <span>{t('saving_results')}</span>
+              <span>{t('loading')}</span>
             </div>
           )}
           {submitError && (
@@ -307,13 +338,19 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
   // If have flashcards, show study screen
   const currentCard = cardsQueue[currentIndex];
 
-  const totalCards = deck.flashcards.length;
-  const answeredEasyCount = localRatings.filter(r => r.rating === 5).length;
-  const progressPercent = totalCards > 0 ? Math.round((answeredEasyCount / totalCards) * 100) : 0;
+  const totalCards = cardsQueue.length;
+  const answeredCount = localRatings.length;
+  const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
   const seenCount = cardSeenCount[currentCard.id] || 0;
 
   return (
     <div className="h-screen w-full bg-background flex items-center justify-center relative">
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <span className="ml-2 text-white">{t('loading')}</span>
+        </div>
+      )}
       <div
         className={`transition-all duration-300 ${
           isChatOpen ? 'mr-[40rem]' : ''
@@ -336,10 +373,10 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
         </div>
 
         <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-4">
-          {/* Progress bar and stats */}
+          {/* Progress bar and single flashcard counter */}
           <div className="w-full mb-2">
             <div className="text-sm text-muted-foreground">
-              {t('progress')}: {answeredEasyCount}/{totalCards} ({progressPercent}%)
+              {t('progress')}: {answeredCount}/{totalCards} ({progressPercent}%)
             </div>
             <div className="h-2 w-full bg-muted rounded-md overflow-hidden">
               <div
@@ -351,8 +388,8 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
 
           <div className="mb-4 text-sm font-medium text-primary">
             {t('flashcard_counter', {
-              current: currentIndex + 1,
-              total: cardsQueue.length
+              current: answeredCount,
+              total: totalCards
             })}
           </div>
 
@@ -439,12 +476,19 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
           )}
 
           {/* Save and exit button */}
-          <Button variant="secondary" onClick={handleFinish} disabled={isSubmitting}>
-            {t('save_and_exit')}
+          <Button variant="secondary" onClick={handleFinish} disabled={isSubmitting || isLoading}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t('save_and_exit')}
+              </>
+            ) : (
+              t('save_and_exit')
+            )}
           </Button>
 
           {/* Loading indicator when saving */}
-          {isSubmitting && (
+          {(isSubmitting || isLoading) && (
             <div className="flex items-center space-x-2">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
               <span>{t('saving_results')}</span>

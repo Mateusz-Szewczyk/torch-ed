@@ -34,7 +34,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
         console.log('Auth Request URL:', `${API_BASE_URL}/auth/me`);
         console.log('Available cookies:', document.cookie);
 
-        const res = await fetch(`${API_BASE_URL}/auth/me`, {
+        const res = await fetch(`${API_BASE_URL}/auth/login`, {
           credentials: 'include',
         });
 

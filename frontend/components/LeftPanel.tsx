@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import {
   Home,
   BookOpen,
@@ -41,6 +41,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import FeedbackModal from '@/components/FeedbackModal';
+import { ConversationContext } from "@/contexts/ConversationContext";
 
 interface Conversation {
   id: number;
@@ -53,8 +54,6 @@ interface LeftPanelProps {
   setIsAuthenticated: (val: boolean) => void;
   isPanelVisible: boolean;
   setIsPanelVisible: React.Dispatch<React.SetStateAction<boolean>>;
-  currentConversationId: number | null;
-  setCurrentConversationId: React.Dispatch<React.SetStateAction<number | null>>;
 }
 
 export function LeftPanel({
@@ -62,13 +61,13 @@ export function LeftPanel({
   setIsAuthenticated,
   isPanelVisible,
   setIsPanelVisible,
-  setCurrentConversationId,
 }: LeftPanelProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const router = useRouter();
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { t, i18n } = useTranslation();
+  const { setCurrentConversationId } = useContext(ConversationContext); // Pobranie funkcji ustawiania konwersacji
 
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -252,8 +251,9 @@ export function LeftPanel({
   };
 
   const handleConversationClick = (conversationId: number) => {
+    console.log(`Setting currentConversationId to: ${conversationId}`);
     setCurrentConversationId(conversationId);
-    router.push(`/chat`); // Przekierowanie do konkretnej konwersacji
+    router.push(`/chat`); // Przekierowanie do /chat, gdzie ChatPage powinien odczytać currentConversationId
   };
 
   const handleMouseEnter = () => {

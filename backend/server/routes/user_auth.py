@@ -173,7 +173,8 @@ def logout() -> Response | tuple:
         samesite='None',
         httponly=True,
         secure=True,
-        path='/'  # Musi być zgodne z ustawieniem podczas logowania
+        path='/',
+        domain='.up.railway.app',
     )
 
     return response

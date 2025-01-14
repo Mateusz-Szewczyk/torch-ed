@@ -4,7 +4,7 @@ import React, { createContext, useState } from 'react';
 
 interface ConversationContextProps {
   currentConversationId: number | null;
-  setCurrentConversationId: (id: number) => void;
+  setCurrentConversationId: (id: number | null) => void;
 }
 
 export const ConversationContext = createContext<ConversationContextProps>({

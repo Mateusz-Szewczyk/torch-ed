@@ -161,7 +161,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
       {/* Lista wiadomości */}
-      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full">
+      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full md:w-4/5">
         {messages.map((message) => {
           const alignmentClass =
             message.sender === 'user'
@@ -170,7 +170,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
           return (
             <div key={message.id} className="flex">
               <div
-                className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-[80%] break-words ${
+                className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-full sm:max-w-4/5 break-words ${
                   message.sender === 'user'
                     ? 'bg-secondary text-secondary-foreground'
                     : 'bg-background text-foreground'
@@ -210,7 +210,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         })}
         {isLoading && (
           <div className="flex">
-            <div className="inline-block p-3 rounded-lg mr-auto max-w-[80%] bg-secondary text-secondary-foreground break-words">
+            <div className="inline-block p-3 rounded-lg mr-auto max-w-full sm:max-w-4/5 bg-secondary text-secondary-foreground break-words">
               <BouncingDots />
             </div>
           </div>
@@ -219,8 +219,8 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       </div>
       {/* Pole tekstowe */}
       <div className="border-t border-border p-4 w-full bg-background">
-        <div className="flex justify-center max-w-5xl mx-auto">
-          <div className="flex gap-2 w-3/4">
+        <div className="flex justify-center mx-auto w-full md:w-4/5">
+          <div className="flex gap-2 w-full">
             <div className="flex-grow">
               <Input
                 type="text"
