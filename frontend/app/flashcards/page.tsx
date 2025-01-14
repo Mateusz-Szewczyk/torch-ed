@@ -190,51 +190,51 @@ export default function FlashcardsPage() {
   /**
    * Funkcja do rozpoczęcia nauki decka
    */
-  const handleStudy = async (deck: Deck) => {
-    try {
-      const response = await fetch(`${STUDY_SESSIONS_URL}start`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deck_id: deck.id }),
-      });
+const handleStudy = async (deck: Deck) => {
+  try {
+    const response = await fetch(`${STUDY_SESSIONS_URL}start`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deck_id: deck.id }),
+    });
 
-      if (!response.ok) {
-        const errorData: ErrorResponse = await response.json();
-        // Jeśli errorData.detail jest listą, skonwertuj ją na string
-        let errorMessage = 'Nie udało się rozpocząć sesji nauki.';
-        if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail.map((err) => (typeof err === 'object' && 'msg' in err ? err.msg : String(err))).join(', ');
-        } else if (typeof errorData.detail === 'string') {
-          errorMessage = errorData.detail;
-        }
-        throw new Error(errorMessage);
+    if (!response.ok) {
+      const errorData: ErrorResponse = await response.json();
+      // Jeśli errorData.detail jest listą, skonwertuj ją na string
+      let errorMessage = 'Nie udało się rozpocząć sesji nauki.';
+      if (Array.isArray(errorData.detail)) {
+        errorMessage = errorData.detail.map((err) => (typeof err === 'object' && 'msg' in err ? err.msg : String(err))).join(', ');
+      } else if (typeof errorData.detail === 'string') {
+        errorMessage = errorData.detail;
       }
-
-      const data = await response.json();
-      const { study_session_id, available_cards } = data;
-
-      // Jeżeli brak fiszek do nauki
-      if (available_cards.length === 0) {
-        alert(t('no_available_flashcards_to_study'));
-        return;
-      }
-
-      // Ustawiamy stan - przechodzimy do trybu nauki
-      setStudyingDeck({
-        deck,
-        study_session_id,
-        available_cards,
-      });
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(`${t('error_starting_study')}: ${err.message}`);
-      } else {
-        setError(t('error_unexpected_starting_study'));
-      }
-      console.error('Error starting study session:', err);
+      throw new Error(errorMessage);
     }
-  };
+
+    const data = await response.json();
+    const { study_session_id, available_cards } = data;
+
+    // Upewnij się, że available_cards jest tablicą
+    if (!Array.isArray(available_cards)) {
+      throw new Error('Invalid response format: available_cards is not an array.');
+    }
+
+    // Ustawiamy stan - przechodzimy do trybu nauki
+    setStudyingDeck({
+      deck,
+      study_session_id,
+      available_cards,
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      setError(`${t('error_starting_study')}: ${err.message}`);
+    } else {
+      setError(t('error_unexpected_starting_study'));
+    }
+    console.error('Error starting study session:', err);
+  }
+};
+
 
   /**
    * Funkcja do wyjścia z trybu nauki

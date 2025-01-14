@@ -33,7 +33,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
   const { t } = useTranslation();
 
   // Queue of flashcards
-  const [cardsQueue, setCardsQueue] = useState<Flashcard[]>(available_cards);
+  const [cardsQueue, setCardsQueue] = useState<Flashcard[]>(Array.isArray(available_cards) ? available_cards : []);
   const [currentIndex, setCurrentIndex] = useState(0);
   // Rated flashcards
   const [localRatings, setLocalRatings] = useState<LocalRating[]>([]);
@@ -57,9 +57,11 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
   // Initialize seen count from available_cards
   useEffect(() => {
     const initialSeenCount: CardSeenCount = {};
-    available_cards.forEach(card => {
-      initialSeenCount[card.id] = 0;
-    });
+    if (Array.isArray(available_cards)) {
+      available_cards.forEach(card => {
+        initialSeenCount[card.id] = 0;
+      });
+    }
     setCardSeenCount(initialSeenCount);
   }, [available_cards]);
 
@@ -324,7 +326,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
 
   const totalCards = deck.flashcards.length;
   const answeredEasyCount = localRatings.filter(r => r.rating === 5).length;
-  const progressPercent = Math.round((answeredEasyCount / totalCards) * 100);
+  const progressPercent = totalCards > 0 ? Math.round((answeredEasyCount / totalCards) * 100) : 0;
   const seenCount = cardSeenCount[currentCard.id] || 0;
 
   return (
