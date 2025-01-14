@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 import logging
 
 from ..dependencies import get_db
@@ -228,10 +228,25 @@ class StartStudySessionRequest(BaseModel):
     deck_id: int
 
 
+class FlashcardResponse(BaseModel):
+    id: int
+    question: str
+    answer: str
+    deck_id: int
+    media_url: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+
 class StudySessionResponse(BaseModel):
     """Response model for starting a study session."""
-    study_session_id: int
-    available_cards: List[dict]
+    study_session_id: Optional[int] = None  # Teraz może być int lub None
+    available_cards: List[FlashcardResponse]
+    next_session_date: Optional[str] = None  # Dodane dla informacji o następnej sesji
+
+    class Config:
+        orm_mode = True
 
 
 @router.post("/start", response_model=StudySessionResponse, status_code=201)
@@ -304,11 +319,11 @@ def start_study_session(
         next_session_date = min(next_reviews) if next_reviews else None
 
         logger.info("No available flashcards to study at this time.")
-        return {
-            "study_session_id": None,
-            "available_cards": [],
-            "next_session_date": next_session_date.isoformat() if next_session_date else None
-        }
+        return StudySessionResponse(
+            study_session_id=None,
+            available_cards=[],
+            next_session_date=next_session_date.isoformat() if next_session_date else None
+        )
 
     # -- (5) Create a new StudySession
     new_session = StudySession(
@@ -348,14 +363,14 @@ def start_study_session(
         logger.error(f"Error committing StudySession: {e}")
         raise HTTPException(status_code=500, detail="Failed to start study session.")
 
-    return {
-        "study_session_id": new_session.id,
-        "available_cards": result,
-        "next_session_date": None
-    }
+    return StudySessionResponse(
+        study_session_id=new_session.id,
+        available_cards=result,
+        next_session_date=None
+    )
 
 
-@router.get("/retake_session", response_model=List[dict], status_code=200)
+@router.get("/retake_session", response_model=List[FlashcardResponse], status_code=200)
 def retake_session(
     deck_id: int = Query(..., description="ID of the deck to retake session from"),
     db: Session = Depends(get_db),
@@ -366,7 +381,7 @@ def retake_session(
     """
     logger.info(f"Fetching retake_session for deck_id={deck_id}, user_id={current_user.id_}")
 
-    # Find the latest StudySession for the deck and user
+    # Find the latest completed StudySession for the deck and user
     session = db.query(StudySession).filter(
         StudySession.deck_id == deck_id,
         StudySession.user_id == current_user.id_,
@@ -407,24 +422,30 @@ def retake_session(
         threshold = sorted_uf[1].ef  # second smallest EF
         logger.debug(f"Second smallest EF={threshold}")
 
-    # Filter by EF <= threshold + 0.1
-    chosen = [uf for uf in user_flashcards if uf.ef <= threshold + 0.1]
-    logger.debug(f"Chosen {len(chosen)} UserFlashcards with EF <= {threshold + 0.1}")
+    # Find two distinct lowest EF values
+    distinct_efs = sorted({uf.ef for uf in user_flashcards})[:2]
+    logger.debug(f"Lowest two distinct EF values: {distinct_efs}")
+
+    # Select all UserFlashcards with EF in the lowest two EF values
+    chosen_user_flashcards = [
+        uf for uf in user_flashcards if uf.ef in distinct_efs
+    ]
+
+    logger.debug(f"Chosen {len(chosen_user_flashcards)} UserFlashcards with EF in {distinct_efs}")
 
     # Gather flashcards
-    flashcard_ids = [uf.flashcard_id for uf in chosen]
+    flashcard_ids = [uf.flashcard_id for uf in chosen_user_flashcards]
     cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
-    # Build JSON
-    result = []
-    for c in cards:
-        result.append({
-            "id": c.id,
-            "question": c.question,
-            "answer": c.answer,
-            "deck_id": c.deck_id,
-            "media_url": getattr(c, 'media_url', None)
-        })
+    # Build JSON response
+    result = [{
+        "id": c.id,
+        "question": c.question,
+        "answer": c.answer,
+        "deck_id": c.deck_id,
+        "media_url": getattr(c, 'media_url', None)
+    } for c in cards]
+
     logger.debug(f"Retake cards for session {session.id}: {result}")
     return result
 
