@@ -178,7 +178,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
   // Function to retake hard cards
   const handleRetakeHardCards = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/retake_hard_cards?deck_id=${deck.id}`, {
+      const response = await fetch(`${API_BASE_URL}/study_sessions/retake_hard_cards?deck_id=${deck.id}`, {
         method: 'GET',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -214,7 +214,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
   // Function to retake session (using the latest session)
   const handleRetakeSession = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/retake_session?deck_id=${deck.id}`, {
+      const response = await fetch(`${API_BASE_URL}/study_sessions/retake_session?deck_id=${deck.id}`, {
         method: 'GET',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
