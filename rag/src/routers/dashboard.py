@@ -21,7 +21,7 @@ logging.basicConfig(
 )
 
 
-@router.get("/dashboard", response_model=DashboardData)
+@router.get("/", response_model=DashboardData)
 async def get_dashboard_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
