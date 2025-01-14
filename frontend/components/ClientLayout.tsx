@@ -88,8 +88,6 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
         setIsAuthenticated={setIsAuthenticated}
         isPanelVisible={isPanelVisible}
         setIsPanelVisible={setIsPanelVisible}
-        currentConversationId={currentConversationId}
-        setCurrentConversationId={setCurrentConversationId}
       />
       <main
         className={`flex-1 overflow-auto transition-all duration-300 ${
