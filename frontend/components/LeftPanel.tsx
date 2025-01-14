@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dialog';
 import FeedbackModal from '@/components/FeedbackModal';
 import { ConversationContext } from "@/contexts/ConversationContext";
+import { AuthContext } from '@/contexts/AuthContext'; // Import AuthContext
 
 interface Conversation {
   id: number;
@@ -49,19 +50,9 @@ interface Conversation {
   created_at: string;
 }
 
-interface LeftPanelProps {
-  isAuthenticated: boolean;
-  setIsAuthenticated: (val: boolean) => void;
-  isPanelVisible: boolean;
-  setIsPanelVisible: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-export function LeftPanel({
-  isAuthenticated,
-  setIsAuthenticated,
-  isPanelVisible,
-  setIsPanelVisible,
-}: LeftPanelProps) {
+const LeftPanel: React.FC = () => {
+  const { isAuthenticated, setIsAuthenticated } = useContext(AuthContext); // Korzystanie z AuthContext
+  const [isPanelVisible, setIsPanelVisible] = useState<boolean>(true);
   const [isHovered, setIsHovered] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const router = useRouter();
@@ -586,4 +577,6 @@ export function LeftPanel({
       </Dialog>
     </>
   );
-}
+};
+
+export default LeftPanel;

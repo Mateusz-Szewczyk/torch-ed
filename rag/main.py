@@ -7,10 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import base64
 
-# Importuj modele i bazę danych
-from src.models import Base
-from src.routers import files, decks, flashcards, query, chats, exams, study_sessions, user_flashcards
-from src.database import engine
+from src.routers import files, decks, flashcards, query, chats, exams, study_sessions, user_flashcards, dashboard
 from src.config import Config
 
 def load_private_keys():
@@ -87,6 +84,7 @@ app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])
 app.include_router(exams.router, prefix="/api/exams", tags=["Exams"])
 app.include_router(study_sessions.router, prefix="/api/study_sessions", tags=["Study Sessions"])
 app.include_router(user_flashcards.router, prefix="/api/user_flashcards", tags=["User Flashcards"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
 # Uruchomienie aplikacji
 if __name__ == "__main__":

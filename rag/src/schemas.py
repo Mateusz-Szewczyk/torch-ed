@@ -267,3 +267,70 @@ class ExamResultRead(BaseModel):
 
     class Config:
         orm_mode = True
+
+class StudyRecord(BaseModel):
+    id: int
+    session_id: Optional[int]
+    user_flashcard_id: Optional[int]
+    rating: Optional[int]
+    reviewed_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla user_flashcards
+class UserFlashcard(BaseModel):
+    id: int
+    user_id: int
+    flashcard_id: int
+    ef: float
+    interval: int
+    repetitions: int
+    next_review: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla study_sessions
+class StudySession(BaseModel):
+    id: int
+    user_id: int
+    deck_id: int
+    started_at: datetime
+    completed_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla exam_result_answers
+class ExamResultAnswer(BaseModel):
+    id: int
+    exam_result_id: int
+    question_id: int
+    selected_answer_id: int
+    is_correct: bool
+    answer_time: datetime
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla exam_results
+class ExamResult(BaseModel):
+    id: int
+    exam_id: int
+    user_id: int
+    started_at: datetime
+    completed_at: Optional[datetime]
+    score: float
+
+    class Config:
+        orm_mode = True
+
+# Schemat dla Dashboard Data
+class DashboardData(BaseModel):
+    study_records: List[StudyRecord]
+    user_flashcards: List[UserFlashcard]
+    study_sessions: List[StudySession]
+    exam_result_answers: List[ExamResultAnswer]
+    exam_results: List[ExamResult]
+

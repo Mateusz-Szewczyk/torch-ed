@@ -1,3 +1,5 @@
+// src/app/page.tsx
+
 'use client';
 
 import { useTranslation, Trans } from 'react-i18next';
@@ -19,7 +21,13 @@ import {
 // Import ikon z react-icons
 import { FaGithub, FaLinkedin, FaRegLightbulb } from 'react-icons/fa'; // Dodana ikona FaRegLightbulb
 
-// Definicja typu dla planów
+// Import komponentu Dashboard
+import Dashboard from '@/components/Dashboard';
+
+// Import AuthContext
+import { useContext } from 'react';
+import { AuthContext } from '@/contexts/AuthContext';
+
 interface FuturePlan {
   title: string;
   description: string;
@@ -27,7 +35,14 @@ interface FuturePlan {
 
 export default function HomePage() {
   const { t } = useTranslation();
+  const { isAuthenticated } = useContext(AuthContext); // Korzystanie z AuthContext
 
+  // Jeśli użytkownik jest zalogowany, renderuj Dashboard
+  if (isAuthenticated) {
+    return <Dashboard />;
+  }
+
+  // Jeśli użytkownik nie jest zalogowany, renderuj istniejącą zawartość HomePage
   // Przykładowe sekcje do kart
   const sections = [
     {
