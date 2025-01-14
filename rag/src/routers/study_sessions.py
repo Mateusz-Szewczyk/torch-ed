@@ -297,10 +297,6 @@ def start_study_session(
     available_ufs = [uf for uf in user_flashcards if uf.next_review <= now]
     logger.debug(f"Found {len(available_ufs)} available UserFlashcards for study.")
 
-    if not available_ufs:
-        logger.info("No available flashcards to study at this time.")
-        raise HTTPException(status_code=200, detail="No available flashcards to study at this time.")
-
     # -- (5) Create a new StudySession
     new_session = StudySession(
         user_id=current_user.id_,
@@ -308,6 +304,7 @@ def start_study_session(
         started_at=now,
         completed_at=None
     )
+
     db.add(new_session)
     db.flush()  # Flush to get new_session.id
     logger.debug(f"Created StudySession with id={new_session.id}")
@@ -321,6 +318,12 @@ def start_study_session(
         logger.error(f"Error committing StudySession: {e}")
         raise HTTPException(status_code=500, detail="Failed to start study session.")
 
+    if not available_ufs:
+        logger.info("No available flashcards to study at this time.")
+        return {
+            "study_session_id": new_session.id,
+            "available_cards": []
+        }
 
     # -- (6) Convert available UserFlashcards to Flashcards
     flashcard_ids = [uf.flashcard_id for uf in available_ufs]
@@ -338,6 +341,7 @@ def start_study_session(
         }
         result.append(card_dict)
     logger.debug(f"Available cards for study session {new_session.id}: {result}")
+
 
     return {
         "study_session_id": new_session.id,
