@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import {
     LineChart, Line,
     BarChart, Bar,
@@ -11,6 +11,7 @@ import {
     Tooltip, Legend,
     ResponsiveContainer
 } from 'recharts';
+import { AuthContext } from '@/contexts/AuthContext';
 
 interface StudyRecord {
     id: number;
@@ -64,9 +65,13 @@ interface DashboardData {
     exam_results: ExamResult[];
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL;
+const DASHBOARD_URL = `${API_BASE_URL}/dashboard`;
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
 
 const Dashboard: React.FC = () => {
+    const { isAuthenticated } = useContext(AuthContext); // Korzystanie z AuthContext
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -74,13 +79,16 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                const token = localStorage.getItem('token'); // Upewnij się, że klucz 'token' jest zgodny z implementacją logowania
-                const response = await fetch('/api/dashboard', {
+                if (!isAuthenticated) {
+                    throw new Error('Unauthorized. Please log in.');
+                }
+
+                const response = await fetch(DASHBOARD_URL, {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': token ? `Bearer ${token}` : '',
                     },
+                    credentials: 'include', // Wysyłanie cookies wraz z żądaniem
                 });
 
                 if (!response.ok) {
@@ -105,7 +113,7 @@ const Dashboard: React.FC = () => {
         };
 
         fetchDashboardData();
-    }, []);
+    }, [isAuthenticated]);
 
     if (loading) return <p>Ładowanie danych...</p>;
     if (error) return <p>{error}</p>;
