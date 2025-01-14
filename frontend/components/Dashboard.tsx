@@ -66,7 +66,7 @@ interface DashboardData {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL;
-const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`;
+const DASHBOARD_URL = `${API_BASE_URL}/dashboard`;
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
 
