@@ -24,9 +24,7 @@ def get_current_user(
     Jeśli token nieprawidłowy, rzuca 401.
     """
     token = request.cookies.get("TorchED_AUTH")
-    cookies = request.cookies
-    print(cookies)
-    print(token)
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -83,6 +81,5 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found."
         )
-    print(f"User_id: {user}, user_id: {user_id}")
 
     return user

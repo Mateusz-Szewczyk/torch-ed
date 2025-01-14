@@ -234,17 +234,6 @@ class StudySessionResponse(BaseModel):
     available_cards: List[dict]
 
 
-class StartStudySessionRequest(BaseModel):
-    """Request model for starting a study session."""
-    deck_id: int
-
-
-class StudySessionResponse(BaseModel):
-    """Response model for starting a study session."""
-    study_session_id: int
-    available_cards: List[dict]
-
-
 @router.post("/start", response_model=StudySessionResponse, status_code=201)
 def start_study_session(
     request: StartStudySessionRequest,
@@ -322,6 +311,16 @@ def start_study_session(
     db.add(new_session)
     db.flush()  # Flush to get new_session.id
     logger.debug(f"Created StudySession with id={new_session.id}")
+
+    # **Commit the transaction to save StudySession**
+    try:
+        db.commit()
+        logger.info(f"StudySession id={new_session.id} committed to the database.")
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error committing StudySession: {e}")
+        raise HTTPException(status_code=500, detail="Failed to start study session.")
+
 
     # -- (6) Convert available UserFlashcards to Flashcards
     flashcard_ids = [uf.flashcard_id for uf in available_ufs]
