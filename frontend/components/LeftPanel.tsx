@@ -115,7 +115,7 @@ const LeftPanel: React.FC = () => {
       try {
         const response = await fetch(`${AI_API_BASE_URL}/chats/`, {
           credentials: 'include',
-          headers: { Authorization: 'TorchED_AUTH' },
+          headers: { Authorization: 'TorchED_AUTH' }, // Upewnij się, że nagłówki są poprawne
         });
         if (response.ok) {
           const data: Conversation[] = await response.json();
@@ -123,7 +123,7 @@ const LeftPanel: React.FC = () => {
         } else {
           console.error('Failed to fetch conversations:', response.statusText);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error fetching conversations:', error);
       }
     };
@@ -179,7 +179,7 @@ const LeftPanel: React.FC = () => {
       } else {
         console.error('Failed to update conversation:', resp.statusText);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error updating conversation:', err);
     }
     setIsEditDialogOpen(false);
@@ -204,7 +204,7 @@ const LeftPanel: React.FC = () => {
       } else {
         console.error('Failed to delete conversation:', resp.statusText);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Error deleting conversation:', err);
     }
     setIsDeleteDialogOpen(false);
@@ -236,7 +236,7 @@ const LeftPanel: React.FC = () => {
       } else {
         console.error('Failed to create conversation:', response.statusText);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error creating conversation:', error);
     }
   };
@@ -521,10 +521,15 @@ const LeftPanel: React.FC = () => {
                   }
                   setIsProfileOpen(false);
                   setIsAuthenticated(false);
+                  localStorage.removeItem('token'); // Usunięcie tokenu z localStorage
                   router.push('/');
-                } catch (err) {
+                } catch (err: unknown) {
                   console.error('Error logging out:', err);
-                  alert('Nie udało się wylogować: ' + String(err));
+                  if (err instanceof Error) {
+                    alert('Nie udało się wylogować: ' + err.message);
+                  } else {
+                    alert('Nie udało się wylogować.');
+                  }
                 }
               }}
             >

@@ -1,7 +1,9 @@
+// src/components/ClientLayout.tsx
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { LeftPanel } from '@/components/LeftPanel';
+import LeftPanel from '@/components/LeftPanel';
 import Chat from '@/components/Chat';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
@@ -13,62 +15,31 @@ interface ClientLayoutProps {
 
 const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
-  const [isPanelVisible, setIsPanelVisible] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isPanelVisible, setIsPanelVisible] = useState<boolean>(true);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   const pathname = usePathname();
 
+  // Reset currentConversationId when navigating away from /chat/
   useEffect(() => {
     if (!pathname.startsWith('/chat/')) {
       setCurrentConversationId(null);
     }
   }, [pathname]);
 
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'https://torch-ed-production.up.railway.app/api/v1';
-
-        // Logowanie URL i dostępnych ciasteczek
-        console.log('Auth Request URL:', `${API_BASE_URL}/auth/me`);
-        console.log('Available cookies:', document.cookie);
-
-        const res = await fetch(`${API_BASE_URL}/auth/login`, {
-          credentials: 'include',
-        });
-
-        // Logowanie statusu odpowiedzi
-        console.log('Auth Response status:', res.status);
-        console.log('Auth Response status text:', res.statusText);
-
-        if (res.ok) {
-          setIsAuthenticated(true);
-          console.log('User authenticated successfully.');
-        } else {
-          setIsAuthenticated(false);
-          console.log('User not authenticated.');
-        }
-      } catch (err) {
-        console.error('Error verifying session:', err);
-        setIsAuthenticated(false);
-      }
-    };
-
-  checkSession();
-}, []);
-
-
+  // Sprawdzanie, czy użytkownik korzysta z urządzenia mobilnego
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-      setIsPanelVisible(window.innerWidth >= 768);
+      const isNowMobile = window.innerWidth < 768;
+      setIsMobile(isNowMobile);
+      setIsPanelVisible(!isNowMobile);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Dodawanie lub usuwanie klasy do body w zależności od widoczności panelu na urządzeniach mobilnych
   useEffect(() => {
     if (isMobile && isPanelVisible) {
       document.body.classList.add('mobile-menu-open');
@@ -77,24 +48,20 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
     }
   }, [isMobile, isPanelVisible]);
 
+  // Funkcja do przełączania widoczności panelu
   const togglePanel = () => {
     setIsPanelVisible(!isPanelVisible);
   };
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
-      <LeftPanel
-        isAuthenticated={isAuthenticated}
-        setIsAuthenticated={setIsAuthenticated}
-        isPanelVisible={isPanelVisible}
-        setIsPanelVisible={setIsPanelVisible}
-      />
+      <LeftPanel/>
       <main
         className={`flex-1 overflow-auto transition-all duration-300 ${
-          isMobile 
-            ? 'w-full' 
-            : isPanelVisible 
-              ? 'ml-64 w-[calc(100%-16rem)]' 
+          isMobile
+            ? 'w-full'
+            : isPanelVisible
+              ? 'ml-64 w-[calc(100%-16rem)]'
               : 'ml-16 w-[calc(100%-4rem)]'
         }`}
       >
