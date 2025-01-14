@@ -22,14 +22,15 @@ type CardSeenCount = { [flashcardId: number]: number };
 
 interface StudyDeckProps {
   deck: Deck;
-  study_session_id: number;
+  study_session_id: number | null;
   available_cards: Flashcard[];
+  next_session_date: string | null;
   onExit: () => void;
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8000/api';
 
-export function StudyDeck({ deck, study_session_id, available_cards, onExit }: StudyDeckProps) {
+export function StudyDeck({ deck, study_session_id, available_cards, next_session_date, onExit }: StudyDeckProps) {
   const { t } = useTranslation();
 
   // Queue of flashcards
@@ -47,9 +48,6 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
   // State for submission
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // Date for next session
-  const [nextSessionDate, setNextSessionDate] = useState<string | null>(null);
 
   // ConversationId for Chat
   const conversationId = deck.id;
@@ -77,8 +75,10 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
 
   // Save state to localStorage
   useEffect(() => {
-    localStorage.setItem(`session-${study_session_id}-ratings`, JSON.stringify(localRatings));
-    localStorage.setItem(`session-${study_session_id}-seenCount`, JSON.stringify(cardSeenCount));
+    if (study_session_id !== null) {
+      localStorage.setItem(`session-${study_session_id}-ratings`, JSON.stringify(localRatings));
+      localStorage.setItem(`session-${study_session_id}-seenCount`, JSON.stringify(cardSeenCount));
+    }
   }, [study_session_id, localRatings, cardSeenCount]);
 
   // Function to rate a card
@@ -135,16 +135,18 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
       setIsSubmitting(true);
       setSubmitError(null);
 
-      await fetchJson(`${API_BASE_URL}/study_sessions/bulk_record`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          session_id: study_session_id,
-          deck_id: deck.id,
-          ratings: localRatings,
-        }),
-      });
+      if (study_session_id !== null) {
+        await fetchJson(`${API_BASE_URL}/study_sessions/bulk_record`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            session_id: study_session_id,
+            deck_id: deck.id,
+            ratings: localRatings,
+          }),
+        });
+      }
 
       clearLocalStorage();
       onExit();
@@ -162,8 +164,10 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
   };
 
   const clearLocalStorage = () => {
-    localStorage.removeItem(`session-${study_session_id}-ratings`);
-    localStorage.removeItem(`session-${study_session_id}-seenCount`);
+    if (study_session_id !== null) {
+      localStorage.removeItem(`session-${study_session_id}-ratings`);
+      localStorage.removeItem(`session-${study_session_id}-seenCount`);
+    }
   };
 
   // Function to flip the card
@@ -171,67 +175,10 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
     setIsFlipped(!isFlipped);
   };
 
-  // Fetch next review date after finishing the session
-  useEffect(() => {
-    if (cardsQueue.length === 0) {
-      fetchEarliestNextReview(deck.id);
-    }
-  }, [cardsQueue.length, deck.id]);
-
-  const fetchEarliestNextReview = async (deckId: number) => {
-    try {
-      const data = await fetchJson<{ next_review: string | null }>(
-        `${API_BASE_URL}/study_sessions/next_review_date?deck_id=${deckId}`,
-        { method: 'GET', credentials: 'include' }
-      );
-      setNextSessionDate(data.next_review);
-    } catch (e) {
-      console.error('Error fetching nextReviewDate:', e);
-      setNextSessionDate(null);
-    }
-  };
-
-  // Function to retake cards from the session
-  const handleRetakeSession = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/study_sessions/session/${study_session_id}/retake_cards`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to retake cards.');
-      }
-
-      const retakeCards: Flashcard[] = await response.json();
-
-      if (retakeCards.length === 0) {
-        alert(t('no_cards_to_retake'));
-        return;
-      }
-
-      setCardsQueue(retakeCards);
-      setCurrentIndex(0);
-      setLocalRatings([]);
-      setNextSessionDate(null);
-      setIsFlipped(false);
-      clearLocalStorage();
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        alert(`${t('error_retake_cards')}: ${err.message}`);
-      } else {
-        alert(t('error_unexpected_retake_cards'));
-      }
-      console.error('Error retaking session cards:', err);
-    }
-  };
-
   // Function to retake hard cards
   const handleRetakeHardCards = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/study_sessions/retake_hard_cards?deck_id=${deck.id}&max_ef=1.8`, {
+      const response = await fetch(`${API_BASE_URL}/retake_hard_cards?deck_id=${deck.id}`, {
         method: 'GET',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -252,7 +199,6 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
       setCardsQueue(hardCards);
       setCurrentIndex(0);
       setLocalRatings([]);
-      setNextSessionDate(null);
       setIsFlipped(false);
       clearLocalStorage();
     } catch (err: unknown) {
@@ -265,6 +211,42 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
     }
   };
 
+  // Function to retake session (using the latest session)
+  const handleRetakeSession = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/retake_session?deck_id=${deck.id}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to retake session.');
+      }
+
+      const retakeCards: Flashcard[] = await response.json();
+
+      if (retakeCards.length === 0) {
+        alert(t('no_cards_to_retake'));
+        return;
+      }
+
+      setCardsQueue(retakeCards);
+      setCurrentIndex(0);
+      setLocalRatings([]);
+      setIsFlipped(false);
+      clearLocalStorage();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(`${t('error_retake_cards')}: ${err.message}`);
+      } else {
+        alert(t('error_unexpected_retake_cards'));
+      }
+      console.error('Error retaking session cards:', err);
+    }
+  };
+
   // When cardsQueue is empty, show completion screen
   if (cardsQueue.length === 0) {
     return (
@@ -273,14 +255,15 @@ export function StudyDeck({ deck, study_session_id, available_cards, onExit }: S
           <h2 className="text-2xl font-bold">{t('congratulations')}</h2>
           <p className="text-center">{t('completed_flashcards_today')}</p>
 
-          {nextSessionDate ? (
+          {next_session_date ? (
             <p className="text-center">
-              {t('next_session_scheduled', { date: new Date(nextSessionDate).toLocaleString() })}
+              {t('next_session_scheduled', { date: new Date(next_session_date).toLocaleString() })}
             </p>
           ) : (
             <p className="text-center">{t('no_future_session_date_found')}</p>
           )}
 
+          {/* Przyciski do retake */}
           <Button
             variant="outline"
             onClick={handleRetakeSession}

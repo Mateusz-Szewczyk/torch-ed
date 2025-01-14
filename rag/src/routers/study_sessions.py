@@ -241,8 +241,9 @@ def start_study_session(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Starts a new study session for the given deck.
+    Starts a new study session for the given deck if there are available flashcards to study.
     Returns the session_id and available cards to study.
+    If no flashcards are available, returns the next scheduled session date.
     """
     deck_id = request.deck_id
     logger.info(f"Starting study session for deck_id={deck_id}, user_id={current_user.id_}")
@@ -297,6 +298,18 @@ def start_study_session(
     available_ufs = [uf for uf in user_flashcards if uf.next_review <= now]
     logger.debug(f"Found {len(available_ufs)} available UserFlashcards for study.")
 
+    if not available_ufs:
+        # Find the earliest next_review date among UserFlashcards
+        next_reviews = [uf.next_review for uf in user_flashcards if uf.next_review > now]
+        next_session_date = min(next_reviews) if next_reviews else None
+
+        logger.info("No available flashcards to study at this time.")
+        return {
+            "study_session_id": None,
+            "available_cards": [],
+            "next_session_date": next_session_date.isoformat() if next_session_date else None
+        }
+
     # -- (5) Create a new StudySession
     new_session = StudySession(
         user_id=current_user.id_,
@@ -308,22 +321,6 @@ def start_study_session(
     db.add(new_session)
     db.flush()  # Flush to get new_session.id
     logger.debug(f"Created StudySession with id={new_session.id}")
-
-    # **Commit the transaction to save StudySession**
-    try:
-        db.commit()
-        logger.info(f"StudySession id={new_session.id} committed to the database.")
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"Error committing StudySession: {e}")
-        raise HTTPException(status_code=500, detail="Failed to start study session.")
-
-    if not available_ufs:
-        logger.info("No available flashcards to study at this time.")
-        return {
-            "study_session_id": new_session.id,
-            "available_cards": []
-        }
 
     # -- (6) Convert available UserFlashcards to Flashcards
     flashcard_ids = [uf.flashcard_id for uf in available_ufs]
@@ -342,40 +339,51 @@ def start_study_session(
         result.append(card_dict)
     logger.debug(f"Available cards for study session {new_session.id}: {result}")
 
+    # **Commit the transaction to save StudySession**
+    try:
+        db.commit()
+        logger.info(f"StudySession id={new_session.id} committed to the database.")
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error committing StudySession: {e}")
+        raise HTTPException(status_code=500, detail="Failed to start study session.")
 
     return {
         "study_session_id": new_session.id,
-        "available_cards": result
+        "available_cards": result,
+        "next_session_date": None
     }
 
 
-@router.get("/session/{session_id}/retake_cards", response_model=List[dict], status_code=200)
-def retake_cards_for_session(
-    session_id: int,
+@router.get("/retake_session", response_model=List[dict], status_code=200)
+def retake_session(
+    deck_id: int = Query(..., description="ID of the deck to retake session from"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Retake only for flashcards that user saw in this session (id=session_id).
-    With EF <= second smallest EF among them.
+    Retake flashcards from the latest session for the given deck and user.
     """
-    logger.info(f"Fetching retake_cards for session_id={session_id}, user_id={current_user.id_}")
+    logger.info(f"Fetching retake_session for deck_id={deck_id}, user_id={current_user.id_}")
 
-    # Find the session
+    # Find the latest StudySession for the deck and user
     session = db.query(StudySession).filter(
-        StudySession.id == session_id,
-        StudySession.user_id == current_user.id_
-    ).first()
+        StudySession.deck_id == deck_id,
+        StudySession.user_id == current_user.id_,
+        StudySession.completed_at.isnot(None)  # Only completed sessions
+    ).order_by(StudySession.started_at.desc()).first()
+
     if not session:
-        logger.error(f"StudySession id={session_id} not found for user_id={current_user.id_}")
-        raise HTTPException(status_code=404, detail="Study session not found or doesn't belong to user.")
+        logger.error(f"No completed StudySession found for deck_id={deck_id}, user_id={current_user.id_}")
+        raise HTTPException(status_code=404, detail="No completed study session found for this deck.")
 
     # Fetch study records for this session
     study_records = db.query(StudyRecord).filter(
-        StudyRecord.session_id == session_id
+        StudyRecord.session_id == session.id
     ).all()
+
     if not study_records:
-        logger.info(f"No StudyRecords found for session_id={session_id}")
+        logger.info(f"No StudyRecords found for session_id={session.id}")
         return []
 
     # Get UserFlashcard IDs
@@ -417,21 +425,23 @@ def retake_cards_for_session(
             "deck_id": c.deck_id,
             "media_url": getattr(c, 'media_url', None)
         })
-    logger.debug(f"Retake cards for session {session_id}: {result}")
+    logger.debug(f"Retake cards for session {session.id}: {result}")
     return result
+
 
 @router.get("/retake_hard_cards", response_model=List[dict], status_code=200)
 def retake_hard_cards(
     deck_id: int = Query(..., description="ID of the deck to retake hard cards from"),
-    max_ef: float = Query(1.8, description="Maximum EF value for hard cards"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Retake hard flashcards from the given deck with EF <= max_ef.
-    These flashcards are scheduled for future review (next_review > now()).
+    Retake hard flashcards from the given deck:
+    - Prefer flashcards with EF <= 1.8.
+    - If none, select all flashcards with the two lowest distinct EF values.
+    - Allows retake even if no hard flashcards are found.
     """
-    logger.info(f"Fetching retake_hard_cards for deck_id={deck_id}, user_id={current_user.id_}, max_ef={max_ef}")
+    logger.info(f"Fetching retake_hard_cards for deck_id={deck_id}, user_id={current_user.id_}")
 
     # Validate deck ownership
     deck = db.query(Deck).filter(
@@ -442,29 +452,80 @@ def retake_hard_cards(
         logger.error(f"Deck id={deck_id} not found or does not belong to user_id={current_user.id_}")
         raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
 
-    # Fetch UserFlashcards with EF <= max_ef and next_review > now()
+    # Current time
     now = datetime.utcnow()
-    user_flashcards = db.query(UserFlashcard).filter(
+
+    # Fetch UserFlashcards with EF <= 1.8 and next_review > now()
+    hard_user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
-        UserFlashcard.ef <= max_ef,
+        UserFlashcard.ef <= 1.8,
         UserFlashcard.next_review > now
-    ).all()
-    logger.debug(f"Found {len(user_flashcards)} hard UserFlashcards for retake.")
+    ).order_by(UserFlashcard.ef.asc()).all()
 
-    # Gather flashcards
-    flashcard_ids = [uf.flashcard_id for uf in user_flashcards]
-    cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+    logger.debug(f"Found {len(hard_user_flashcards)} hard UserFlashcards with EF <= 1.8.")
 
-    # Build JSON
-    result = []
-    for c in cards:
-        result.append({
+    if hard_user_flashcards:
+        # Gather flashcards
+        flashcard_ids = [uf.flashcard_id for uf in hard_user_flashcards]
+        cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+
+        # Build JSON response
+        result = [{
             "id": c.id,
             "question": c.question,
             "answer": c.answer,
             "deck_id": c.deck_id,
             "media_url": getattr(c, 'media_url', None)
-        })
-    logger.debug(f"Retake hard cards: {result}")
-    return result
+        } for c in cards]
+
+        logger.debug(f"Retake hard cards (EF <= 1.8): {result}")
+        return result
+    else:
+        # If no hard flashcards, select all flashcards with the two lowest distinct EF values
+        # Fetch all UserFlashcards with next_review > now()
+        user_flashcards = db.query(UserFlashcard).filter(
+            UserFlashcard.user_id == current_user.id_,
+            UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
+            UserFlashcard.next_review > now
+        ).order_by(UserFlashcard.ef.asc()).all()
+
+        if not user_flashcards:
+            # No flashcards available for retake
+            logger.info("No flashcards available for retake.")
+            return []
+
+        # Extract distinct EF values, sorted ascending
+        distinct_efs = sorted({uf.ef for uf in user_flashcards})
+
+        if not distinct_efs:
+            logger.info("No distinct EF values found.")
+            return []
+
+        # Take the two lowest distinct EF values
+        lowest_two_efs = distinct_efs[:2] if len(distinct_efs) >= 2 else distinct_efs
+
+        logger.debug(f"Lowest two distinct EF values: {lowest_two_efs}")
+
+        # Select all UserFlashcards with EF in the lowest two EF values
+        chosen_user_flashcards = [
+            uf for uf in user_flashcards if uf.ef in lowest_two_efs
+        ]
+
+        logger.debug(f"Chosen {len(chosen_user_flashcards)} UserFlashcards with EF in {lowest_two_efs}")
+
+        # Gather flashcards
+        flashcard_ids = [uf.flashcard_id for uf in chosen_user_flashcards]
+        cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+
+        # Build JSON response
+        result = [{
+            "id": c.id,
+            "question": c.question,
+            "answer": c.answer,
+            "deck_id": c.deck_id,
+            "media_url": getattr(c, 'media_url', None)
+        } for c in cards]
+
+        logger.debug(f"Retake hard cards (two lowest EF values): {result}")
+        return result

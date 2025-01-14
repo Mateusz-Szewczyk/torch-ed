@@ -33,8 +33,9 @@ export default function FlashcardsPage() {
 
   const [studyingDeck, setStudyingDeck] = useState<{
     deck: Deck;
-    study_session_id: number;
+    study_session_id: number | null;
     available_cards: Flashcard[];
+    next_session_date: string | null;
   } | null>(null);
 
   const [importing, setImporting] = useState<boolean>(false);
@@ -212,7 +213,7 @@ const handleStudy = async (deck: Deck) => {
     }
 
     const data = await response.json();
-    const { study_session_id, available_cards } = data;
+    const { study_session_id, available_cards, next_session_date } = data;
 
     // Upewnij się, że available_cards jest tablicą
     if (!Array.isArray(available_cards)) {
@@ -224,6 +225,7 @@ const handleStudy = async (deck: Deck) => {
       deck,
       study_session_id,
       available_cards,
+      next_session_date,
     });
   } catch (err: unknown) {
     if (err instanceof Error) {
@@ -234,6 +236,7 @@ const handleStudy = async (deck: Deck) => {
     console.error('Error starting study session:', err);
   }
 };
+
 
 
   /**
@@ -338,6 +341,7 @@ const handleStudy = async (deck: Deck) => {
         deck={studyingDeck.deck}
         study_session_id={studyingDeck.study_session_id}
         available_cards={studyingDeck.available_cards}
+        next_session_date={studyingDeck.next_session_date}
         onExit={handleExitStudy}
       />
     );
