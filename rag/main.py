@@ -6,7 +6,6 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import base64
-from werkzeug.middleware.proxy_fix import ProxyFix  # Import ProxyFix
 
 from src.routers import files, decks, flashcards, query, chats, exams, study_sessions, user_flashcards, dashboard
 from src.config import Config
@@ -40,9 +39,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Dodanie ProxyFix middleware
-app.add_middleware(ProxyFix, x_proto=1, x_host=1)
-
 # Dodanie CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +48,7 @@ app.add_middleware(
         "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
         "https://torch-ed.vercel.app",
         "https://torched.pl"
-    ],  # Zaktualizuj URL frontend jeśli potrzebne
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

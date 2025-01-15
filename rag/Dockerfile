@@ -26,4 +26,4 @@ ENV UVICORN_HOST=0.0.0.0
 ENV UVICORN_PORT=8043
 
 # Polecenie uruchamiające aplikację FastAPI za pomocą Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8043"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8043", "--proxy-headers"]
