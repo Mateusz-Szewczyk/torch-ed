@@ -8,7 +8,7 @@ from ..models import (
     UserFlashcard as UserFlashcardModel,
     StudySession as StudySessionModel,
     ExamResultAnswer as ExamResultAnswerModel,
-    ExamResult as ExamResultModel,
+    ExamResult as ExamResultModel, User,
 )
 
 router = APIRouter()
