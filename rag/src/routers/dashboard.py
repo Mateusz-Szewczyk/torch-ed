@@ -157,13 +157,13 @@ async def get_dashboard_data(
         serialized_exam_result_answers = [serialize(answer) for answer in exam_result_answers_result]
         serialized_exam_results = [
             {
-                "id": result.ExamResultModel.id,
-                "exam_id": result.ExamResultModel.exam_id,
-                "exam_name": result.exam_name,
-                "user_id": result.ExamResultModel.user_id,
-                "started_at": result.ExamResultModel.started_at.isoformat(),
-                "completed_at": result.ExamResultModel.completed_at.isoformat() if result.ExamResultModel.completed_at else None,
-                "score": float(result.ExamResultModel.score)
+                "id": result[0].id,
+                "exam_id": result[0].exam_id,
+                "exam_name": result[1],
+                "user_id": result[0].user_id,
+                "started_at": result[0].started_at.isoformat(),
+                "completed_at": result[0].completed_at.isoformat() if result[0].completed_at else None,
+                "score": float(result[0].score)
             }
             for result in exam_results_result
         ]
