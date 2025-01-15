@@ -1,5 +1,3 @@
-// src/components/Dashboard.tsx
-
 'use client';
 
 import React, { useEffect, useState, useContext } from 'react';
@@ -28,7 +26,7 @@ interface UserFlashcard {
     ef: number;
     interval: number;
     repetitions: number;
-    next_review: string;
+    next_review: string | null;
 }
 
 interface StudySession {
@@ -57,7 +55,7 @@ interface ExamResult {
     score: number;
 }
 
-interface DashboardData {
+interface DashboardResponse {
     study_records: StudyRecord[];
     user_flashcards: UserFlashcard[];
     study_sessions: StudySession[];
@@ -71,8 +69,8 @@ const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`;
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
 
 const Dashboard: React.FC = () => {
-    const { isAuthenticated } = useContext(AuthContext); // Korzystanie z AuthContext
-    const [data, setData] = useState<DashboardData | null>(null);
+    const { isAuthenticated } = useContext(AuthContext);
+    const [data, setData] = useState<DashboardResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -88,7 +86,7 @@ const Dashboard: React.FC = () => {
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    credentials: 'include', // Wysyłanie cookies wraz z żądaniem
+                    credentials: 'include',
                 });
 
                 if (!response.ok) {
@@ -98,7 +96,7 @@ const Dashboard: React.FC = () => {
                     throw new Error('Failed to fetch dashboard data.');
                 }
 
-                const result: DashboardData = await response.json();
+                const result: DashboardResponse = await response.json();
                 setData(result);
                 setLoading(false);
             } catch (err: unknown) {
@@ -106,7 +104,7 @@ const Dashboard: React.FC = () => {
                 if (err instanceof Error) {
                     setError(err.message);
                 } else {
-                    setError('Nie udało się pobrać danych.');
+                    setError('Failed to fetch data.');
                 }
                 setLoading(false);
             }
@@ -115,119 +113,78 @@ const Dashboard: React.FC = () => {
         fetchDashboardData();
     }, [isAuthenticated]);
 
-    if (loading) return <p>Ładowanie danych...</p>;
+    if (loading) return <p>Loading data...</p>;
     if (error) return <p>{error}</p>;
-    if (!data) return <p>Brak danych do wyświetlenia.</p>;
+    if (!data) return <p>No data available.</p>;
 
-    // Przygotowanie danych do wizualizacji
-
-    // 1. Średnia ocena fiszek na dzień
-    const averageRatingPerDay = data.study_records.reduce<{ [key: string]: { total: number; count: number } }>((acc, record) => {
-        const date = record.reviewed_at.split('T')[0];
-        if (!acc[date]) {
-            acc[date] = { total: record.rating, count: 1 };
-        } else {
-            acc[date].total += record.rating;
-            acc[date].count += 1;
-        }
-        return acc;
-    }, {});
-
-    const averageRatingData = Object.keys(averageRatingPerDay).map(date => ({
+    // Data preparation
+    const averageRatingData = Object.entries(
+        data.study_records.reduce<{ [key: string]: { total: number; count: number } }>((acc, record) => {
+            const date = record.reviewed_at.split('T')[0];
+            if (!acc[date]) {
+                acc[date] = { total: record.rating, count: 1 };
+            } else {
+                acc[date].total += record.rating;
+                acc[date].count += 1;
+            }
+            return acc;
+        }, {})
+    ).map(([date, { total, count }]) => ({
         date,
-        average_rating: averageRatingPerDay[date].total / averageRatingPerDay[date].count
-    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        average_rating: total / count,
+    }));
 
-    // 2. Liczba sesji nauki w czasie
-    const sessionsOverTime = data.study_sessions.map(session => ({
-        date: session.started_at.split('T')[0],
-        count: 1
-    })).reduce<{ date: string; count: number }[]>((acc, session) => {
-        const existing = acc.find(item => item.date === session.date);
-        if (existing) {
-            existing.count += 1;
-        } else {
-            acc.push({ date: session.date, count: 1 });
-        }
-        return acc;
-    }, []).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // 3. Średnia ocena egzaminów w czasie
-    const examScoresOverTime = data.exam_results.map(result => ({
-        date: result.started_at.split('T')[0],
-        score: result.score
-    })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // 4. Wskaźnik poprawnych odpowiedzi na egzaminach
-    const totalAnswers = data.exam_result_answers.length;
-    const correctAnswers = data.exam_result_answers.filter(answer => answer.is_correct).length;
-    const incorrectAnswers = totalAnswers - correctAnswers;
+    const sessionsOverTime = Object.entries(
+        data.study_sessions.reduce<{ [key: string]: number }>((acc, session) => {
+            const date = session.started_at.split('T')[0];
+            acc[date] = (acc[date] || 0) + 1;
+            return acc;
+        }, {})
+    ).map(([date, count]) => ({
+        date,
+        count,
+    }));
 
     const pieData = [
-        { name: 'Poprawne Odpowiedzi', value: correctAnswers },
-        { name: 'Niepoprawne Odpowiedzi', value: incorrectAnswers }
+        { name: 'Correct Answers', value: data.exam_result_answers.filter(ans => ans.is_correct).length },
+        { name: 'Incorrect Answers', value: data.exam_result_answers.filter(ans => !ans.is_correct).length },
     ];
 
     return (
         <div className="p-4">
-            <h2 className="text-2xl font-bold mb-6">Twój Dashboard</h2>
+            <h2 className="text-2xl font-bold mb-6">Your Dashboard</h2>
 
-            {/* Średnia Ocena Fiszek na Dzień */}
             <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Średnia Ocena Fiszek na Dzień</h3>
+                <h3 className="text-xl font-semibold mb-4">Average Rating Per Day</h3>
                 <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={averageRatingData}>
                         <XAxis dataKey="date" />
                         <YAxis domain={[0, 5]} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="average_rating" name="Średnia Ocena" stroke="#8884d8" />
+                        <Line type="monotone" dataKey="average_rating" stroke="#8884d8" />
                     </LineChart>
                 </ResponsiveContainer>
             </div>
 
-            {/* Liczba Sesji Nauki w Czasie */}
             <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Liczba Sesji Nauki w Czasie</h3>
+                <h3 className="text-xl font-semibold mb-4">Study Sessions Over Time</h3>
                 <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={sessionsOverTime}>
                         <XAxis dataKey="date" />
-                        <YAxis allowDecimals={false} />
+                        <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="count" name="Sesje Nauki" fill="#82ca9d" />
+                        <Bar dataKey="count" fill="#82ca9d" />
                     </BarChart>
                 </ResponsiveContainer>
             </div>
 
-            {/* Średnia Ocena Egzaminów w Czasie */}
             <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Średnia Ocena Egzaminów w Czasie</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={examScoresOverTime}>
-                        <XAxis dataKey="date" />
-                        <YAxis domain={[0, 100]} />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="score" name="Ocena Egzaminu" stroke="#8884d8" />
-                    </LineChart>
-                </ResponsiveContainer>
-            </div>
-
-            {/* Wskaźnik Poprawnych Odpowiedzi na Egzaminach */}
-            <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Wskaźnik Poprawnych Odpowiedzi na Egzaminach</h3>
+                <h3 className="text-xl font-semibold mb-4">Answer Accuracy</h3>
                 <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
-                        <Pie
-                            data={pieData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            label
-                        >
+                        <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
                             {pieData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
@@ -236,13 +193,9 @@ const Dashboard: React.FC = () => {
                         <Legend />
                     </PieChart>
                 </ResponsiveContainer>
-                <p className="mt-2 text-center">Poprawne: {correctAnswers} | Niepoprawne: {incorrectAnswers}</p>
             </div>
-
-            {/* Możesz dodać więcej wykresów, np. Efektywność fiszek, Harmonogram przeglądów, itp. */}
         </div>
     );
-
 };
 
 export default Dashboard;
