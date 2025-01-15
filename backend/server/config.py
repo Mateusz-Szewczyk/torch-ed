@@ -6,12 +6,14 @@ load_dotenv()
 
 
 class Config:
-    DATABASE_URL: str = os.getenv("DATABASE_URL", 'postgresql://postgres:njLFJCMxXaxbWXHsCLgUvfFnsishdbvW@postgres.railway.internal:5432/railway')
+    DATABASE_URL: str = os.getenv("DATABASE_URL", 'postgresql://admin:admin1234@localhost:5432/torched_db')
     SQLALCHEMY_TRACK_MODYFICATIONS: bool = False
     SECRET_KEY: str | None = os.getenv('SECRET_KEY')
     PRP_PATH: str = "prp_key.pem"
     PUP_PATH: str = "pup_key.pem"
     SALT = os.getenv('SALT')
+    DOMAIN = os.getenv('DOMAIN', '.up.railway.app')
+    IS_SECURE = os.getenv('IS_SECURE', True)
 
 
 

@@ -66,9 +66,9 @@ def login() -> Response | tuple:
                         token,
                         samesite='None',
                         max_age=60 * 60 * 24,
-                        httponly=True, secure=True,
+                        httponly=True, secure=Config.IS_SECURE,
                         path='/',
-                        domain='.up.railway.app')
+                        domain=Config.DOMAIN)
 
     return response
 
@@ -172,9 +172,9 @@ def logout() -> Response | tuple:
         COOKIE_AUTH,
         samesite='None',
         httponly=True,
-        secure=True,
+        secure=Config.IS_SECURE,
         path='/',
-        domain='.up.railway.app',
+        domain=Config.DOMAIN,
     )
 
     return response

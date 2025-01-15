@@ -110,8 +110,8 @@ const Dashboard: React.FC = () => {
                 }
 
                 // Użyj zmiennej środowiskowej, jeśli jest skonfigurowana
-                const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || '';
-                const DASHBOARD_URL = `${API_BASE_URL}/api/dashboard/`; // Upewnij się, że adres jest poprawny i zawiera trailing slash
+                const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+                const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`; // Upewnij się, że adres jest poprawny i zawiera trailing slash
 
                 const response = await fetch(DASHBOARD_URL, {
                     method: 'GET',

@@ -1,6 +1,9 @@
 import os
 import hmac
 import hashlib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from flask import Request, jsonify, request
 import smtplib
 from werkzeug.security import check_password_hash
@@ -93,14 +96,38 @@ def signature_check(func: Callable) -> Callable | tuple:
     
     return wraper
 
-def send_email(to: str, message: str) -> None:
-    if not isinstance(EMAIL, str) or not isinstance(EMAIL_PASSWORD, str):
-        raise Misconfiguration('No email or password')
-    with smtplib.SMTP('smtp.gmail.com') as connection:
-        connection.starttls()
-        connection.login(EMAIL, EMAIL_PASSWORD)
-        connection.sendmail(
-            from_addr=EMAIL,
-            to_addrs=to,
-            msg=message
-        )
+
+def send_email(to: str, subject: str, message: str) -> None:
+    """
+    Wysyła e-mail za pomocą Gmaila.
+
+    :param to: Adres e-mail odbiorcy
+    :param subject: Temat wiadomości
+    :param message: Treść wiadomości
+    """
+    try:
+        # Sprawdzenie konfiguracji e-maila
+        if not EMAIL or not EMAIL_PASSWORD:
+            raise ValueError("Email or password not provided.")
+
+        # Utworzenie wiadomości MIME
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL
+        msg['To'] = to
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+
+        # Połączenie z serwerem SMTP
+        with smtplib.SMTP('smtp.gmail.com', 587) as connection:
+            connection.starttls()  # Rozpoczęcie szyfrowanego połączenia
+            connection.login(EMAIL, EMAIL_PASSWORD)  # Logowanie do konta
+            connection.send_message(msg)  # Wysłanie wiadomości
+
+        print(f"Email sent successfully to {to}")
+
+    except smtplib.SMTPAuthenticationError:
+        print("Error: Authentication failed. Check your email and password.")
+    except smtplib.SMTPConnectError:
+        print("Error: Unable to connect to the SMTP server.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
