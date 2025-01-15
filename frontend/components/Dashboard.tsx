@@ -8,7 +8,8 @@ import {
     RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
     XAxis, YAxis,
     Tooltip, Legend,
-    ResponsiveContainer
+    ResponsiveContainer,
+    CartesianGrid,
 } from 'recharts';
 import { AuthContext } from '@/contexts/AuthContext';
 
@@ -182,8 +183,7 @@ const Dashboard: React.FC = () => {
         // Filtruj według egzaminu
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter(exam => exam.exam_id === selectedExamId);
-            // Ponieważ frontend nie ma wystarczających danych do filtrowania exam_daily_average,
-            // musisz to zrobić na backendzie, jeśli to konieczne.
+            // Możesz również filtrować exam_daily_average w backendzie dla bardziej precyzyjnych danych
         }
 
         // Filtruj według zestawu fiszek
@@ -192,7 +192,7 @@ const Dashboard: React.FC = () => {
                 const session = data.study_sessions.find(session => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
-            // Podobnie, filtrowanie flashcard_daily_average wymaga dodatkowych danych
+            // Możesz również filtrować flashcard_daily_average w backendzie dla bardziej precyzyjnych danych
         }
 
         return {
@@ -303,6 +303,45 @@ const Dashboard: React.FC = () => {
         },
     ];
 
+    // Planowane sesje nauki (Timeline)
+    const nextReviewTimelineData = filteredData.user_flashcards
+        .filter(card => card.next_review) // Filtrujemy fiszki z datą następnej sesji
+        .map(card => ({
+            date: card.next_review.split('T')[0],
+            count: 1,
+        }))
+        .reduce((acc, cur) => {
+            const existing = acc.find(item => item.date === cur.date);
+            if (existing) {
+                existing.count += cur.count;
+            } else {
+                acc.push({ ...cur });
+            }
+            return acc;
+        }, [] as { date: string; count: number }[]);
+
+    // Tabela fiszek dziennie
+    const flashcardsSolvedDaily = filteredData.study_records
+        .filter(record => record.session_id !== null)
+        .map(record => ({
+            date: record.reviewed_at.split('T')[0],
+            count: 1,
+        }))
+        .reduce((acc, cur) => {
+            const existing = acc.find(item => item.date === cur.date);
+            if (existing) {
+                existing.count += cur.count;
+            } else {
+                acc.push({ ...cur });
+            }
+            return acc;
+        }, [] as { date: string; count: number }[]);
+
+    const averageFlashcardsSolved =
+        flashcardsSolvedDaily.length > 0
+            ? flashcardsSolvedDaily.reduce((acc, record) => acc + record.count, 0) / flashcardsSolvedDaily.length
+            : 0;
+
     return (
         <div className="p-4">
             <h2 className="text-2xl font-bold mb-6 text-center">Twój Dashboard</h2>
@@ -380,6 +419,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-semibold mb-2">Średnie Wyniki Egzaminów w Czasie</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={examLineChartData}>
+                                <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 100]} />
                                 <Tooltip />
@@ -394,6 +434,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-semibold mb-2">Średnie Wyniki Egzaminów - Słupki</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={examBarChartData}>
+                                <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 100]} />
                                 <Tooltip />
@@ -445,7 +486,7 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* Sekcja Fiszek */}
-            <div>
+            <div className="mb-12">
                 <h3 className="text-xl font-bold mb-4 text-center">Analiza Fiszek</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Wykres Liniowy - Średnie Oceny Fiszek w czasie */}
@@ -453,6 +494,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-semibold mb-2">Średnie Oceny Fiszek w Czasie</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={flashcardLineChartData}>
+                                <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 5]} />
                                 <Tooltip />
@@ -467,6 +509,7 @@ const Dashboard: React.FC = () => {
                         <h4 className="text-lg font-semibold mb-2">Średnie Oceny Fiszek - Słupki</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={flashcardBarChartData}>
+                                <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 5]} />
                                 <Tooltip />
@@ -513,6 +556,43 @@ const Dashboard: React.FC = () => {
                                 <Radar name="Średnia Ocena" dataKey="A" stroke="#FFBB28" fill="#FFBB28" fillOpacity={0.6} />
                             </RadarChart>
                         </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            {/* Sekcja Planowanych Sesji Nauki */}
+            <div className="mb-12">
+                <h3 className="text-xl font-bold mb-4 text-center">Planowane Sesje Nauki (Timeline)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={nextReviewTimelineData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="count" name="Liczba fiszek" stroke="#82ca9d" />
+                    </LineChart>
+                </ResponsiveContainer>
+            </div>
+
+            {/* Sekcja Fiszek Rozwiązanych Dziennie */}
+            <div>
+                <h3 className="text-xl font-bold mb-4 text-center">Fiszki Rozwiązane Dziennie</h3>
+                <div className="flex flex-col items-center">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={flashcardsSolvedDaily}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="count" name="Fiszki rozwiązane" fill="#8884d8" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                    <div className="mt-4">
+                        <p className="text-lg">
+                            Średnia liczba fiszek rozwiązanych dziennie: <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
+                        </p>
                     </div>
                 </div>
             </div>

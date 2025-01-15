@@ -66,7 +66,7 @@ async def get_dashboard_data(
         exam_results_result = exam_results_query.all()
 
         # Pobierz odpowiedzi na wyniki egzaminów użytkownika
-        exam_result_ids = [exam_result.ExamResultModel.id for exam_result in exam_results_result]
+        exam_result_ids = [result[0].id for result in exam_results_result]
         exam_result_answers_result = (
             db.query(ExamResultAnswerModel)
             .filter(ExamResultAnswerModel.exam_result_id.in_(exam_result_ids))
@@ -102,7 +102,6 @@ async def get_dashboard_data(
                 func.date(StudyRecordModel.reviewed_at).label("date"),
                 func.avg(StudyRecordModel.rating).label("average_rating")
             )
-            .filter(StudyRecordModel.session_id != None)  # Upewnij się, że sesja istnieje
             .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
             .filter(StudySessionModel.user_id == user_id)
             .group_by(func.date(StudyRecordModel.reviewed_at))
@@ -121,7 +120,9 @@ async def get_dashboard_data(
             {
                 "date": session.started_at.date().isoformat(),
                 "duration_hours": (
-                                              session.completed_at - session.started_at).total_seconds() / 3600 if session.completed_at else 0
+                    (session.completed_at - session.started_at).total_seconds() / 3600
+                    if session.completed_at else 0
+                )
             }
             for session in study_sessions_result
         ]
@@ -145,13 +146,8 @@ async def get_dashboard_data(
         serialized_exam_result_answers = [serialize(answer) for answer in exam_result_answers_result]
         serialized_exam_results = [
             {
-                "id": result.ExamResultModel.id,
-                "exam_id": result.ExamResultModel.exam_id,
-                "exam_name": result.exam_name,
-                "user_id": result.ExamResultModel.user_id,
-                "started_at": result.ExamResultModel.started_at.isoformat(),
-                "completed_at": result.ExamResultModel.completed_at.isoformat() if result.ExamResultModel.completed_at else None,
-                "score": float(result.ExamResultModel.score)
+                **serialize(result[0]),
+                "exam_name": result.exam_name
             }
             for result in exam_results_result
         ]
