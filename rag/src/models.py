@@ -121,8 +121,8 @@ class UserFlashcard(Base):
         UniqueConstraint('user_id', 'flashcard_id', name='uix_user_flashcard'),
     )
 
-    class ConfigDict:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 class StudySession(Base):
@@ -148,8 +148,8 @@ class StudySession(Base):
         cascade="all, delete-orphan"
     )
 
-    class ConfigDict:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 class StudyRecord(Base):
@@ -170,8 +170,7 @@ class StudyRecord(Base):
         back_populates="study_records"
     )
 
-    class ConfigDict:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class Exam(Base):
     __tablename__ = 'exams'
@@ -241,8 +240,8 @@ class ExamResult(Base):
         cascade="all, delete-orphan"
     )
 
-    class ConfigDict:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 class ExamResultAnswer(Base):
@@ -262,8 +261,8 @@ class ExamResultAnswer(Base):
     question = relationship("ExamQuestion")
     selected_answer = relationship("ExamAnswer")
 
-    class ConfigDict:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class User(Base):
     __tablename__ = 'users'
