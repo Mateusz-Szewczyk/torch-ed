@@ -98,7 +98,7 @@ const Dashboard: React.FC = () => {
 
                 // Użyj zmiennej środowiskowej, jeśli jest skonfigurowana
                 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || '';
-                const DASHBOARD_URL = `${API_BASE_URL}/dashboard`;
+                const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`;
 
                 const response = await fetch(DASHBOARD_URL, {
                     method: 'GET',

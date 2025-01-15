@@ -16,6 +16,7 @@ from ..models import (
 
 router = APIRouter()
 
+@router.get("", response_model=Dict[str, Any])
 @router.get("/", response_model=Dict[str, Any])
 async def get_dashboard_data(
     db: Session = Depends(get_db),
