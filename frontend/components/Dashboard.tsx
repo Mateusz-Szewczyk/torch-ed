@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState, useContext } from 'react';
 import {
-    LineChart, Line,
     BarChart, Bar,
-    PieChart, Pie, Cell,
+    RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
     XAxis, YAxis,
     Tooltip, Legend,
     ResponsiveContainer
@@ -26,7 +25,7 @@ interface UserFlashcard {
     ef: number;
     interval: number;
     repetitions: number;
-    next_review: string | null;
+    next_review: string;
 }
 
 interface StudySession {
@@ -55,143 +54,196 @@ interface ExamResult {
     score: number;
 }
 
-interface DashboardResponse {
+interface DashboardData {
     study_records: StudyRecord[];
     user_flashcards: UserFlashcard[];
     study_sessions: StudySession[];
     exam_result_answers: ExamResultAnswer[];
     exam_results: ExamResult[];
+    session_durations: { date: string; duration: number }[];
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL;
-const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`;
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
 
 const Dashboard: React.FC = () => {
     const { isAuthenticated } = useContext(AuthContext);
-    const [data, setData] = useState<DashboardResponse | null>(null);
+    const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
+    const [progress, setProgress] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
+    const [filters, setFilters] = useState<{
+        dateRange: [string | null, string | null];
+        examId: number | null;
+        deckId: number | null;
+    }>({
+        dateRange: [null, null],
+        examId: null,
+        deckId: null,
+    });
+
     useEffect(() => {
-        const fetchDashboardData = async () => {
+        const fetchData = async () => {
+            setProgress(10);
             try {
                 if (!isAuthenticated) {
                     throw new Error('Unauthorized. Please log in.');
                 }
 
-                const response = await fetch(DASHBOARD_URL, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                let queryParams = '';
+                if (filters.dateRange[0] && filters.dateRange[1]) {
+                    queryParams += `date_start=${filters.dateRange[0]}&date_end=${filters.dateRange[1]}&`;
+                }
+                if (filters.examId) {
+                    queryParams += `exam_id=${filters.examId}&`;
+                }
+                if (filters.deckId) {
+                    queryParams += `deck_id=${filters.deckId}&`;
+                }
+
+                const response = await fetch(`/api/dashboard?${queryParams}`, {
                     credentials: 'include',
                 });
 
+                setProgress(60);
+
                 if (!response.ok) {
-                    if (response.status === 401) {
-                        throw new Error('Unauthorized. Please log in.');
-                    }
-                    throw new Error('Failed to fetch dashboard data.');
+                    throw new Error('Failed to fetch data.');
                 }
 
-                const result: DashboardResponse = await response.json();
+                const result: DashboardData = await response.json();
                 setData(result);
-                setLoading(false);
-            } catch (err: unknown) {
-                console.error('Error fetching dashboard data:', err);
-                if (err instanceof Error) {
-                    setError(err.message);
-                } else {
-                    setError('Failed to fetch data.');
-                }
+                setProgress(100);
+            } catch (err) {
+                console.error(err);
+                setError('Błąd podczas ładowania danych.');
+            } finally {
                 setLoading(false);
             }
         };
 
-        fetchDashboardData();
-    }, [isAuthenticated]);
+        fetchData();
+    }, [filters, isAuthenticated]);
 
-    if (loading) return <p>Loading data...</p>;
-    if (error) return <p>{error}</p>;
-    if (!data) return <p>No data available.</p>;
+    if (loading) {
+        return (
+            <div className="loading-screen">
+                <p>Ładowanie danych... {progress}%</p>
+                <div className="progress-bar" style={{ width: `${progress}%`, backgroundColor: '#4caf50', height: '5px' }}></div>
+            </div>
+        );
+    }
 
-    // Data preparation
-    const averageRatingData = Object.entries(
-        data.study_records.reduce<{ [key: string]: { total: number; count: number } }>((acc, record) => {
-            const date = record.reviewed_at.split('T')[0];
-            if (!acc[date]) {
-                acc[date] = { total: record.rating, count: 1 };
-            } else {
-                acc[date].total += record.rating;
-                acc[date].count += 1;
-            }
-            return acc;
-        }, {})
-    ).map(([date, { total, count }]) => ({
+    if (error) {
+        return <div className="text-red-600">{error}</div>;
+    }
+
+    if (!data) {
+        return <div className="text-center">Brak danych do wyświetlenia.</div>;
+    }
+
+    const sessionDurations = data.session_durations.map(({ date, duration }) => ({
         date,
-        average_rating: total / count,
+        duration,
     }));
 
-    const sessionsOverTime = Object.entries(
-        data.study_sessions.reduce<{ [key: string]: number }>((acc, session) => {
-            const date = session.started_at.split('T')[0];
-            acc[date] = (acc[date] || 0) + 1;
-            return acc;
-        }, {})
-    ).map(([date, count]) => ({
-        date,
-        count,
-    }));
+    const activeDays = data.study_sessions.reduce<Record<string, number>>((acc, session) => {
+        const day = new Date(session.started_at).toLocaleDateString('pl-PL', { weekday: 'long' });
+        acc[day] = (acc[day] || 0) + 1;
+        return acc;
+    }, {});
 
-    const pieData = [
-        { name: 'Correct Answers', value: data.exam_result_answers.filter(ans => ans.is_correct).length },
-        { name: 'Incorrect Answers', value: data.exam_result_answers.filter(ans => !ans.is_correct).length },
-    ];
+    const activeDaysData = Object.keys(activeDays).map((day) => ({
+        day,
+        sessions: activeDays[day],
+    }));
 
     return (
         <div className="p-4">
-            <h2 className="text-2xl font-bold mb-6">Your Dashboard</h2>
+            <h2 className="text-2xl font-bold mb-6">Twój Dashboard</h2>
 
-            <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Average Rating Per Day</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={averageRatingData}>
-                        <XAxis dataKey="date" />
-                        <YAxis domain={[0, 5]} />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="average_rating" stroke="#8884d8" />
-                    </LineChart>
-                </ResponsiveContainer>
+            {/* Filtry */}
+            <div className="filters mb-8">
+                <label>
+                    Od:
+                    <input
+                        type="date"
+                        onChange={(e) =>
+                            setFilters({
+                                ...filters,
+                                dateRange: [e.target.value, filters.dateRange[1]],
+                            })
+                        }
+                    />
+                </label>
+                <label>
+                    Do:
+                    <input
+                        type="date"
+                        onChange={(e) =>
+                            setFilters({
+                                ...filters,
+                                dateRange: [filters.dateRange[0], e.target.value],
+                            })
+                        }
+                    />
+                </label>
+                <label>
+                    Egzamin:
+                    <select
+                        onChange={(e) =>
+                            setFilters({ ...filters, examId: e.target.value ? parseInt(e.target.value) : null })
+                        }
+                    >
+                        <option value="">Wybierz egzamin</option>
+                        {data.exam_results.map((exam) => (
+                            <option key={exam.id} value={exam.id}>
+                                Egzamin {exam.id}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label>
+                    Zestaw fiszek:
+                    <select
+                        onChange={(e) =>
+                            setFilters({ ...filters, deckId: e.target.value ? parseInt(e.target.value) : null })
+                        }
+                    >
+                        <option value="">Wybierz zestaw</option>
+                        {data.study_sessions.map((session) => (
+                            <option key={session.deck_id} value={session.deck_id}>
+                                Zestaw {session.deck_id}
+                            </option>
+                        ))}
+                    </select>
+                </label>
             </div>
 
+            {/* Czas spędzony na sesjach nauki */}
             <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Study Sessions Over Time</h3>
+                <h3 className="text-xl font-semibold mb-4">Czas Spędzony na Sesjach Nauki</h3>
                 <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={sessionsOverTime}>
+                    <BarChart data={sessionDurations}>
                         <XAxis dataKey="date" />
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="count" fill="#82ca9d" />
+                        <Bar dataKey="duration" name="Czas (godziny)" fill="#8884d8" />
                     </BarChart>
                 </ResponsiveContainer>
             </div>
 
+            {/* Najbardziej aktywne dni tygodnia */}
             <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Answer Accuracy</h3>
+                <h3 className="text-xl font-semibold mb-4">Najbardziej Aktywne Dni Tygodnia</h3>
                 <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                        <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100}>
-                            {pieData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip />
+                    <RadarChart data={activeDaysData}>
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="day" />
+                        <PolarRadiusAxis />
+                        <Radar dataKey="sessions" name="Sesje" fill="#82ca9d" fillOpacity={0.6} />
                         <Legend />
-                    </PieChart>
+                    </RadarChart>
                 </ResponsiveContainer>
             </div>
         </div>
