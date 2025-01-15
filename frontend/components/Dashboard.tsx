@@ -1,23 +1,31 @@
 'use client';
 
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useState } from 'react';
 import {
     LineChart, Line,
     BarChart, Bar,
     PieChart, Pie, Cell,
-    RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
     XAxis, YAxis,
     Tooltip, Legend,
     ResponsiveContainer
 } from 'recharts';
-import { AuthContext } from '@/contexts/AuthContext';
 
-interface StudyRecord {
+interface ExamResult {
     id: number;
-    session_id: number | null;
-    user_flashcard_id: number | null;
-    rating: number;
-    reviewed_at: string;
+    exam_id: number;
+    user_id: number;
+    started_at: string;
+    completed_at: string | null;
+    score: number;
+}
+
+interface ExamResultAnswer {
+    id: number;
+    exam_result_id: number;
+    question_id: number;
+    selected_answer_id: number;
+    is_correct: boolean;
+    answer_time: string;
 }
 
 interface UserFlashcard {
@@ -30,6 +38,14 @@ interface UserFlashcard {
     next_review: string;
 }
 
+interface StudyRecord {
+    id: number;
+    session_id: number | null;
+    user_flashcard_id: number | null;
+    rating: number;
+    reviewed_at: string;
+}
+
 interface StudySession {
     id: number;
     user_id: number;
@@ -38,182 +54,189 @@ interface StudySession {
     completed_at: string | null;
 }
 
-interface ExamResultAnswer {
-    id: number;
-    exam_result_id: number;
-    question_id: number;
-    selected_answer_id: number;
-    is_correct: boolean;
-    answer_time: string;
-}
-
-interface ExamResult {
-    id: number;
-    exam_id: number;
-    user_id: number;
-    started_at: string;
-    completed_at: string | null;
-    score: number;
-}
-
 interface DashboardData {
-    study_records: StudyRecord[];
-    user_flashcards: UserFlashcard[];
-    study_sessions: StudySession[];
-    exam_result_answers: ExamResultAnswer[];
     exam_results: ExamResult[];
+    exam_result_answers: ExamResultAnswer[];
+    user_flashcards: UserFlashcard[];
+    study_records: StudyRecord[];
+    study_sessions: StudySession[];
 }
 
+const Dashboard: React.FC<{ data: DashboardData }> = ({ data }) => {
+    const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
+    const [selectedDeckId, setSelectedDeckId] = useState<number | null>(null);
 
-const Dashboard: React.FC = () => {
-    const { isAuthenticated } = useContext(AuthContext);
-    const [data, setData] = useState<DashboardData | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
+    // Filtry
+    const filteredExamResults = selectedExamId
+        ? data.exam_results.filter((exam) => exam.exam_id === selectedExamId)
+        : data.exam_results;
 
-    const [filterDate, setFilterDate] = useState<{ start: string; end: string }>({
-        start: '',
-        end: '',
-    });
-    const [selectedExam, setSelectedExam] = useState<number | null>(null);
-    const [selectedDeck, setSelectedDeck] = useState<number | null>(null);
+    const filteredStudyRecords = selectedDeckId
+        ? data.study_records.filter((record) => {
+            const session = data.study_sessions.find((session) => session.id === record.session_id);
+            return session?.deck_id === selectedDeckId;
+        })
+        : data.study_records;
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                if (!isAuthenticated) {
-                    throw new Error('Unauthorized. Please log in.');
-                }
-
-                const response = await fetch('/api/dashboard/', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    credentials: 'include',
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch dashboard data.');
-                }
-
-                const result: DashboardData = await response.json();
-                setData(result);
-            } catch (err: unknown) {
-                console.error('Error fetching dashboard data:', err);
-                setError(err instanceof Error ? err.message : 'Unexpected error occurred.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDashboardData();
-    }, [isAuthenticated]);
-
-    const handleFilterChange = () => {
-        // Add logic here to filter `data` based on `filterDate`, `selectedExam`, and `selectedDeck`
-    };
-
-    if (loading) {
-        return (
-            <div className="loading-screen">
-                <h2>Ładowanie danych...</h2>
-                <progress className="loading-bar" />
-            </div>
-        );
-    }
-
-    if (error) {
-        return <p>{error}</p>;
-    }
-
-    if (!data) {
-        return <p>Brak danych do wyświetlenia.</p>;
-    }
-
-    // Filter data based on user selection
-    const filteredStudyRecords = data.study_records.filter((record) => {
-        const recordDate = new Date(record.reviewed_at).toISOString().split('T')[0];
-        const startDate = filterDate.start || '1900-01-01';
-        const endDate = filterDate.end || '2100-01-01';
-        const withinDateRange = recordDate >= startDate && recordDate <= endDate;
-        const matchesDeck = selectedDeck === null || record.session_id === selectedDeck;
-        return withinDateRange && matchesDeck;
-    });
-
-    const filteredExamResults = data.exam_results.filter((exam) => {
-        const examDate = new Date(exam.started_at).toISOString().split('T')[0];
-        const startDate = filterDate.start || '1900-01-01';
-        const endDate = filterDate.end || '2100-01-01';
-        const withinDateRange = examDate >= startDate && examDate <= endDate;
-        const matchesExam = selectedExam === null || exam.exam_id === selectedExam;
-        return withinDateRange && matchesExam;
-    });
+    // Kolory
+    const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
     return (
         <div className="p-4">
-            <h2 className="text-2xl font-bold mb-6">Twój Dashboard</h2>
+            <h2 className="text-2xl font-bold mb-6">Dashboard Nauki</h2>
 
-            <div className="filters mb-8">
-                <label>
-                    Data od:
-                    <input
-                        type="date"
-                        value={filterDate.start}
-                        onChange={(e) => setFilterDate({ ...filterDate, start: e.target.value })}
-                    />
-                </label>
-                <label>
-                    Data do:
-                    <input
-                        type="date"
-                        value={filterDate.end}
-                        onChange={(e) => setFilterDate({ ...filterDate, end: e.target.value })}
-                    />
-                </label>
-                <label>
-                    Wybierz egzamin:
+            {/* Sekcja Egzaminów */}
+            <div className="mb-12">
+                <h3 className="text-xl font-bold mb-4">Analiza Egzaminów</h3>
+                <div className="mb-4">
+                    <label htmlFor="exam-select" className="block mb-2">
+                        Wybierz egzamin:
+                    </label>
                     <select
-                        value={selectedExam || ''}
-                        onChange={(e) => setSelectedExam(Number(e.target.value) || null)}
+                        id="exam-select"
+                        className="border p-2 rounded w-full"
+                        onChange={(e) => setSelectedExamId(Number(e.target.value) || null)}
                     >
-                        <option value="">Wszystkie egzaminy</option>
-                        {data.exam_results.map((exam) => (
-                            <option key={exam.id} value={exam.exam_id}>
-                                Egzamin {exam.exam_id}
+                        <option value="">Wszystkie</option>
+                        {Array.from(new Set(data.exam_results.map((exam) => exam.exam_id))).map((examId) => (
+                            <option key={examId} value={examId}>
+                                Egzamin {examId}
                             </option>
                         ))}
                     </select>
-                </label>
-                <label>
-                    Wybierz zestaw fiszek:
-                    <select
-                        value={selectedDeck || ''}
-                        onChange={(e) => setSelectedDeck(Number(e.target.value) || null)}
-                    >
-                        <option value="">Wszystkie zestawy</option>
-                        {data.study_sessions.map((session) => (
-                            <option key={session.id} value={session.deck_id}>
-                                Zestaw {session.deck_id}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-                <button onClick={handleFilterChange}>Filtruj</button>
-            </div>
-
-            {/* Visualization logic */}
-            <div className="charts">
-                <h3>Wizualizacje wyników po filtrach:</h3>
+                </div>
                 <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={filteredStudyRecords}>
-                        <XAxis dataKey="reviewed_at" />
-                        <YAxis />
+                    <LineChart
+                        data={filteredExamResults.map((exam) => ({
+                            date: exam.started_at.split('T')[0],
+                            score: exam.score,
+                        }))}
+                    >
+                        <XAxis dataKey="date" />
+                        <YAxis domain={[0, 100]} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="rating" fill="#8884d8" />
-                    </BarChart>
+                        <Line type="monotone" dataKey="score" name="Wynik Egzaminu" stroke="#82ca9d" />
+                    </LineChart>
                 </ResponsiveContainer>
+
+                {/* Kolejne wykresy dla egzaminów */}
+                <div className="grid grid-cols-2 gap-4 mt-8">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart
+                            data={filteredExamResults.map((exam) => ({
+                                date: exam.started_at.split('T')[0],
+                                score: exam.score,
+                            }))}
+                        >
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="score" name="Wynik Egzaminu" fill="#8884d8" />
+                        </BarChart>
+                    </ResponsiveContainer>
+
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={filteredExamResults.map((exam) => ({
+                                    name: `Egzamin ${exam.exam_id}`,
+                                    value: exam.score,
+                                }))}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={100}
+                                label
+                            >
+                                {filteredExamResults.map((_, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* Sekcja Fiszek */}
+            <div>
+                <h3 className="text-xl font-bold mb-4">Analiza Fiszek</h3>
+                <div className="mb-4">
+                    <label htmlFor="deck-select" className="block mb-2">
+                        Wybierz zestaw fiszek:
+                    </label>
+                    <select
+                        id="deck-select"
+                        className="border p-2 rounded w-full"
+                        onChange={(e) => setSelectedDeckId(Number(e.target.value) || null)}
+                    >
+                        <option value="">Wszystkie</option>
+                        {Array.from(new Set(data.study_sessions.map((session) => session.deck_id))).map((deckId) => (
+                            <option key={deckId} value={deckId}>
+                                Zestaw {deckId}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                    <LineChart
+                        data={filteredStudyRecords.map((record) => ({
+                            date: record.reviewed_at.split('T')[0],
+                            rating: record.rating,
+                        }))}
+                    >
+                        <XAxis dataKey="date" />
+                        <YAxis domain={[0, 5]} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="rating" name="Ocena Fiszek" stroke="#8884d8" />
+                    </LineChart>
+                </ResponsiveContainer>
+
+                {/* Kolejne wykresy dla fiszek */}
+                <div className="grid grid-cols-2 gap-4 mt-8">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart
+                            data={filteredStudyRecords.map((record) => ({
+                                date: record.reviewed_at.split('T')[0],
+                                rating: record.rating,
+                            }))}
+                        >
+                            <XAxis dataKey="date" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="rating" name="Ocena Fiszek" fill="#82ca9d" />
+                        </BarChart>
+                    </ResponsiveContainer>
+
+                    <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                            <Pie
+                                data={filteredStudyRecords.map((record) => ({
+                                    name: `Fiszek ${record.id}`,
+                                    value: record.rating,
+                                }))}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={100}
+                                label
+                            >
+                                {filteredStudyRecords.map((_, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
         </div>
     );
