@@ -1,15 +1,14 @@
-import logging
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from ..schemas import DashboardData
+from ..schemas import DashboardData, StudyRecord, UserFlashcard, StudySession, ExamResultAnswer, ExamResult
 from ..dependencies import get_db
 from ..auth import get_current_user
-from ..models import User, StudyRecord, UserFlashcard, StudySession, ExamResultAnswer, ExamResult
+from ..models import User, StudyRecord as StudyRecordModel, UserFlashcard as UserFlashcardModel, StudySession as StudySessionModel, ExamResultAnswer as ExamResultAnswerModel, ExamResult as ExamResultModel
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+
 
 @router.get("/", response_model=DashboardData)
 async def get_dashboard_data(
@@ -17,64 +16,50 @@ async def get_dashboard_data(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Fetches dashboard data for the authenticated user by joining related tables.
+    Fetches dashboard data for the authenticated user.
     """
     user_id = current_user.id_
-    logger.info(f"Fetching dashboard data for user_id: {user_id}")
-
     try:
-        # Fetch study records indirectly via study sessions
+        # Query and serialize the data
         study_records_result = (
-            db.query(StudyRecord)
-            .join(StudySession, StudyRecord.session_id == StudySession.id)
-            .filter(StudySession.user_id == user_id)
+            db.query(StudyRecordModel)
+            .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
+            .filter(StudySessionModel.user_id == user_id)
             .all()
         )
-
-        # Fetch user flashcards
         user_flashcards_result = (
-            db.query(UserFlashcard)
-            .filter(UserFlashcard.user_id == user_id)
+            db.query(UserFlashcardModel)
+            .filter(UserFlashcardModel.user_id == user_id)
             .all()
         )
-
-        # Fetch study sessions
         study_sessions_result = (
-            db.query(StudySession)
-            .filter(StudySession.user_id == user_id)
+            db.query(StudySessionModel)
+            .filter(StudySessionModel.user_id == user_id)
             .all()
         )
-
-        # Fetch exam result answers via exam results
         exam_result_answers_result = (
-            db.query(ExamResultAnswer)
-            .join(ExamResult, ExamResultAnswer.exam_result_id == ExamResult.id)
-            .filter(ExamResult.user_id == user_id)
+            db.query(ExamResultAnswerModel)
+            .join(ExamResultModel, ExamResultAnswerModel.exam_result_id == ExamResultModel.id)
+            .filter(ExamResultModel.user_id == user_id)
             .all()
         )
-
-        # Fetch exam results
         exam_results_result = (
-            db.query(ExamResult)
-            .filter(ExamResult.user_id == user_id)
+            db.query(ExamResultModel)
+            .filter(ExamResultModel.user_id == user_id)
             .all()
         )
 
-        # Prepare the dashboard data
         dashboard_data = DashboardData(
-            study_records=study_records_result,
-            user_flashcards=user_flashcards_result,
-            study_sessions=study_sessions_result,
-            exam_result_answers=exam_result_answers_result,
-            exam_results=exam_results_result,
+            study_records=[StudyRecord.from_attributes(record) for record in study_records_result],
+            user_flashcards=[UserFlashcard.from_attributes(card) for card in user_flashcards_result],
+            study_sessions=[StudySession.from_attributes(session) for session in study_sessions_result],
+            exam_result_answers=[ExamResultAnswer.from_attributes(answer) for answer in exam_result_answers_result],
+            exam_results=[ExamResult.from_attributes(result) for result in exam_results_result],
         )
 
-        logger.info(f"Successfully fetched dashboard data for user_id: {user_id}")
         return dashboard_data
 
     except SQLAlchemyError as e:
-        logger.error(f"Database error: {e}")
-        raise HTTPException(status_code=500, detail="Error fetching dashboard data")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="Unexpected error occurred")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
