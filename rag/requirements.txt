@@ -20,6 +20,7 @@ PyMuPDF
 PyPDF2
 pytest
 sentence-transformers
+neo4j
 python-multipart
 nltk
 torch
