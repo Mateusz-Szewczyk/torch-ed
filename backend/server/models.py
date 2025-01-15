@@ -3,7 +3,6 @@
 from typing import Optional
 from datetime import datetime
 
-from pydantic import ConfigDict
 from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,
     func, Float, UniqueConstraint
