@@ -1,36 +1,55 @@
-'use client';
-
+// File: Dashboard.tsx
 import React, { useEffect, useState, useContext } from 'react';
 import {
     LineChart, Line,
     BarChart, Bar,
     PieChart, Pie, Cell,
-    RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+    AreaChart, Area,
     XAxis, YAxis,
     Tooltip, Legend,
     ResponsiveContainer,
     CartesianGrid,
 } from 'recharts';
+import {
+    ChevronDown,
+    ChevronUp,
+    BookOpen,
+    TestTube,
+} from 'lucide-react';
 import { AuthContext } from '@/contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
-// Definicje interfejsów
+// Define COLORS
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
+
+// Types
+type DateString = string;
+
 interface ExamResult {
     id: number;
     exam_id: number;
     exam_name: string;
     user_id: number;
-    started_at: string;
-    completed_at: string | null;
+    started_at: DateString;
+    completed_at: DateString | null;
     score: number;
 }
 
-interface ExamResultAnswer {
+interface StudyRecord {
     id: number;
-    exam_result_id: number;
-    question_id: number;
-    selected_answer_id: number;
-    is_correct: boolean;
-    answer_time: string;
+    session_id: number | null;
+    user_flashcard_id: number | null;
+    rating: number;
+    reviewed_at: DateString;
+}
+
+interface StudySession {
+    id: number;
+    user_id: number;
+    deck_id: number;
+    deck_name: string;
+    started_at: DateString;
+    completed_at: DateString | null;
 }
 
 interface UserFlashcard {
@@ -40,28 +59,11 @@ interface UserFlashcard {
     ef: number;
     interval: number;
     repetitions: number;
-    next_review: string;
-}
-
-interface StudyRecord {
-    id: number;
-    session_id: number | null;
-    user_flashcard_id: number | null;
-    rating: number;
-    reviewed_at: string;
-}
-
-interface StudySession {
-    id: number;
-    user_id: number;
-    deck_id: number;
-    deck_name: string;
-    started_at: string;
-    completed_at: string | null;
+    next_review: DateString;
 }
 
 interface SessionDuration {
-    date: string;
+    date: DateString;
     duration_hours: number;
 }
 
@@ -69,36 +71,148 @@ interface DashboardData {
     study_records: StudyRecord[];
     user_flashcards: UserFlashcard[];
     study_sessions: StudySession[];
-    exam_result_answers: ExamResultAnswer[];
     exam_results: ExamResult[];
     session_durations: SessionDuration[];
     exam_daily_average: {
-        date: string;
+        date: DateString;
         average_score: number;
     }[];
     flashcard_daily_average: {
-        date: string;
+        date: DateString;
         average_rating: number;
     }[];
-    deck_names: {
-        [key: number]: string;
-    };
+    deck_names: Record<number, string>;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
+// Helper functions
+const sortByDateAscending = <T extends { date: string }>(data: T[]): T[] =>
+    [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+// Components
+const LoadingSpinner = ({ progress }: { progress: number }) => {
+    const { t } = useTranslation();
+    return (
+        <div className="flex flex-col items-center justify-center h-screen">
+            <h2 className="text-2xl mb-4">{t('loadingData')}</h2>
+            <div className="w-1/2 bg-gray-300 rounded-full">
+                <div
+                    className="bg-blue-500 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full"
+                    style={{ width: `${progress}%` }}
+                >
+                    {progress}%
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const FilterSection = ({
+    filterStartDate,
+    filterEndDate,
+    selectedExamId,
+    selectedDeckId,
+    setFilterStartDate,
+    setFilterEndDate,
+    setSelectedExamId,
+    setSelectedDeckId,
+    examOptions,
+    deckOptions,
+}: {
+    filterStartDate: string;
+    filterEndDate: string;
+    selectedExamId: number | null;
+    selectedDeckId: number | null;
+    setFilterStartDate: (date: string) => void;
+    setFilterEndDate: (date: string) => void;
+    setSelectedExamId: (id: number | null) => void;
+    setSelectedDeckId: (id: number | null) => void;
+    examOptions: { id: number; name: string }[];
+    deckOptions: { id: number; name: string }[];
+}) => {
+    const { t } = useTranslation();
+    return (
+        <div className="flex flex-wrap justify-center mb-8 space-x-4">
+            <div>
+                <label htmlFor="start-date" className="block mb-2">
+                    {t('filter.dateFrom')}
+                </label>
+                <input
+                    id="start-date"
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="border p-2 rounded"
+                />
+            </div>
+            <div>
+                <label htmlFor="end-date" className="block mb-2">
+                    {t('filter.dateTo')}
+                </label>
+                <input
+                    id="end-date"
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="border p-2 rounded"
+                />
+            </div>
+            <div>
+                <label htmlFor="exam-select" className="block mb-2">
+                    {t('filter.selectExam')}
+                </label>
+                <select
+                    id="exam-select"
+                    value={selectedExamId ?? ''}
+                    onChange={(e) => setSelectedExamId(e.target.value ? parseInt(e.target.value) : null)}
+                    className="border p-2 rounded"
+                >
+                    <option value="">{t('filter.all')}</option>
+                    {examOptions.map(({ id, name }) => (
+                        <option key={id} value={id}>
+                            {name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="deck-select" className="block mb-2">
+                    {t('filter.selectDeck')}
+                </label>
+                <select
+                    id="deck-select"
+                    value={selectedDeckId ?? ''}
+                    onChange={(e) => setSelectedDeckId(e.target.value ? parseInt(e.target.value) : null)}
+                    className="border p-2 rounded"
+                >
+                    <option value="">{t('filter.all')}</option>
+                    {deckOptions.map(({ id, name }) => (
+                        <option key={id} value={id}>
+                            {name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+        </div>
+    );
+};
 
 const Dashboard: React.FC = () => {
+    const { t } = useTranslation();
     const { isAuthenticated } = useContext(AuthContext);
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [progress, setProgress] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
-    // Filtry
+    // Filters
     const [filterStartDate, setFilterStartDate] = useState<string>('');
     const [filterEndDate, setFilterEndDate] = useState<string>('');
     const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
     const [selectedDeckId, setSelectedDeckId] = useState<number | null>(null);
+
+    // UI state
+    const [isExamAnalysisOpen, setIsExamAnalysisOpen] = useState<boolean>(false); // Initially collapsed
+    const [isFlashcardAnalysisOpen, setIsFlashcardAnalysisOpen] = useState<boolean>(false); // Initially collapsed
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -107,25 +221,18 @@ const Dashboard: React.FC = () => {
                 setProgress(10);
 
                 if (!isAuthenticated) {
-                    throw new Error('Unauthorized. Please log in.');
+                    throw new Error(t('pleaseLogin'));
                 }
 
-                // Użyj zmiennej środowiskowej, jeśli jest skonfigurowana
-                const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
-                const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`; // Upewnij się, że adres jest poprawny i zawiera trailing slash
-
-                const response = await fetch(DASHBOARD_URL, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
+                const response = await fetch(`${API_BASE_URL}/dashboard/`, {
                     credentials: 'include',
                 });
 
                 setProgress(50);
 
                 if (!response.ok) {
-                    throw new Error('Failed to fetch dashboard data.');
+                    throw new Error(t('fetchError', { statusText: response.statusText }));
                 }
 
                 const result: DashboardData = await response.json();
@@ -133,11 +240,7 @@ const Dashboard: React.FC = () => {
                 setProgress(100);
             } catch (err: unknown) {
                 console.error('Error fetching dashboard data:', err);
-                if (err instanceof Error) {
-                    setError(err.message);
-                } else {
-                    setError('Failed to fetch data.');
-                }
+                setError(err instanceof Error ? err.message : t('fetchErrorGeneric'));
                 setProgress(100);
             } finally {
                 setLoading(false);
@@ -145,54 +248,85 @@ const Dashboard: React.FC = () => {
         };
 
         fetchDashboardData();
-    }, [isAuthenticated]);
+    }, [isAuthenticated, t]);
 
-    // Funkcja do filtrowania danych
+    if (loading) {
+        return <LoadingSpinner progress={progress} />;
+    }
+
+    if (error) {
+        return <div className="text-red-500 text-center mt-10">{error}</div>;
+    }
+
+    if (!data) {
+        return <div className="text-center mt-10">{t('noData')}</div>;
+    }
+
+    // Prepare filter options
+    const examOptions = Array.from(
+        new Set(
+            data.exam_results.map((exam) => ({
+                id: exam.exam_id,
+                name: exam.exam_name || `${t('filter.selectExam')} ${exam.exam_id}`,
+            }))
+        ),
+        (item) => item
+    );
+
+    const deckOptions = Array.from(
+        new Set(
+            data.study_sessions.map((session) => ({
+                id: session.deck_id,
+                name: data.deck_names[session.deck_id] || `${t('filter.selectDeck')} ${session.deck_id}`,
+            }))
+        ),
+        (item) => item
+    );
+
+    // Filter data based on selected filters
     const getFilteredData = (data: DashboardData): DashboardData => {
         let filteredStudyRecords = data.study_records;
         let filteredExamResults = data.exam_results;
         let filteredExamDailyAverage = data.exam_daily_average;
         let filteredFlashcardDailyAverage = data.flashcard_daily_average;
 
-        // Filtruj według daty
+        // Filter by date
         if (filterStartDate && filterEndDate) {
             const start = new Date(filterStartDate);
             const end = new Date(filterEndDate);
 
-            filteredStudyRecords = data.study_records.filter(record => {
+            filteredStudyRecords = data.study_records.filter((record) => {
                 const recordDate = new Date(record.reviewed_at);
                 return recordDate >= start && recordDate <= end;
             });
 
-            filteredExamResults = data.exam_results.filter(exam => {
+            filteredExamResults = data.exam_results.filter((exam) => {
                 const examDate = new Date(exam.started_at);
                 return examDate >= start && examDate <= end;
             });
 
-            filteredExamDailyAverage = data.exam_daily_average.filter(avg => {
+            filteredExamDailyAverage = data.exam_daily_average.filter((avg) => {
                 const avgDate = new Date(avg.date);
                 return avgDate >= start && avgDate <= end;
             });
 
-            filteredFlashcardDailyAverage = data.flashcard_daily_average.filter(avg => {
+            filteredFlashcardDailyAverage = data.flashcard_daily_average.filter((avg) => {
                 const avgDate = new Date(avg.date);
                 return avgDate >= start && avgDate <= end;
             });
         }
 
-        // Filtruj według egzaminu
+        // Filter by exam
         if (selectedExamId) {
-            filteredExamResults = filteredExamResults.filter(exam => exam.exam_id === selectedExamId);
-            // Możesz również filtrować exam_daily_average w backendzie dla bardziej precyzyjnych danych
+            filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
         }
 
-        // Filtruj według zestawu fiszek
+        // Filter by flashcard deck
         if (selectedDeckId) {
-            filteredStudyRecords = filteredStudyRecords.filter(record => {
-                const session = data.study_sessions.find(session => session.id === record.session_id);
+            filteredStudyRecords = filteredStudyRecords.filter((record) => {
+                const session = data.study_sessions.find((session) => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
-            // Możesz również filtrować flashcard_daily_average w backendzie dla bardziej precyzyjnych danych
         }
 
         return {
@@ -204,138 +338,148 @@ const Dashboard: React.FC = () => {
         };
     };
 
-    let filteredData: DashboardData | null = null;
-    if (data) {
-        filteredData = getFilteredData(data);
-    }
+    const filteredData = getFilteredData(data);
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center h-screen">
-                <h2 className="text-2xl mb-4">Ładowanie danych...</h2>
-                <div className="w-1/2 bg-gray-300 rounded-full">
-                    <div
-                        className="bg-blue-500 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full"
-                        style={{ width: `${progress}%` }}
-                    >
-                        {progress}%
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    // Prepare data for Exam Analysis
+    const examLineChartData = sortByDateAscending(
+        filteredData.exam_daily_average.map((record) => ({
+            date: record.date,
+            average_score: record.average_score,
+        }))
+    );
 
-    if (error) {
-        return <div className="text-red-500 text-center mt-10">{error}</div>;
-    }
+    const examStudyTimeData = sortByDateAscending(
+        filteredData.exam_results
+            .filter((exam) => exam.started_at && exam.completed_at)
+            .map((exam) => {
+                const start = new Date(exam.started_at);
+                const end = new Date(exam.completed_at!);
+                const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60); // Duration in hours
+                return {
+                    date: start.toISOString().split('T')[0],
+                    study_time: parseFloat(duration.toFixed(2)),
+                };
+            })
+    ).reduce((acc, cur) => {
+        const existing = acc.find((item) => item.date === cur.date);
+        if (existing) {
+            existing.study_time += cur.study_time;
+        } else {
+            acc.push({ ...cur });
+        }
+        return acc;
+    }, [] as { date: string; study_time: number }[]);
 
-    if (!filteredData) {
-        return <div className="text-center mt-10">Brak danych do wyświetlenia.</div>;
-    }
-
-    // Sekcja Egzaminów - 4 wykresy
-    const examLineChartData = filteredData.exam_daily_average.map(record => ({
-        date: record.date,
-        average_score: record.average_score,
+    const sortedExamStudyTimeData = sortByDateAscending(examStudyTimeData).map((record) => ({
+        ...record,
+        study_time: parseFloat(record.study_time.toFixed(2)),
     }));
 
-    const examBarChartData = filteredData.exam_daily_average.map(record => ({
-        date: record.date,
-        average_score: record.average_score,
-    }));
+    const histogramExamResultsData = (() => {
+        // Create buckets for all possible score ranges (0-10, 10-20, ..., 90-100)
+        const buckets = Array.from({ length: 10 }, (_, i) => ({
+            score: i * 10,
+            count: 0
+        }));
 
-    const averageExamScore =
-        filteredData.exam_daily_average.length > 0
-            ? filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length
-            : 0;
+        // Fill the buckets with actual data
+        filteredData.exam_results.forEach(exam => {
+            let bucketIndex = Math.floor(exam.score / 10);
+            if (bucketIndex >= 10) bucketIndex = 9; // Handle score of 100
+            buckets[bucketIndex].count += 1;
+        });
 
-    const examPieChartData = [
-        {
-            name: 'Średni wynik',
-            value: averageExamScore,
-        },
-        {
-            name: 'Pozostało do 100',
-            value: 100 - averageExamScore,
-        },
-    ];
+        return buckets;
+    })();
 
-    const examRadarChartData = [
-        {
-            subject: 'Średni wynik',
-            A: averageExamScore,
-            fullMark: 100,
-        },
-    ];
+    const combinedExamData = sortByDateAscending([
+        ...filteredData.study_sessions.map((session) => ({
+            date: session.started_at.split('T')[0],
+            study_sessions: 1,
+            exams_completed: 0,
+        })),
+        ...filteredData.exam_results.map((exam) => ({
+            date: exam.started_at.split('T')[0],
+            study_sessions: 0,
+            exams_completed: 1,
+        })),
+    ]).reduce((acc, cur) => {
+        const existing = acc.find((item) => item.date === cur.date);
+        if (existing) {
+            existing.study_sessions += cur.study_sessions;
+            existing.exams_completed += cur.exams_completed;
+        } else {
+            acc.push({ ...cur });
+        }
+        return acc;
+    }, [] as { date: string; study_sessions: number; exams_completed: number }[]);
 
-    // Sekcja Fiszek - 4 wykresy
-    const flashcardLineChartData = filteredData.flashcard_daily_average.map(record => ({
-        date: record.date,
-        average_rating: record.average_rating,
-    }));
+    // Prepare data for Flashcard Analysis
+    const flashcardLineChartData = sortByDateAscending(
+        filteredData.flashcard_daily_average.map((record) => ({
+            date: record.date,
+            average_rating: record.average_rating,
+        }))
+    );
 
-    const flashcardBarChartData = filteredData.flashcard_daily_average.map(record => ({
-        date: record.date,
-        average_rating: record.average_rating,
-    }));
-
-    const averageFlashcardRating =
-        filteredData.flashcard_daily_average.length > 0
-            ? filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length
-            : 0;
+    const totalStudyTimeData = sortByDateAscending(
+        filteredData.session_durations.map((record) => ({
+            date: record.date,
+            total_study_time: parseFloat(record.duration_hours.toFixed(2)),
+        }))
+    );
 
     const flashcardPieChartData = [
         {
-            name: 'Średnia ocena',
-            value: averageFlashcardRating,
+            name: 'Average Rating',
+            value:
+                filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) /
+                (filteredData.flashcard_daily_average.length || 1),
         },
         {
-            name: 'Pozostało do 5',
-            value: 5 - averageFlashcardRating,
+            name: 'Remaining to 5',
+            value:
+                5 -
+                (filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) /
+                    (filteredData.flashcard_daily_average.length || 1)),
         },
     ];
 
-    const flashcardRadarChartData = [
-        {
-            subject: 'Średnia ocena',
-            A: averageFlashcardRating,
-            fullMark: 5,
-        },
-    ];
+    const nextReviewTimelineData = sortByDateAscending(
+        filteredData.user_flashcards
+            .filter((card) => card.next_review)
+            .map((card) => ({
+                date: card.next_review.split('T')[0],
+                count: 1,
+            }))
+            .reduce((acc, cur) => {
+                const existing = acc.find((item) => item.date === cur.date);
+                if (existing) {
+                    existing.count += cur.count;
+                } else {
+                    acc.push({ ...cur });
+                }
+                return acc;
+            }, [] as { date: string; count: number }[])
+    );
 
-    // Planowane sesje nauki (Timeline)
-    const nextReviewTimelineData = filteredData.user_flashcards
-        .filter(card => card.next_review) // Filtrujemy fiszki z datą następnej sesji
-        .map(card => ({
-            date: card.next_review.split('T')[0],
-            count: 1,
-        }))
-        .reduce((acc, cur) => {
-            const existing = acc.find(item => item.date === cur.date);
-            if (existing) {
-                existing.count += cur.count;
-            } else {
-                acc.push({ ...cur });
-            }
-            return acc;
-        }, [] as { date: string; count: number }[]);
-
-    // Tabela fiszek dziennie
-    const flashcardsSolvedDaily = filteredData.study_records
-        .filter(record => record.session_id !== null)
-        .map(record => ({
-            date: record.reviewed_at.split('T')[0],
-            count: 1,
-        }))
-        .reduce((acc, cur) => {
-            const existing = acc.find(item => item.date === cur.date);
-            if (existing) {
-                existing.count += cur.count;
-            } else {
-                acc.push({ ...cur });
-            }
-            return acc;
-        }, [] as { date: string; count: number }[]);
+    const flashcardsSolvedDaily = sortByDateAscending(
+        filteredData.study_records
+            .filter((record) => record.session_id !== null)
+            .map((record) => ({
+                date: record.reviewed_at.split('T')[0],
+                count: 1,
+            }))
+            .reduce((acc, cur) => {
+                const existing = acc.find((item) => item.date === cur.date);
+                if (existing) {
+                    existing.count += cur.count;
+                } else {
+                    acc.push({ ...cur });
+                }
+                return acc;
+            }, [] as { date: string; count: number }[])
+    );
 
     const averageFlashcardsSolved =
         flashcardsSolvedDaily.length > 0
@@ -343,257 +487,254 @@ const Dashboard: React.FC = () => {
             : 0;
 
     return (
-        <div className="p-4">
-            <h2 className="text-2xl font-bold mb-6 text-center">Twój Dashboard</h2>
+        <div className="p-4 w-full">
+            <h2 className="text-2xl font-bold mb-6 text-center">{t('dashboardTitle')}</h2>
 
-            {/* Filtry */}
-            <div className="flex flex-wrap justify-center mb-8 space-x-4">
-                <div>
-                    <label htmlFor="start-date" className="block mb-2">
-                        Data od:
-                    </label>
-                    <input
-                        id="start-date"
-                        type="date"
-                        value={filterStartDate}
-                        onChange={(e) => setFilterStartDate(e.target.value)}
-                        className="border p-2 rounded"
-                    />
-                </div>
-                <div>
-                    <label htmlFor="end-date" className="block mb-2">
-                        Data do:
-                    </label>
-                    <input
-                        id="end-date"
-                        type="date"
-                        value={filterEndDate}
-                        onChange={(e) => setFilterEndDate(e.target.value)}
-                        className="border p-2 rounded"
-                    />
-                </div>
-                <div>
-                    <label htmlFor="exam-select" className="block mb-2">
-                        Wybierz egzamin:
-                    </label>
-                    <select
-                        id="exam-select"
-                        value={selectedExamId ?? ''}
-                        onChange={(e) => setSelectedExamId(e.target.value ? parseInt(e.target.value) : null)}
-                        className="border p-2 rounded"
+            <FilterSection
+                filterStartDate={filterStartDate}
+                filterEndDate={filterEndDate}
+                selectedExamId={selectedExamId}
+                selectedDeckId={selectedDeckId}
+                setFilterStartDate={setFilterStartDate}
+                setFilterEndDate={setFilterEndDate}
+                setSelectedExamId={setSelectedExamId}
+                setSelectedDeckId={setSelectedDeckId}
+                examOptions={examOptions}
+                deckOptions={deckOptions}
+            />
+
+            <div className="space-y-8">
+                {/* Exam Analysis */}
+                <div className="border rounded-lg p-4">
+                    <button
+                        className="flex justify-between items-center w-full text-left focus:outline-none"
+                        onClick={() => setIsExamAnalysisOpen(!isExamAnalysisOpen)}
                     >
-                        <option value="">Wszystkie</option>
-                        {Array.from(new Set(filteredData.exam_results.map(exam => exam.exam_id))).map(examId => (
-                            <option key={examId} value={examId}>
-                                {filteredData.exam_results.find(exam => exam.exam_id === examId)?.exam_name || `Egzamin ${examId}`}
-                            </option>
-                        ))}
-                    </select>
+                        <div className="flex items-center space-x-2">
+                            <TestTube className="h-6 w-6 text-blue-500" />
+                            <h3 className="text-xl font-bold">{t('examAnalysis')}</h3>
+                        </div>
+                        {isExamAnalysisOpen ? (
+                            <ChevronUp className="h-6 w-6 text-blue-500" />
+                        ) : (
+                            <ChevronDown className="h-6 w-6 text-blue-500" />
+                        )}
+                    </button>
+                    {isExamAnalysisOpen && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Average Exam Scores Over Time */}
+                            <div>
+                                <h4 className="text-lg font-semibold mb-2">{t('averageExamScoresOverTime')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <LineChart data={examLineChartData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis domain={[0, 100]} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Line type="monotone" dataKey="average_score" name={t('averageScore')} stroke="#82ca9d" />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* Time Spent Studying for Exams */}
+                            <div>
+                                <h4 className="text-lg font-semibold mb-2">{t('timeSpentStudyingExams')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={sortedExamStudyTimeData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis domain={[0, 'auto']} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Bar dataKey="study_time" name={t('studyTimeHours')} fill="#FF8042" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* Exam Score Distribution */}
+                            <div className="md:col-span-2">
+                                <h4 className="text-lg font-semibold mb-2">{t('examScoreDistribution')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={histogramExamResultsData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="score" type="number" domain={[0, 100]} allowDecimals={false} />
+                                        <YAxis allowDecimals={false} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Bar dataKey="count" name={t('numberOfExams')} fill="#FFBB28" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* Sessions and Exams per Day */}
+                            <div className="md:col-span-2">
+                                <h4 className="text-lg font-semibold mb-2">{t('sessionsAndExamsPerDay')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={combinedExamData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis allowDecimals={false} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Bar dataKey="study_sessions" name={t('studySessions')} fill="#82ca9d" />
+                                        <Bar dataKey="exams_completed" name={t('exams')} fill="#FF8042" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
                 </div>
-                <div>
-                    <label htmlFor="deck-select" className="block mb-2">
-                        Wybierz zestaw fiszek:
-                    </label>
-                    <select
-                        id="deck-select"
-                        value={selectedDeckId ?? ''}
-                        onChange={(e) => setSelectedDeckId(e.target.value ? parseInt(e.target.value) : null)}
-                        className="border p-2 rounded"
+
+                {/* Flashcard Analysis */}
+                <div className="border rounded-lg p-4">
+                    <button
+                        className="flex justify-between items-center w-full text-left focus:outline-none"
+                        onClick={() => setIsFlashcardAnalysisOpen(!isFlashcardAnalysisOpen)}
                     >
-                        <option value="">Wszystkie</option>
-                        {Array.from(new Set(filteredData.study_sessions.map(session => session.deck_id))).map(deckId => (
-                            <option key={deckId} value={deckId}>
-                                {filteredData.deck_names[deckId] || `Zestaw ${deckId}`}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </div>
+                        <div className="flex items-center space-x-2">
+                            <BookOpen className="h-6 w-6 text-green-500" />
+                            <h3 className="text-xl font-bold">{t('flashcardAnalysis')}</h3>
+                        </div>
+                        {isFlashcardAnalysisOpen ? (
+                            <ChevronUp className="h-6 w-6 text-green-500" />
+                        ) : (
+                            <ChevronDown className="h-6 w-6 text-green-500" />
+                        )}
+                    </button>
+                    {isFlashcardAnalysisOpen && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Average Flashcard Ratings Over Time */}
+                            <div>
+                                <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRatingsOverTime')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <LineChart data={flashcardLineChartData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis domain={[0, 5]} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Line type="monotone" dataKey="average_rating" name={t('averageRating')} stroke="#82ca9d" />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
 
-            {/* Sekcja Egzaminów */}
-            <div className="mb-12">
-                <h3 className="text-xl font-bold mb-4 text-center">Analiza Egzaminów</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Wykres Liniowy - Średnie Wyniki Egzaminów w czasie */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średnie Wyniki Egzaminów w Czasie</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={examLineChartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis domain={[0, 100]} />
-                                <Tooltip />
-                                <Legend />
-                                <Line type="monotone" dataKey="average_score" name="Średni Wynik" stroke="#82ca9d" />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
+                            {/* Total Time Spent Studying Flashcards */}
+                            <div>
+                                <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudyingFlashcards')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <AreaChart data={totalStudyTimeData}>
+                                        <defs>
+                                            <linearGradient id="colorTotalStudy" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                                                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis domain={[0, 'auto']} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="total_study_time"
+                                            name={t('studyTimeHours')}
+                                            stroke="#82ca9d"
+                                            fillOpacity={1}
+                                            fill="url(#colorTotalStudy)"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
 
-                    {/* Wykres Słupkowy - Średnie Wyniki Egzaminów */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średnie Wyniki Egzaminów - Słupki</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={examBarChartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis domain={[0, 100]} />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="average_score" name="Średni Wynik" fill="#8884d8" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                            {/* Total Time Spent Studying */}
+                            <div className="md:col-span-2">
+                                <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudying')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <AreaChart data={totalStudyTimeData}>
+                                        <defs>
+                                            <linearGradient id="colorDuration" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#FF8042" stopOpacity={0.8} />
+                                                <stop offset="95%" stopColor="#FF8042" stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis domain={[0, 'auto']} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="total_study_time"
+                                            name={t('studyTimeHours')}
+                                            stroke="#FF8042"
+                                            fillOpacity={1}
+                                            fill="url(#colorDuration)"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
 
-                    {/* Wykres Kołowy - Średni Wynik Egzaminów */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średni Wynik Egzaminów</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                                <Pie
-                                    data={examPieChartData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={100}
-                                    label
-                                >
-                                    {examPieChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
+                            {/* Average Flashcard Rating */}
+                            <div className="md:col-span-2">
+                                <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRating')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <PieChart>
+                                        <Pie
+                                            data={flashcardPieChartData}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={100}
+                                            label
+                                        >
+                                            {flashcardPieChartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
 
-                    {/* Wykres Radarowy - Średni Wynik Egzaminów */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średni Wynik Egzaminów - Radar</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <RadarChart data={examRadarChartData}>
-                                <PolarGrid />
-                                <PolarAngleAxis dataKey="subject" />
-                                <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                                <Tooltip />
-                                <Legend />
-                                <Radar name="Średni Wynik" dataKey="A" stroke="#00C49F" fill="#00C49F" fillOpacity={0.6} />
-                            </RadarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
+                            {/* Planned Study Sessions */}
+                            <div className="md:col-span-2">
+                                <h4 className="text-lg font-semibold mb-2">{t('plannedStudySessions')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <LineChart data={nextReviewTimelineData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Line type="monotone" dataKey="count" name={t('numberOfFlashcards')} stroke="#82ca9d" />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
 
-            {/* Sekcja Fiszek */}
-            <div className="mb-12">
-                <h3 className="text-xl font-bold mb-4 text-center">Analiza Fiszek</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Wykres Liniowy - Średnie Oceny Fiszek w czasie */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średnie Oceny Fiszek w Czasie</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={flashcardLineChartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis domain={[0, 5]} />
-                                <Tooltip />
-                                <Legend />
-                                <Line type="monotone" dataKey="average_rating" name="Średnia Ocena" stroke="#82ca9d" />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    {/* Wykres Słupkowy - Średnie Oceny Fiszek */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średnie Oceny Fiszek - Słupki</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={flashcardBarChartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="date" />
-                                <YAxis domain={[0, 5]} />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="average_rating" name="Średnia Ocena" fill="#8884d8" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    {/* Wykres Kołowy - Średnia Ocena Fiszek */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średnia Ocena Fiszek</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                                <Pie
-                                    data={flashcardPieChartData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={100}
-                                    label
-                                >
-                                    {flashcardPieChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    {/* Wykres Radarowy - Średnia Ocena Fiszek */}
-                    <div>
-                        <h4 className="text-lg font-semibold mb-2">Średnia Ocena Fiszek - Radar</h4>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <RadarChart data={flashcardRadarChartData}>
-                                <PolarGrid />
-                                <PolarAngleAxis dataKey="subject" />
-                                <PolarRadiusAxis angle={30} domain={[0, 5]} />
-                                <Tooltip />
-                                <Legend />
-                                <Radar name="Średnia Ocena" dataKey="A" stroke="#FFBB28" fill="#FFBB28" fillOpacity={0.6} />
-                            </RadarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            </div>
-
-            {/* Sekcja Planowanych Sesji Nauki */}
-            <div className="mb-12">
-                <h3 className="text-xl font-bold mb-4 text-center">Planowane Sesje Nauki (Timeline)</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={nextReviewTimelineData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="count" name="Liczba fiszek" stroke="#82ca9d" />
-                    </LineChart>
-                </ResponsiveContainer>
-            </div>
-
-            {/* Sekcja Fiszek Rozwiązanych Dziennie */}
-            <div>
-                <h3 className="text-xl font-bold mb-4 text-center">Fiszki Rozwiązane Dziennie</h3>
-                <div className="flex flex-col items-center">
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={flashcardsSolvedDaily}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="date" />
-                            <YAxis />
-                            <Tooltip />
-                            <Legend />
-                            <Bar dataKey="count" name="Fiszki rozwiązane" fill="#8884d8" />
-                        </BarChart>
-                    </ResponsiveContainer>
-                    <div className="mt-4">
-                        <p className="text-lg">
-                            Średnia liczba fiszek rozwiązanych dziennie: <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
-                        </p>
-                    </div>
+                            {/* Flashcards Solved Daily */}
+                            <div className="md:col-span-2">
+                                <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedDaily')}</h4>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={flashcardsSolvedDaily}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis allowDecimals={false} />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Bar dataKey="count" name={t('flashcardsSolved')} fill="#8884d8" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                                <div className="mt-4">
+                                    <p className="text-lg">
+                                        {t('averageFlashcardsSolvedDaily')} <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -28,7 +28,7 @@ interface StudyDeckProps {
   onExit: () => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 export function StudyDeck({ deck, study_session_id, available_cards, next_session_date, onExit }: StudyDeckProps) {
   const { t } = useTranslation();
@@ -137,8 +137,14 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
       setIsSubmitting(true);
       setSubmitError(null);
 
+      console.log('Submitting bulk record:', {
+        session_id: study_session_id,
+        deck_id: deck.id,
+        ratings: localRatings,
+      });
+
       if (study_session_id !== null) {
-        await fetchJson(`${API_BASE_URL}/study_sessions/bulk_record`, {
+        const response = await fetchJson(`${API_BASE_URL}/study_sessions/bulk_record`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -148,6 +154,9 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
             ratings: localRatings,
           }),
         });
+        console.log('Bulk record response:', response);
+      } else {
+        console.warn('study_session_id is null. Skipping bulk_record request.');
       }
 
       clearLocalStorage();
@@ -193,6 +202,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
       }
 
       const hardCards: Flashcard[] = await response.json();
+      console.log('Received hardCards:', hardCards);
 
       if (hardCards.length === 0) {
         alert(t('no_hard_cards_found'));
@@ -232,6 +242,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
       }
 
       const retakeCards: Flashcard[] = await response.json();
+      console.log('Received retakeCards:', retakeCards);
 
       if (retakeCards.length === 0) {
         alert(t('no_cards_to_retake'));

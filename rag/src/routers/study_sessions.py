@@ -87,38 +87,50 @@ def bulk_record(
     logger.info(f"bulk_record session_id={data.session_id}, deck_id={data.deck_id}, user_id={current_user.id_}")
 
     # -- (1) Validate deck ownership
-    deck = db.query(Deck).filter(
-        Deck.id == data.deck_id,
-        Deck.user_id == current_user.id_
-    ).first()
-    if not deck:
-        logger.error(f"Deck id={data.deck_id} not found or does not belong to user_id={current_user.id_}")
-        raise HTTPException(
-            status_code=404,
-            detail="Deck not found or doesn't belong to user."
-        )
-    logger.debug(f"Deck found: {deck}")
+    try:
+        deck = db.query(Deck).filter(
+            Deck.id == data.deck_id,
+            Deck.user_id == current_user.id_
+        ).first()
+        if not deck:
+            logger.error(f"Deck id={data.deck_id} not found or does not belong to user_id={current_user.id_}")
+            raise HTTPException(
+                status_code=404,
+                detail="Deck not found or doesn't belong to user."
+            )
+        logger.debug(f"Deck found: {deck}")
+    except Exception as e:
+        logger.error(f"Error fetching Deck: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
     # -- (2) Validate session
-    session = db.query(StudySession).filter(
-        StudySession.id == data.session_id,
-        StudySession.user_id == current_user.id_,
-        StudySession.deck_id == data.deck_id
-    ).first()
-    if not session:
-        logger.error(f"StudySession id={data.session_id} not found or does not belong to user_id={current_user.id_}")
-        raise HTTPException(
-            status_code=404,
-            detail="Study session not found or doesn't belong to user."
-        )
-    logger.debug(f"StudySession found: {session}")
+    try:
+        session = db.query(StudySession).filter(
+            StudySession.id == data.session_id,
+            StudySession.user_id == current_user.id_,
+            StudySession.deck_id == data.deck_id
+        ).first()
+        if not session:
+            logger.error(f"StudySession id={data.session_id} not found or does not belong to user_id={current_user.id_}")
+            raise HTTPException(
+                status_code=404,
+                detail="Study session not found or doesn't belong to user."
+            )
+        logger.debug(f"StudySession found: {session}")
+    except Exception as e:
+        logger.error(f"Error fetching StudySession: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
     # -- (3) Pobierz userFlashcards (mapowanie flashcard_id -> userFlashcard).
-    user_flashcards = db.query(UserFlashcard).filter(
-        UserFlashcard.user_id == current_user.id_,
-        UserFlashcard.flashcard_id.in_([f.id for f in deck.flashcards])
-    ).all()
-    logger.debug(f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
+    try:
+        user_flashcards = db.query(UserFlashcard).filter(
+            UserFlashcard.user_id == current_user.id_,
+            UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
+        ).all()
+        logger.debug(f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
+    except Exception as e:
+        logger.error(f"Error fetching UserFlashcards: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
     # Mapowanie flashcard_id -> UserFlashcard
     uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
@@ -140,12 +152,17 @@ def bulk_record(
             db.add(new_uf)
             new_ufs.append(new_uf)
             logger.debug(f"Added new UserFlashcard: {new_uf}")
-        db.flush()  # Persist new UserFlashcards
-        # Aktualizuj mapę
-        user_flashcards += new_ufs
-        for uf in new_ufs:
-            uf_map[uf.flashcard_id] = uf
-        logger.info(f"Persisted {len(new_ufs)} new UserFlashcard entries.")
+        try:
+            db.flush()  # Persist new UserFlashcards
+            # Aktualizuj mapę
+            user_flashcards += new_ufs
+            for uf in new_ufs:
+                uf_map[uf.flashcard_id] = uf
+            logger.info(f"Persisted {len(new_ufs)} new UserFlashcard entries.")
+        except Exception as e:
+            logger.error(f"Error initializing UserFlashcards: {e}")
+            db.rollback()
+            raise HTTPException(status_code=500, detail="Failed to initialize UserFlashcards.")
 
     # -- (5) Dla każdej oceny twórz StudyRecord & aktualizuj SM2
     for item in data.ratings:
@@ -190,6 +207,7 @@ def bulk_record(
         "message": "Bulk record saved",
         "study_session_id": session.id
     }
+
 
 @router.get("/next_review_date")
 def get_next_review_date(
