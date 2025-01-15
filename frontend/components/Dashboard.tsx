@@ -57,13 +57,18 @@ interface StudySession {
     completed_at: string | null;
 }
 
+interface SessionDuration {
+    date: string;
+    duration_hours: number;
+}
+
 interface DashboardData {
     exam_results: ExamResult[];
     exam_result_answers: ExamResultAnswer[];
     user_flashcards: UserFlashcard[];
     study_records: StudyRecord[];
     study_sessions: StudySession[];
-    session_durations: { date: string; duration_hours: number }[];
+    session_durations: SessionDuration[];
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
@@ -309,7 +314,7 @@ const Dashboard: React.FC = () => {
                         className="border p-2 rounded"
                     >
                         <option value="">Wszystkie</option>
-                        {Array.from(new Set(data?.exam_results.map(exam => exam.exam_id))).map(examId => (
+                        {Array.from(new Set(filteredData.exam_results.map(exam => exam.exam_id))).map(examId => (
                             <option key={examId} value={examId}>
                                 Egzamin {examId}
                             </option>
@@ -327,7 +332,7 @@ const Dashboard: React.FC = () => {
                         className="border p-2 rounded"
                     >
                         <option value="">Wszystkie</option>
-                        {Array.from(new Set(data?.study_sessions.map(session => session.deck_id))).map(deckId => (
+                        {Array.from(new Set(filteredData.study_sessions.map(session => session.deck_id))).map(deckId => (
                             <option key={deckId} value={deckId}>
                                 Zestaw {deckId}
                             </option>
