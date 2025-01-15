@@ -5,9 +5,13 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.proxy_headers import ProxyHeadersMiddleware  # Dodany import
 import base64
 
-from src.routers import files, decks, flashcards, query, chats, exams, study_sessions, user_flashcards, dashboard
+from src.routers import (
+    files, decks, flashcards, query, chats, exams,
+    study_sessions, user_flashcards, dashboard
+)
 from src.config import Config
 
 def load_private_keys():
@@ -39,7 +43,18 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Dodanie CORS middleware
+# Dodaj ProxyHeadersMiddleware przed CORSMiddleware
+app.add_middleware(
+    ProxyHeadersMiddleware,
+    trusted_hosts=["empathetic-enjoyment-production.up.railway.app",
+                   "http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                    "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+                    "https://torch-ed.vercel.app",
+                    "https://torched.pl"],  # Zastąp swoją domeną produkcyjną
+)
+
+# Dodaj middleware CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -48,7 +63,7 @@ app.add_middleware(
         "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
         "https://torch-ed.vercel.app",
         "https://torched.pl"
-    ],
+    ],  # Upewnij się, że wszystkie wymagane domeny są tutaj uwzględnione
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

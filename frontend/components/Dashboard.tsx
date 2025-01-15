@@ -111,7 +111,7 @@ const Dashboard: React.FC = () => {
 
                 // Użyj zmiennej środowiskowej, jeśli jest skonfigurowana
                 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || '';
-                const DASHBOARD_URL = `${API_BASE_URL}/api/dashboard`; // Upewnij się, że adres jest poprawny
+                const DASHBOARD_URL = `${API_BASE_URL}/api/dashboard/`; // Upewnij się, że adres jest poprawny i zawiera trailing slash
 
                 const response = await fetch(DASHBOARD_URL, {
                     method: 'GET',
@@ -182,11 +182,8 @@ const Dashboard: React.FC = () => {
         // Filtruj według egzaminu
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter(exam => exam.exam_id === selectedExamId);
-            filteredExamDailyAverage = data.exam_daily_average.filter(avg => {
-                // Zakładam, że musisz ponownie obliczyć średnie, jeśli filtrujesz egzamin
-                // Alternatywnie, możesz potrzebować backendu do zwracania takich danych
-                return true; // Placeholder, ponieważ frontend nie ma wystarczających danych do filtrowania
-            });
+            // Ponieważ frontend nie ma wystarczających danych do filtrowania exam_daily_average,
+            // musisz to zrobić na backendzie, jeśli to konieczne.
         }
 
         // Filtruj według zestawu fiszek
@@ -195,11 +192,7 @@ const Dashboard: React.FC = () => {
                 const session = data.study_sessions.find(session => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
-
-            filteredFlashcardDailyAverage = data.flashcard_daily_average.filter(avg => {
-                // Podobnie jak z egzaminami, frontend nie ma wystarczających danych
-                return true; // Placeholder
-            });
+            // Podobnie, filtrowanie flashcard_daily_average wymaga dodatkowych danych
         }
 
         return {
@@ -251,21 +244,26 @@ const Dashboard: React.FC = () => {
         average_score: record.average_score,
     }));
 
+    const averageExamScore =
+        filteredData.exam_daily_average.length > 0
+            ? filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length
+            : 0;
+
     const examPieChartData = [
         {
             name: 'Średni wynik',
-            value: filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length,
+            value: averageExamScore,
         },
         {
             name: 'Pozostało do 100',
-            value: 100 - (filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length),
+            value: 100 - averageExamScore,
         },
     ];
 
     const examRadarChartData = [
         {
             subject: 'Średni wynik',
-            A: filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length,
+            A: averageExamScore,
             fullMark: 100,
         },
     ];
@@ -281,21 +279,26 @@ const Dashboard: React.FC = () => {
         average_rating: record.average_rating,
     }));
 
+    const averageFlashcardRating =
+        filteredData.flashcard_daily_average.length > 0
+            ? filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length
+            : 0;
+
     const flashcardPieChartData = [
         {
             name: 'Średnia ocena',
-            value: filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length,
+            value: averageFlashcardRating,
         },
         {
             name: 'Pozostało do 5',
-            value: 5 - (filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length),
+            value: 5 - averageFlashcardRating,
         },
     ];
 
     const flashcardRadarChartData = [
         {
             subject: 'Średnia ocena',
-            A: filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length,
+            A: averageFlashcardRating,
             fullMark: 5,
         },
     ];

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from typing import Dict, Any, List
 from datetime import datetime, date
 from sqlalchemy import func
 
@@ -47,14 +48,15 @@ async def get_dashboard_data(
             .all()
         )
 
-        # Pobierz sesje studiów użytkownika
+        # Pobierz sesje studiów użytkownika wraz z nazwą decka
         study_sessions_result = (
-            db.query(StudySessionModel)
+            db.query(StudySessionModel, Deck.name.label("deck_name"))
+            .join(Deck, StudySessionModel.deck_id == Deck.id)
             .filter(StudySessionModel.user_id == user_id)
             .all()
         )
 
-        # Pobierz wyniki egzaminów użytkownika wraz z nazwami egzaminów
+        # Pobierz wyniki egzaminów użytkownika wraz z nazwą egzaminu
         exam_results_query = (
             db.query(
                 ExamResultModel,
@@ -66,7 +68,7 @@ async def get_dashboard_data(
         exam_results_result = exam_results_query.all()
 
         # Pobierz odpowiedzi na wyniki egzaminów użytkownika
-        exam_result_ids = [exam_result.ExamResultModel.id for exam_result in exam_results_result]
+        exam_result_ids = [result.ExamResultModel.id for result in exam_results_result]
         exam_result_answers_result = (
             db.query(ExamResultAnswerModel)
             .filter(ExamResultAnswerModel.exam_result_id.in_(exam_result_ids))
@@ -74,7 +76,7 @@ async def get_dashboard_data(
         )
 
         # Pobierz nazwy decków
-        deck_ids = {session.deck_id for session in study_sessions_result}
+        deck_ids = {session.StudySessionModel.deck_id for session in study_sessions_result}
         decks = db.query(Deck).filter(Deck.id.in_(deck_ids)).all()
         deck_id_to_name = {deck.id: deck.name for deck in decks}
 
@@ -119,9 +121,9 @@ async def get_dashboard_data(
         # Oblicz dodatkowe metryki (średnia czasów sesji)
         session_durations = [
             {
-                "date": session.started_at.date().isoformat(),
+                "date": session.StudySessionModel.started_at.date().isoformat(),
                 "duration_hours": (
-                                              session.completed_at - session.started_at).total_seconds() / 3600 if session.completed_at else 0
+                                              session.StudySessionModel.completed_at - session.StudySessionModel.started_at).total_seconds() / 3600 if session.StudySessionModel.completed_at else 0
             }
             for session in study_sessions_result
         ]
@@ -141,7 +143,17 @@ async def get_dashboard_data(
         # Serializacja wszystkich danych
         serialized_study_records = [serialize(record) for record in study_records_result]
         serialized_user_flashcards = [serialize(card) for card in user_flashcards_result]
-        serialized_study_sessions = [serialize(session) for session in study_sessions_result]
+        serialized_study_sessions = [
+            {
+                "id": session.StudySessionModel.id,
+                "user_id": session.StudySessionModel.user_id,
+                "deck_id": session.StudySessionModel.deck_id,
+                "deck_name": session.deck_name,
+                "started_at": session.StudySessionModel.started_at.isoformat(),
+                "completed_at": session.StudySessionModel.completed_at.isoformat() if session.StudySessionModel.completed_at else None
+            }
+            for session in study_sessions_result
+        ]
         serialized_exam_result_answers = [serialize(answer) for answer in exam_result_answers_result]
         serialized_exam_results = [
             {
