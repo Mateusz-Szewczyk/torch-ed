@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState, useContext } from 'react';
 import {
+    LineChart, Line,
     BarChart, Bar,
+    PieChart, Pie, Cell,
     RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
     XAxis, YAxis,
     Tooltip, Legend,
@@ -60,7 +62,6 @@ interface DashboardData {
     study_sessions: StudySession[];
     exam_result_answers: ExamResultAnswer[];
     exam_results: ExamResult[];
-    session_durations: { date: string; duration: number }[];
 }
 
 
@@ -68,182 +69,150 @@ const Dashboard: React.FC = () => {
     const { isAuthenticated } = useContext(AuthContext);
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
-    const [progress, setProgress] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
-    const [filters, setFilters] = useState<{
-        dateRange: [string | null, string | null];
-        examId: number | null;
-        deckId: number | null;
-    }>({
-        dateRange: [null, null],
-        examId: null,
-        deckId: null,
+    const [filterDate, setFilterDate] = useState<{ start: string; end: string }>({
+        start: '',
+        end: '',
     });
+    const [selectedExam, setSelectedExam] = useState<number | null>(null);
+    const [selectedDeck, setSelectedDeck] = useState<number | null>(null);
 
     useEffect(() => {
-        const fetchData = async () => {
-            setProgress(10);
+        const fetchDashboardData = async () => {
             try {
                 if (!isAuthenticated) {
                     throw new Error('Unauthorized. Please log in.');
                 }
 
-                let queryParams = '';
-                if (filters.dateRange[0] && filters.dateRange[1]) {
-                    queryParams += `date_start=${filters.dateRange[0]}&date_end=${filters.dateRange[1]}&`;
-                }
-                if (filters.examId) {
-                    queryParams += `exam_id=${filters.examId}&`;
-                }
-                if (filters.deckId) {
-                    queryParams += `deck_id=${filters.deckId}&`;
-                }
-
-                const response = await fetch(`/api/dashboard?${queryParams}`, {
+                const response = await fetch('/api/dashboard/', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     credentials: 'include',
                 });
 
-                setProgress(60);
-
                 if (!response.ok) {
-                    throw new Error('Failed to fetch data.');
+                    throw new Error('Failed to fetch dashboard data.');
                 }
 
                 const result: DashboardData = await response.json();
                 setData(result);
-                setProgress(100);
-            } catch (err) {
-                console.error(err);
-                setError('Błąd podczas ładowania danych.');
+            } catch (err: unknown) {
+                console.error('Error fetching dashboard data:', err);
+                setError(err instanceof Error ? err.message : 'Unexpected error occurred.');
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchData();
-    }, [filters, isAuthenticated]);
+        fetchDashboardData();
+    }, [isAuthenticated]);
+
+    const handleFilterChange = () => {
+        // Add logic here to filter `data` based on `filterDate`, `selectedExam`, and `selectedDeck`
+    };
 
     if (loading) {
         return (
             <div className="loading-screen">
-                <p>Ładowanie danych... {progress}%</p>
-                <div className="progress-bar" style={{ width: `${progress}%`, backgroundColor: '#4caf50', height: '5px' }}></div>
+                <h2>Ładowanie danych...</h2>
+                <progress className="loading-bar" />
             </div>
         );
     }
 
     if (error) {
-        return <div className="text-red-600">{error}</div>;
+        return <p>{error}</p>;
     }
 
     if (!data) {
-        return <div className="text-center">Brak danych do wyświetlenia.</div>;
+        return <p>Brak danych do wyświetlenia.</p>;
     }
 
-    const sessionDurations = data.session_durations.map(({ date, duration }) => ({
-        date,
-        duration,
-    }));
+    // Filter data based on user selection
+    const filteredStudyRecords = data.study_records.filter((record) => {
+        const recordDate = new Date(record.reviewed_at).toISOString().split('T')[0];
+        const startDate = filterDate.start || '1900-01-01';
+        const endDate = filterDate.end || '2100-01-01';
+        const withinDateRange = recordDate >= startDate && recordDate <= endDate;
+        const matchesDeck = selectedDeck === null || record.session_id === selectedDeck;
+        return withinDateRange && matchesDeck;
+    });
 
-    const activeDays = data.study_sessions.reduce<Record<string, number>>((acc, session) => {
-        const day = new Date(session.started_at).toLocaleDateString('pl-PL', { weekday: 'long' });
-        acc[day] = (acc[day] || 0) + 1;
-        return acc;
-    }, {});
-
-    const activeDaysData = Object.keys(activeDays).map((day) => ({
-        day,
-        sessions: activeDays[day],
-    }));
+    const filteredExamResults = data.exam_results.filter((exam) => {
+        const examDate = new Date(exam.started_at).toISOString().split('T')[0];
+        const startDate = filterDate.start || '1900-01-01';
+        const endDate = filterDate.end || '2100-01-01';
+        const withinDateRange = examDate >= startDate && examDate <= endDate;
+        const matchesExam = selectedExam === null || exam.exam_id === selectedExam;
+        return withinDateRange && matchesExam;
+    });
 
     return (
         <div className="p-4">
             <h2 className="text-2xl font-bold mb-6">Twój Dashboard</h2>
 
-            {/* Filtry */}
             <div className="filters mb-8">
                 <label>
-                    Od:
+                    Data od:
                     <input
                         type="date"
-                        onChange={(e) =>
-                            setFilters({
-                                ...filters,
-                                dateRange: [e.target.value, filters.dateRange[1]],
-                            })
-                        }
+                        value={filterDate.start}
+                        onChange={(e) => setFilterDate({ ...filterDate, start: e.target.value })}
                     />
                 </label>
                 <label>
-                    Do:
+                    Data do:
                     <input
                         type="date"
-                        onChange={(e) =>
-                            setFilters({
-                                ...filters,
-                                dateRange: [filters.dateRange[0], e.target.value],
-                            })
-                        }
+                        value={filterDate.end}
+                        onChange={(e) => setFilterDate({ ...filterDate, end: e.target.value })}
                     />
                 </label>
                 <label>
-                    Egzamin:
+                    Wybierz egzamin:
                     <select
-                        onChange={(e) =>
-                            setFilters({ ...filters, examId: e.target.value ? parseInt(e.target.value) : null })
-                        }
+                        value={selectedExam || ''}
+                        onChange={(e) => setSelectedExam(Number(e.target.value) || null)}
                     >
-                        <option value="">Wybierz egzamin</option>
+                        <option value="">Wszystkie egzaminy</option>
                         {data.exam_results.map((exam) => (
-                            <option key={exam.id} value={exam.id}>
-                                Egzamin {exam.id}
+                            <option key={exam.id} value={exam.exam_id}>
+                                Egzamin {exam.exam_id}
                             </option>
                         ))}
                     </select>
                 </label>
                 <label>
-                    Zestaw fiszek:
+                    Wybierz zestaw fiszek:
                     <select
-                        onChange={(e) =>
-                            setFilters({ ...filters, deckId: e.target.value ? parseInt(e.target.value) : null })
-                        }
+                        value={selectedDeck || ''}
+                        onChange={(e) => setSelectedDeck(Number(e.target.value) || null)}
                     >
-                        <option value="">Wybierz zestaw</option>
+                        <option value="">Wszystkie zestawy</option>
                         {data.study_sessions.map((session) => (
-                            <option key={session.deck_id} value={session.deck_id}>
+                            <option key={session.id} value={session.deck_id}>
                                 Zestaw {session.deck_id}
                             </option>
                         ))}
                     </select>
                 </label>
+                <button onClick={handleFilterChange}>Filtruj</button>
             </div>
 
-            {/* Czas spędzony na sesjach nauki */}
-            <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Czas Spędzony na Sesjach Nauki</h3>
+            {/* Visualization logic */}
+            <div className="charts">
+                <h3>Wizualizacje wyników po filtrach:</h3>
                 <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={sessionDurations}>
-                        <XAxis dataKey="date" />
+                    <BarChart data={filteredStudyRecords}>
+                        <XAxis dataKey="reviewed_at" />
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="duration" name="Czas (godziny)" fill="#8884d8" />
+                        <Bar dataKey="rating" fill="#8884d8" />
                     </BarChart>
-                </ResponsiveContainer>
-            </div>
-
-            {/* Najbardziej aktywne dni tygodnia */}
-            <div className="mb-8">
-                <h3 className="text-xl font-semibold mb-4">Najbardziej Aktywne Dni Tygodnia</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                    <RadarChart data={activeDaysData}>
-                        <PolarGrid />
-                        <PolarAngleAxis dataKey="day" />
-                        <PolarRadiusAxis />
-                        <Radar dataKey="sessions" name="Sesje" fill="#82ca9d" fillOpacity={0.6} />
-                        <Legend />
-                    </RadarChart>
                 </ResponsiveContainer>
             </div>
         </div>
