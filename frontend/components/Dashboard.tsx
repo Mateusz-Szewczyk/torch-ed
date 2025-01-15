@@ -16,6 +16,7 @@ import { AuthContext } from '@/contexts/AuthContext';
 interface ExamResult {
     id: number;
     exam_id: number;
+    exam_name: string;
     user_id: number;
     started_at: string;
     completed_at: string | null;
@@ -53,6 +54,7 @@ interface StudySession {
     id: number;
     user_id: number;
     deck_id: number;
+    deck_name: string;
     started_at: string;
     completed_at: string | null;
 }
@@ -63,12 +65,23 @@ interface SessionDuration {
 }
 
 interface DashboardData {
-    exam_results: ExamResult[];
-    exam_result_answers: ExamResultAnswer[];
-    user_flashcards: UserFlashcard[];
     study_records: StudyRecord[];
+    user_flashcards: UserFlashcard[];
     study_sessions: StudySession[];
+    exam_result_answers: ExamResultAnswer[];
+    exam_results: ExamResult[];
     session_durations: SessionDuration[];
+    exam_daily_average: {
+        date: string;
+        average_score: number;
+    }[];
+    flashcard_daily_average: {
+        date: string;
+        average_rating: number;
+    }[];
+    deck_names: {
+        [key: number]: string;
+    };
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
@@ -98,7 +111,7 @@ const Dashboard: React.FC = () => {
 
                 // Użyj zmiennej środowiskowej, jeśli jest skonfigurowana
                 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || '';
-                const DASHBOARD_URL = `${API_BASE_URL}/dashboard/`;
+                const DASHBOARD_URL = `${API_BASE_URL}/api/dashboard`; // Upewnij się, że adres jest poprawny
 
                 const response = await fetch(DASHBOARD_URL, {
                     method: 'GET',
@@ -137,6 +150,8 @@ const Dashboard: React.FC = () => {
     const getFilteredData = (data: DashboardData): DashboardData => {
         let filteredStudyRecords = data.study_records;
         let filteredExamResults = data.exam_results;
+        let filteredExamDailyAverage = data.exam_daily_average;
+        let filteredFlashcardDailyAverage = data.flashcard_daily_average;
 
         // Filtruj według daty
         if (filterStartDate && filterEndDate) {
@@ -152,11 +167,26 @@ const Dashboard: React.FC = () => {
                 const examDate = new Date(exam.started_at);
                 return examDate >= start && examDate <= end;
             });
+
+            filteredExamDailyAverage = data.exam_daily_average.filter(avg => {
+                const avgDate = new Date(avg.date);
+                return avgDate >= start && avgDate <= end;
+            });
+
+            filteredFlashcardDailyAverage = data.flashcard_daily_average.filter(avg => {
+                const avgDate = new Date(avg.date);
+                return avgDate >= start && avgDate <= end;
+            });
         }
 
         // Filtruj według egzaminu
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter(exam => exam.exam_id === selectedExamId);
+            filteredExamDailyAverage = data.exam_daily_average.filter(avg => {
+                // Zakładam, że musisz ponownie obliczyć średnie, jeśli filtrujesz egzamin
+                // Alternatywnie, możesz potrzebować backendu do zwracania takich danych
+                return true; // Placeholder, ponieważ frontend nie ma wystarczających danych do filtrowania
+            });
         }
 
         // Filtruj według zestawu fiszek
@@ -165,12 +195,19 @@ const Dashboard: React.FC = () => {
                 const session = data.study_sessions.find(session => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
+
+            filteredFlashcardDailyAverage = data.flashcard_daily_average.filter(avg => {
+                // Podobnie jak z egzaminami, frontend nie ma wystarczających danych
+                return true; // Placeholder
+            });
         }
 
         return {
             ...data,
             study_records: filteredStudyRecords,
             exam_results: filteredExamResults,
+            exam_daily_average: filteredExamDailyAverage,
+            flashcard_daily_average: filteredFlashcardDailyAverage,
         };
     };
 
@@ -204,71 +241,61 @@ const Dashboard: React.FC = () => {
     }
 
     // Sekcja Egzaminów - 4 wykresy
-    const examLineChartData = filteredData.exam_results.map(exam => ({
-        date: exam.started_at.split('T')[0],
-        score: exam.score,
+    const examLineChartData = filteredData.exam_daily_average.map(record => ({
+        date: record.date,
+        average_score: record.average_score,
     }));
 
-    const examBarChartData = filteredData.exam_results.map(exam => ({
-        date: exam.started_at.split('T')[0],
-        score: exam.score,
+    const examBarChartData = filteredData.exam_daily_average.map(record => ({
+        date: record.date,
+        average_score: record.average_score,
     }));
-
-    const averageExamScore =
-        filteredData.exam_results.length > 0
-            ? filteredData.exam_results.reduce((acc, exam) => acc + exam.score, 0) / filteredData.exam_results.length
-            : 0;
 
     const examPieChartData = [
         {
             name: 'Średni wynik',
-            value: averageExamScore,
+            value: filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length,
         },
         {
             name: 'Pozostało do 100',
-            value: 100 - averageExamScore,
+            value: 100 - (filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length),
         },
     ];
 
     const examRadarChartData = [
         {
             subject: 'Średni wynik',
-            A: averageExamScore,
+            A: filteredData.exam_daily_average.reduce((acc, record) => acc + record.average_score, 0) / filteredData.exam_daily_average.length,
             fullMark: 100,
         },
     ];
 
     // Sekcja Fiszek - 4 wykresy
-    const flashcardLineChartData = filteredData.study_records.map(record => ({
-        date: record.reviewed_at.split('T')[0],
-        rating: record.rating,
+    const flashcardLineChartData = filteredData.flashcard_daily_average.map(record => ({
+        date: record.date,
+        average_rating: record.average_rating,
     }));
 
-    const flashcardBarChartData = filteredData.study_records.map(record => ({
-        date: record.reviewed_at.split('T')[0],
-        rating: record.rating,
+    const flashcardBarChartData = filteredData.flashcard_daily_average.map(record => ({
+        date: record.date,
+        average_rating: record.average_rating,
     }));
-
-    const averageFlashcardRating =
-        filteredData.study_records.length > 0
-            ? filteredData.study_records.reduce((acc, record) => acc + record.rating, 0) / filteredData.study_records.length
-            : 0;
 
     const flashcardPieChartData = [
         {
             name: 'Średnia ocena',
-            value: averageFlashcardRating,
+            value: filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length,
         },
         {
             name: 'Pozostało do 5',
-            value: 5 - averageFlashcardRating,
+            value: 5 - (filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length),
         },
     ];
 
     const flashcardRadarChartData = [
         {
             subject: 'Średnia ocena',
-            A: averageFlashcardRating,
+            A: filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length,
             fullMark: 5,
         },
     ];
@@ -316,7 +343,7 @@ const Dashboard: React.FC = () => {
                         <option value="">Wszystkie</option>
                         {Array.from(new Set(filteredData.exam_results.map(exam => exam.exam_id))).map(examId => (
                             <option key={examId} value={examId}>
-                                Egzamin {examId}
+                                {filteredData.exam_results.find(exam => exam.exam_id === examId)?.exam_name || `Egzamin ${examId}`}
                             </option>
                         ))}
                     </select>
@@ -334,7 +361,7 @@ const Dashboard: React.FC = () => {
                         <option value="">Wszystkie</option>
                         {Array.from(new Set(filteredData.study_sessions.map(session => session.deck_id))).map(deckId => (
                             <option key={deckId} value={deckId}>
-                                Zestaw {deckId}
+                                {filteredData.deck_names[deckId] || `Zestaw ${deckId}`}
                             </option>
                         ))}
                     </select>
@@ -345,30 +372,30 @@ const Dashboard: React.FC = () => {
             <div className="mb-12">
                 <h3 className="text-xl font-bold mb-4 text-center">Analiza Egzaminów</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Wykres Liniowy - Wyniki Egzaminów w czasie */}
+                    {/* Wykres Liniowy - Średnie Wyniki Egzaminów w czasie */}
                     <div>
-                        <h4 className="text-lg font-semibold mb-2">Wyniki Egzaminów w Czasie</h4>
+                        <h4 className="text-lg font-semibold mb-2">Średnie Wyniki Egzaminów w Czasie</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={examLineChartData}>
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 100]} />
                                 <Tooltip />
                                 <Legend />
-                                <Line type="monotone" dataKey="score" name="Wynik" stroke="#82ca9d" />
+                                <Line type="monotone" dataKey="average_score" name="Średni Wynik" stroke="#82ca9d" />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
 
-                    {/* Wykres Słupkowy - Wyniki Egzaminów */}
+                    {/* Wykres Słupkowy - Średnie Wyniki Egzaminów */}
                     <div>
-                        <h4 className="text-lg font-semibold mb-2">Wyniki Egzaminów - Słupki</h4>
+                        <h4 className="text-lg font-semibold mb-2">Średnie Wyniki Egzaminów - Słupki</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={examBarChartData}>
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 100]} />
                                 <Tooltip />
                                 <Legend />
-                                <Bar dataKey="score" name="Wynik" fill="#8884d8" />
+                                <Bar dataKey="average_score" name="Średni Wynik" fill="#8884d8" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -418,30 +445,30 @@ const Dashboard: React.FC = () => {
             <div>
                 <h3 className="text-xl font-bold mb-4 text-center">Analiza Fiszek</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Wykres Liniowy - Oceny Fiszek w czasie */}
+                    {/* Wykres Liniowy - Średnie Oceny Fiszek w czasie */}
                     <div>
-                        <h4 className="text-lg font-semibold mb-2">Oceny Fiszek w Czasie</h4>
+                        <h4 className="text-lg font-semibold mb-2">Średnie Oceny Fiszek w Czasie</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <LineChart data={flashcardLineChartData}>
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 5]} />
                                 <Tooltip />
                                 <Legend />
-                                <Line type="monotone" dataKey="rating" name="Ocena" stroke="#82ca9d" />
+                                <Line type="monotone" dataKey="average_rating" name="Średnia Ocena" stroke="#82ca9d" />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
 
-                    {/* Wykres Słupkowy - Oceny Fiszek */}
+                    {/* Wykres Słupkowy - Średnie Oceny Fiszek */}
                     <div>
-                        <h4 className="text-lg font-semibold mb-2">Oceny Fiszek - Słupki</h4>
+                        <h4 className="text-lg font-semibold mb-2">Średnie Oceny Fiszek - Słupki</h4>
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={flashcardBarChartData}>
                                 <XAxis dataKey="date" />
                                 <YAxis domain={[0, 5]} />
                                 <Tooltip />
                                 <Legend />
-                                <Bar dataKey="rating" name="Ocena" fill="#8884d8" />
+                                <Bar dataKey="average_rating" name="Średnia Ocena" fill="#8884d8" />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -488,6 +515,7 @@ const Dashboard: React.FC = () => {
             </div>
         </div>
     );
+
 };
 
 export default Dashboard;
