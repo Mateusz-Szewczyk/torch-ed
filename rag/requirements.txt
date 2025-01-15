@@ -20,9 +20,7 @@ PyMuPDF
 PyPDF2
 pytest
 sentence-transformers
-tqdm
 python-multipart
-neo4j
 nltk
 torch
 urllib3<2
@@ -40,3 +38,4 @@ sentence-transformers
 torch
 requests
 authlib
+werkzeug

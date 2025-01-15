@@ -6,6 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import base64
+from werkzeug.middleware.proxy_fix import ProxyFix  # Import ProxyFix
 
 from src.routers import files, decks, flashcards, query, chats, exams, study_sessions, user_flashcards, dashboard
 from src.config import Config
@@ -20,7 +21,6 @@ def load_private_keys():
     else:
         raise ValueError("PUP_KEY environment variable is missing!")
 
-
 load_private_keys()
 
 # Inicjalizacja logowania
@@ -33,7 +33,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 # Inicjalizacja FastAPI aplikacji
 app = FastAPI(
     title="RAG Knowledge Base API",
@@ -41,15 +40,19 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Dodanie ProxyFix middleware
+app.add_middleware(ProxyFix, x_proto=1, x_host=1)
+
 # Dodanie CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000",
-                    "http://127.0.0.1:3000",
-                    "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                    "https://torch-ed.vercel.app",
-                    "https://torched.pl"
-                    ],  # Zaktualizuj URL frontend jeśli potrzebne
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+        "https://torch-ed.vercel.app",
+        "https://torched.pl"
+    ],  # Zaktualizuj URL frontend jeśli potrzebne
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
