@@ -5,7 +5,6 @@ import logging
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.proxy_headers import ProxyHeadersMiddleware  # Dodany import
 import base64
 
 from src.routers import (
@@ -41,17 +40,6 @@ app = FastAPI(
     title="RAG Knowledge Base API",
     description="API for uploading documents, querying a knowledge base using RAG, and managing flashcards, decks, and chats.",
     version="1.0.0"
-)
-
-# Dodaj ProxyHeadersMiddleware przed CORSMiddleware
-app.add_middleware(
-    ProxyHeadersMiddleware,
-    trusted_hosts=["empathetic-enjoyment-production.up.railway.app",
-                   "http://localhost:3000",
-                    "http://127.0.0.1:3000",
-                    "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                    "https://torch-ed.vercel.app",
-                    "https://torched.pl"],  # Zastąp swoją domeną produkcyjną
 )
 
 # Dodaj middleware CORS
