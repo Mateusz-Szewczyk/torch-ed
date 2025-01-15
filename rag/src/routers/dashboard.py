@@ -21,40 +21,33 @@ async def get_dashboard_data(
     user_id = current_user.id_
     try:
         # Query and serialize the data
-        study_records_result = (
-            db.query(StudyRecordModel)
-            .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
-            .filter(StudySessionModel.user_id == user_id)
-            .all()
-        )
-        user_flashcards_result = (
-            db.query(UserFlashcardModel)
-            .filter(UserFlashcardModel.user_id == user_id)
-            .all()
-        )
-        study_sessions_result = (
-            db.query(StudySessionModel)
-            .filter(StudySessionModel.user_id == user_id)
-            .all()
-        )
-        exam_result_answers_result = (
-            db.query(ExamResultAnswerModel)
-            .join(ExamResultModel, ExamResultAnswerModel.exam_result_id == ExamResultModel.id)
-            .filter(ExamResultModel.user_id == user_id)
-            .all()
-        )
-        exam_results_result = (
-            db.query(ExamResultModel)
-            .filter(ExamResultModel.user_id == user_id)
-            .all()
-        )
+        study_records_result = db.query(StudyRecordModel).join(
+            StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id
+        ).filter(StudySessionModel.user_id == user_id).all()
 
+        user_flashcards_result = db.query(UserFlashcardModel).filter(
+            UserFlashcardModel.user_id == user_id
+        ).all()
+
+        study_sessions_result = db.query(StudySessionModel).filter(
+            StudySessionModel.user_id == user_id
+        ).all()
+
+        exam_result_answers_result = db.query(ExamResultAnswerModel).join(
+            ExamResultModel, ExamResultAnswerModel.exam_result_id == ExamResultModel.id
+        ).filter(ExamResultModel.user_id == user_id).all()
+
+        exam_results_result = db.query(ExamResultModel).filter(
+            ExamResultModel.user_id == user_id
+        ).all()
+
+        # Convert ORM results to Pydantic models
         dashboard_data = DashboardData(
-            study_records=study_records_result,
-            user_flashcards=user_flashcards_result,
-            study_sessions=study_sessions_result,
-            exam_result_answers=exam_result_answers_result,
-            exam_results=exam_results_result
+            study_records=[StudyRecord.model_validate(record) for record in study_records_result],
+            user_flashcards=[UserFlashcard.model_validate(card) for card in user_flashcards_result],
+            study_sessions=[StudySession.model_validate(session) for session in study_sessions_result],
+            exam_result_answers=[ExamResultAnswer.model_validate(answer) for answer in exam_result_answers_result],
+            exam_results=[ExamResult.model_validate(result) for result in exam_results_result],
         )
 
         return dashboard_data
