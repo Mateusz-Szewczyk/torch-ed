@@ -3,6 +3,7 @@
 from typing import Optional
 from datetime import datetime
 
+from pydantic import ConfigDict
 from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,
     func, Float, UniqueConstraint
@@ -39,7 +40,6 @@ class Message(Base):
         "Conversation",
         back_populates="messages"
     )
-
 
 class ORMFile(Base):
     __tablename__ = 'files'
@@ -121,6 +121,9 @@ class UserFlashcard(Base):
         UniqueConstraint('user_id', 'flashcard_id', name='uix_user_flashcard'),
     )
 
+    class ConfigDict:
+        from_attributes = True
+
 
 class StudySession(Base):
     __tablename__ = 'study_sessions'
@@ -145,6 +148,9 @@ class StudySession(Base):
         cascade="all, delete-orphan"
     )
 
+    class ConfigDict:
+        from_attributes = True
+
 
 class StudyRecord(Base):
     __tablename__ = 'study_records'
@@ -164,6 +170,8 @@ class StudyRecord(Base):
         back_populates="study_records"
     )
 
+    class ConfigDict:
+        from_attributes = True
 
 class Exam(Base):
     __tablename__ = 'exams'
@@ -233,6 +241,9 @@ class ExamResult(Base):
         cascade="all, delete-orphan"
     )
 
+    class ConfigDict:
+        from_attributes = True
+
 
 class ExamResultAnswer(Base):
     __tablename__ = 'exam_result_answers'
@@ -251,6 +262,8 @@ class ExamResultAnswer(Base):
     question = relationship("ExamQuestion")
     selected_answer = relationship("ExamAnswer")
 
+    class ConfigDict:
+        from_attributes = True
 
 class User(Base):
     __tablename__ = 'users'
