@@ -1,5 +1,6 @@
 // File: Dashboard.tsx
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useMemo } from 'react';
+import Link from 'next/link'; // Import dla nawigacji
 import {
     LineChart, Line,
     BarChart, Bar,
@@ -47,7 +48,7 @@ interface StudySession {
     id: number;
     user_id: number;
     deck_id: number;
-    deck_name: string;
+    deck_name: string; // Możesz usunąć ten field, jeśli nie jest potrzebny
     started_at: DateString;
     completed_at: DateString | null;
 }
@@ -224,7 +225,7 @@ const Dashboard: React.FC = () => {
                     throw new Error(t('pleaseLogin'));
                 }
 
-                const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+                const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
                 const response = await fetch(`${API_BASE_URL}/dashboard/`, {
                     credentials: 'include',
                 });
@@ -250,47 +251,37 @@ const Dashboard: React.FC = () => {
         fetchDashboardData();
     }, [isAuthenticated, t]);
 
-    if (loading) {
-        return <LoadingSpinner progress={progress} />;
-    }
+    // Przygotowanie opcji filtrów z deduplikacją na podstawie deck_names
+    const deckOptions = useMemo(() => {
+        if (!data) return [];
+        return Object.entries(data.deck_names).map(([id, name]) => ({
+            id: parseInt(id, 10),
+            name,
+        }));
+    }, [data]);
 
-    if (error) {
-        return <div className="text-red-500 text-center mt-10">{error}</div>;
-    }
+    // Przygotowanie opcji egzaminów z deduplikacją na podstawie exam_id
+    const examOptions = useMemo(() => {
+        if (!data) return [];
+        const uniqueExamsMap = new Map<number, string>();
+        data.exam_results.forEach((exam) => {
+            if (!uniqueExamsMap.has(exam.exam_id)) {
+                uniqueExamsMap.set(exam.exam_id, exam.exam_name || `${t('filter.selectExam')} ${exam.exam_id}`);
+            }
+        });
+        return Array.from(uniqueExamsMap, ([id, name]) => ({ id, name }));
+    }, [data, t]);
 
-    if (!data) {
-        return <div className="text-center mt-10">{t('noData')}</div>;
-    }
+    // Przetwarzanie filtrowanych danych
+    const filteredData = useMemo(() => {
+        if (!data) return null;
 
-    // Prepare filter options
-    const examOptions = Array.from(
-        new Set(
-            data.exam_results.map((exam) => ({
-                id: exam.exam_id,
-                name: exam.exam_name || `${t('filter.selectExam')} ${exam.exam_id}`,
-            }))
-        ),
-        (item) => item
-    );
-
-    const deckOptions = Array.from(
-        new Set(
-            data.study_sessions.map((session) => ({
-                id: session.deck_id,
-                name: data.deck_names[session.deck_id] || `${t('filter.selectDeck')} ${session.deck_id}`,
-            }))
-        ),
-        (item) => item
-    );
-
-    // Filter data based on selected filters
-    const getFilteredData = (data: DashboardData): DashboardData => {
         let filteredStudyRecords = data.study_records;
         let filteredExamResults = data.exam_results;
         let filteredExamDailyAverage = data.exam_daily_average;
         let filteredFlashcardDailyAverage = data.flashcard_daily_average;
 
-        // Filter by date
+        // Filtracja po dacie
         if (filterStartDate && filterEndDate) {
             const start = new Date(filterStartDate);
             const end = new Date(filterEndDate);
@@ -316,14 +307,15 @@ const Dashboard: React.FC = () => {
             });
         }
 
-        // Filter by exam
+        // Filtracja po egzaminie
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
         }
 
-        // Filter by flashcard deck
+        // Filtracja po zestawie fiszek
         if (selectedDeckId) {
             filteredStudyRecords = filteredStudyRecords.filter((record) => {
+                if (record.session_id === null) return false;
                 const session = data.study_sessions.find((session) => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
@@ -336,155 +328,184 @@ const Dashboard: React.FC = () => {
             exam_daily_average: filteredExamDailyAverage,
             flashcard_daily_average: filteredFlashcardDailyAverage,
         };
-    };
+    }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
-    const filteredData = getFilteredData(data);
+    // Przygotowanie danych do wykresów
+    const examLineChartData = useMemo(() => {
+        if (!filteredData) return [];
+        return sortByDateAscending(
+            filteredData.exam_daily_average.map((record) => ({
+                date: record.date,
+                average_score: record.average_score,
+            }))
+        );
+    }, [filteredData]);
 
-    // Prepare data for Exam Analysis
-    const examLineChartData = sortByDateAscending(
-        filteredData.exam_daily_average.map((record) => ({
-            date: record.date,
-            average_score: record.average_score,
-        }))
-    );
-
-    const examStudyTimeData = sortByDateAscending(
+    const examStudyTimeData = useMemo(() => {
+        if (!filteredData) return [];
+        const studyTimeMap = new Map<string, number>();
         filteredData.exam_results
             .filter((exam) => exam.started_at && exam.completed_at)
-            .map((exam) => {
+            .forEach((exam) => {
                 const start = new Date(exam.started_at);
                 const end = new Date(exam.completed_at!);
                 const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60); // Duration in hours
-                return {
-                    date: start.toISOString().split('T')[0],
-                    study_time: parseFloat(duration.toFixed(2)),
-                };
-            })
-    ).reduce((acc, cur) => {
-        const existing = acc.find((item) => item.date === cur.date);
-        if (existing) {
-            existing.study_time += cur.study_time;
-        } else {
-            acc.push({ ...cur });
-        }
-        return acc;
-    }, [] as { date: string; study_time: number }[]);
+                const date = start.toISOString().split('T')[0];
+                studyTimeMap.set(date, (studyTimeMap.get(date) || 0) + parseFloat(duration.toFixed(2)));
+            });
+        return sortByDateAscending(
+            Array.from(studyTimeMap.entries()).map(([date, study_time]) => ({
+                date,
+                study_time: parseFloat(study_time.toFixed(2)),
+            }))
+        );
+    }, [filteredData]);
 
-    const sortedExamStudyTimeData = sortByDateAscending(examStudyTimeData).map((record) => ({
-        ...record,
-        study_time: parseFloat(record.study_time.toFixed(2)),
-    }));
-
-    const histogramExamResultsData = (() => {
-        // Create buckets for all possible score ranges (0-10, 10-20, ..., 90-100)
-        const buckets = Array.from({ length: 10 }, (_, i) => ({
-            score: i * 10,
-            count: 0
+    const histogramExamResultsData = useMemo(() => {
+        if (!filteredData) return [];
+        // Tworzenie przedziałów dla rozkładu wyników egzaminów (0-9, 10-19, ..., 90-99, 100)
+        const buckets = Array.from({ length: 11 }, (_, i) => ({
+            score: i < 10 ? `${i * 10}-${i * 10 + 9}` : '100',
+            count: 0,
         }));
 
-        // Fill the buckets with actual data
-        filteredData.exam_results.forEach(exam => {
-            let bucketIndex = Math.floor(exam.score / 10);
-            if (bucketIndex >= 10) bucketIndex = 9; // Handle score of 100
-            buckets[bucketIndex].count += 1;
+        // Wypełnienie przedziałów danymi
+        filteredData.exam_results.forEach((exam) => {
+            if (exam.score === 100) {
+                buckets[10].count += 1;
+            } else {
+                const bucketIndex = Math.floor(exam.score / 10);
+                if (bucketIndex >= 0 && bucketIndex < 10) {
+                    buckets[bucketIndex].count += 1;
+                }
+            }
         });
 
         return buckets;
-    })();
+    }, [filteredData]);
 
-    const combinedExamData = sortByDateAscending([
-        ...filteredData.study_sessions.map((session) => ({
-            date: session.started_at.split('T')[0],
-            study_sessions: 1,
-            exams_completed: 0,
-        })),
-        ...filteredData.exam_results.map((exam) => ({
-            date: exam.started_at.split('T')[0],
-            study_sessions: 0,
-            exams_completed: 1,
-        })),
-    ]).reduce((acc, cur) => {
-        const existing = acc.find((item) => item.date === cur.date);
-        if (existing) {
-            existing.study_sessions += cur.study_sessions;
-            existing.exams_completed += cur.exams_completed;
-        } else {
-            acc.push({ ...cur });
-        }
-        return acc;
-    }, [] as { date: string; study_sessions: number; exams_completed: number }[]);
+    const combinedExamData = useMemo(() => {
+        if (!filteredData) return [];
+        const combinedMap = new Map<string, { study_sessions: number; exams_completed: number }>();
+        filteredData.study_sessions.forEach((session) => {
+            const date = session.started_at.split('T')[0];
+            if (!combinedMap.has(date)) {
+                combinedMap.set(date, { study_sessions: 0, exams_completed: 0 });
+            }
+            const entry = combinedMap.get(date)!;
+            entry.study_sessions += 1;
+        });
+        filteredData.exam_results.forEach((exam) => {
+            const date = exam.started_at.split('T')[0];
+            if (!combinedMap.has(date)) {
+                combinedMap.set(date, { study_sessions: 0, exams_completed: 0 });
+            }
+            const entry = combinedMap.get(date)!;
+            entry.exams_completed += 1;
+        });
+        return sortByDateAscending(
+            Array.from(combinedMap.entries()).map(([date, counts]) => ({
+                date,
+                study_sessions: counts.study_sessions,
+                exams_completed: counts.exams_completed,
+            }))
+        );
+    }, [filteredData]);
 
-    // Prepare data for Flashcard Analysis
-    const flashcardLineChartData = sortByDateAscending(
-        filteredData.flashcard_daily_average.map((record) => ({
-            date: record.date,
-            average_rating: record.average_rating,
-        }))
-    );
+    const flashcardLineChartData = useMemo(() => {
+        if (!filteredData) return [];
+        return sortByDateAscending(
+            filteredData.flashcard_daily_average.map((record) => ({
+                date: record.date,
+                average_rating: record.average_rating,
+            }))
+        );
+    }, [filteredData]);
 
-    const totalStudyTimeData = sortByDateAscending(
-        filteredData.session_durations.map((record) => ({
-            date: record.date,
-            total_study_time: parseFloat(record.duration_hours.toFixed(2)),
-        }))
-    );
+    const totalStudyTimeData = useMemo(() => {
+        if (!filteredData) return [];
+        const studyTimeMap = new Map<string, number>();
+        filteredData.session_durations.forEach((record) => {
+            const date = record.date;
+            studyTimeMap.set(date, (studyTimeMap.get(date) || 0) + parseFloat(record.duration_hours.toFixed(2)));
+        });
+        return sortByDateAscending(
+            Array.from(studyTimeMap.entries()).map(([date, total_study_time]) => ({
+                date,
+                total_study_time: parseFloat(total_study_time.toFixed(2)),
+            }))
+        );
+    }, [filteredData]);
 
-    const flashcardPieChartData = [
-        {
-            name: 'Average Rating',
-            value:
-                filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) /
-                (filteredData.flashcard_daily_average.length || 1),
-        },
-        {
-            name: 'Remaining to 5',
-            value:
-                5 -
-                (filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) /
-                    (filteredData.flashcard_daily_average.length || 1)),
-        },
-    ];
+    const flashcardPieChartData = useMemo(() => {
+        if (!filteredData) return [];
+        const averageRating = filteredData.flashcard_daily_average.length > 0
+            ? filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length
+            : 0;
+        return [
+            {
+                name: 'Average Rating',
+                value: averageRating,
+            },
+            {
+                name: 'Remaining to 5',
+                value: 5 - averageRating,
+            },
+        ];
+    }, [filteredData]);
 
-    const nextReviewTimelineData = sortByDateAscending(
+    const nextReviewTimelineData = useMemo(() => {
+        if (!filteredData) return [];
+        const reviewMap = new Map<string, number>();
         filteredData.user_flashcards
             .filter((card) => card.next_review)
-            .map((card) => ({
-                date: card.next_review.split('T')[0],
-                count: 1,
+            .forEach((card) => {
+                const date = card.next_review.split('T')[0];
+                reviewMap.set(date, (reviewMap.get(date) || 0) + 1);
+            });
+        return sortByDateAscending(
+            Array.from(reviewMap.entries()).map(([date, count]) => ({
+                date,
+                count,
             }))
-            .reduce((acc, cur) => {
-                const existing = acc.find((item) => item.date === cur.date);
-                if (existing) {
-                    existing.count += cur.count;
-                } else {
-                    acc.push({ ...cur });
-                }
-                return acc;
-            }, [] as { date: string; count: number }[])
-    );
+        );
+    }, [filteredData]);
 
-    const flashcardsSolvedDaily = sortByDateAscending(
+    const flashcardsSolvedDaily = useMemo(() => {
+        if (!filteredData) return [];
+        const solvedMap = new Map<string, number>();
         filteredData.study_records
             .filter((record) => record.session_id !== null)
-            .map((record) => ({
-                date: record.reviewed_at.split('T')[0],
-                count: 1,
+            .forEach((record) => {
+                const date = record.reviewed_at.split('T')[0];
+                solvedMap.set(date, (solvedMap.get(date) || 0) + 1);
+            });
+        return sortByDateAscending(
+            Array.from(solvedMap.entries()).map(([date, count]) => ({
+                date,
+                count,
             }))
-            .reduce((acc, cur) => {
-                const existing = acc.find((item) => item.date === cur.date);
-                if (existing) {
-                    existing.count += cur.count;
-                } else {
-                    acc.push({ ...cur });
-                }
-                return acc;
-            }, [] as { date: string; count: number }[])
-    );
+        );
+    }, [filteredData]);
 
-    const averageFlashcardsSolved =
-        flashcardsSolvedDaily.length > 0
-            ? flashcardsSolvedDaily.reduce((acc, record) => acc + record.count, 0) / flashcardsSolvedDaily.length
-            : 0;
+    const averageFlashcardsSolved = useMemo(() => {
+        if (flashcardsSolvedDaily.length === 0) return 0;
+        const total = flashcardsSolvedDaily.reduce((acc, record) => acc + record.count, 0);
+        return total / flashcardsSolvedDaily.length;
+    }, [flashcardsSolvedDaily]);
+
+    // Teraz, po wywołaniu wszystkich hooków, możemy wykonać warunkowe zwroty
+    if (loading) {
+        return <LoadingSpinner progress={progress} />;
+    }
+
+    if (error) {
+        return <div className="text-red-500 text-center mt-10">{error}</div>;
+    }
+
+    if (!filteredData) {
+        return <div className="text-center mt-10">{t('noData')}</div>;
+    }
 
     return (
         <div className="p-4 w-full">
@@ -522,66 +543,84 @@ const Dashboard: React.FC = () => {
                     </button>
                     {isExamAnalysisOpen && (
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Average Exam Scores Over Time */}
-                            <div>
-                                <h4 className="text-lg font-semibold mb-2">{t('averageExamScoresOverTime')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={examLineChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis domain={[0, 100]} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Line type="monotone" dataKey="average_score" name={t('averageScore')} stroke="#82ca9d" />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
+                            {filteredData.exam_results.length === 0 ? (
+                                <div className="col-span-2 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                                    <strong className="font-bold">{t('noExams.title')}</strong>
+                                    <span className="block sm:inline">
+                                        {t('noExams.description')}
+                                    </span>
+                                    <div className="mt-4">
+                                        <Link href="/tests">
+                                            <a className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                                {t('noExams.addExam')}
+                                            </a>
+                                        </Link>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Average Exam Scores Over Time */}
+                                    <div>
+                                        <h4 className="text-lg font-semibold mb-2">{t('averageExamScoresOverTime')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <LineChart data={examLineChartData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis domain={[0, 100]} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Line type="monotone" dataKey="average_score" name={t('averageScore')} stroke="#82ca9d" />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
 
-                            {/* Time Spent Studying for Exams */}
-                            <div>
-                                <h4 className="text-lg font-semibold mb-2">{t('timeSpentStudyingExams')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={sortedExamStudyTimeData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis domain={[0, 'auto']} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="study_time" name={t('studyTimeHours')} fill="#FF8042" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                                    {/* Time Spent Studying for Exams */}
+                                    <div>
+                                        <h4 className="text-lg font-semibold mb-2">{t('timeSpentStudyingExams')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={examStudyTimeData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis domain={[0, 'auto']} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="study_time" name={t('studyTimeHours')} fill="#FF8042" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
 
-                            {/* Exam Score Distribution */}
-                            <div className="md:col-span-2">
-                                <h4 className="text-lg font-semibold mb-2">{t('examScoreDistribution')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={histogramExamResultsData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="score" type="number" domain={[0, 100]} allowDecimals={false} />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="count" name={t('numberOfExams')} fill="#FFBB28" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                                    {/* Exam Score Distribution */}
+                                    <div className="md:col-span-2">
+                                        <h4 className="text-lg font-semibold mb-2">{t('examScoreDistribution')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={histogramExamResultsData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="score" />
+                                                <YAxis allowDecimals={false} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="count" name={t('numberOfExams')} fill="#FFBB28" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
 
-                            {/* Sessions and Exams per Day */}
-                            <div className="md:col-span-2">
-                                <h4 className="text-lg font-semibold mb-2">{t('sessionsAndExamsPerDay')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={combinedExamData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="study_sessions" name={t('studySessions')} fill="#82ca9d" />
-                                        <Bar dataKey="exams_completed" name={t('exams')} fill="#FF8042" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
+                                    {/* Sessions and Exams per Day */}
+                                    <div className="md:col-span-2">
+                                        <h4 className="text-lg font-semibold mb-2">{t('sessionsAndExamsPerDay')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={combinedExamData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis allowDecimals={false} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="study_sessions" name={t('studySessions')} fill="#82ca9d" />
+                                                <Bar dataKey="exams_completed" name={t('exams')} fill="#FF8042" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
@@ -604,142 +643,160 @@ const Dashboard: React.FC = () => {
                     </button>
                     {isFlashcardAnalysisOpen && (
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Average Flashcard Ratings Over Time */}
-                            <div>
-                                <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRatingsOverTime')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={flashcardLineChartData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis domain={[0, 5]} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Line type="monotone" dataKey="average_rating" name={t('averageRating')} stroke="#82ca9d" />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Total Time Spent Studying Flashcards */}
-                            <div>
-                                <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudyingFlashcards')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <AreaChart data={totalStudyTimeData}>
-                                        <defs>
-                                            <linearGradient id="colorTotalStudy" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
-                                                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis domain={[0, 'auto']} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="total_study_time"
-                                            name={t('studyTimeHours')}
-                                            stroke="#82ca9d"
-                                            fillOpacity={1}
-                                            fill="url(#colorTotalStudy)"
-                                        />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Total Time Spent Studying */}
-                            <div className="md:col-span-2">
-                                <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudying')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <AreaChart data={totalStudyTimeData}>
-                                        <defs>
-                                            <linearGradient id="colorDuration" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#FF8042" stopOpacity={0.8} />
-                                                <stop offset="95%" stopColor="#FF8042" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis domain={[0, 'auto']} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="total_study_time"
-                                            name={t('studyTimeHours')}
-                                            stroke="#FF8042"
-                                            fillOpacity={1}
-                                            fill="url(#colorDuration)"
-                                        />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Average Flashcard Rating */}
-                            <div className="md:col-span-2">
-                                <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRating')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <PieChart>
-                                        <Pie
-                                            data={flashcardPieChartData}
-                                            dataKey="value"
-                                            nameKey="name"
-                                            cx="50%"
-                                            cy="50%"
-                                            outerRadius={100}
-                                            label
-                                        >
-                                            {flashcardPieChartData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                        <Legend />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Planned Study Sessions */}
-                            <div className="md:col-span-2">
-                                <h4 className="text-lg font-semibold mb-2">{t('plannedStudySessions')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={nextReviewTimelineData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Line type="monotone" dataKey="count" name={t('numberOfFlashcards')} stroke="#82ca9d" />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Flashcards Solved Daily */}
-                            <div className="md:col-span-2">
-                                <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedDaily')}</h4>
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={flashcardsSolvedDaily}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
-                                        <YAxis allowDecimals={false} />
-                                        <Tooltip />
-                                        <Legend />
-                                        <Bar dataKey="count" name={t('flashcardsSolved')} fill="#8884d8" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                <div className="mt-4">
-                                    <p className="text-lg">
-                                        {t('averageFlashcardsSolvedDaily')} <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
-                                    </p>
+                            {filteredData.user_flashcards.length === 0 ? (
+                                <div className="col-span-2 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                                    <strong className="font-bold">{t('noFlashcards.title')}</strong>
+                                    <span className="block sm:inline">
+                                        {t('noFlashcards.description')}
+                                    </span>
+                                    <div className="mt-4">
+                                        <Link href="/flashcards">
+                                            <a className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                                                {t('noFlashcards.addFlashcards')}
+                                            </a>
+                                        </Link>
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <>
+                                    {/* Average Flashcard Ratings Over Time */}
+                                    <div>
+                                        <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRatingsOverTime')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <LineChart data={flashcardLineChartData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis domain={[0, 5]} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Line type="monotone" dataKey="average_rating" name={t('averageRating')} stroke="#82ca9d" />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Total Time Spent Studying Flashcards */}
+                                    <div>
+                                        <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudyingFlashcards')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <AreaChart data={totalStudyTimeData}>
+                                                <defs>
+                                                    <linearGradient id="colorTotalStudy" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                                                        <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis domain={[0, 'auto']} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="total_study_time"
+                                                    name={t('studyTimeHours')}
+                                                    stroke="#82ca9d"
+                                                    fillOpacity={1}
+                                                    fill="url(#colorTotalStudy)"
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Total Time Spent Studying */}
+                                    <div className="md:col-span-2">
+                                        <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudying')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <AreaChart data={totalStudyTimeData}>
+                                                <defs>
+                                                    <linearGradient id="colorDuration" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#FF8042" stopOpacity={0.8} />
+                                                        <stop offset="95%" stopColor="#FF8042" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis domain={[0, 'auto']} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Area
+                                                    type="monotone"
+                                                    dataKey="total_study_time"
+                                                    name={t('studyTimeHours')}
+                                                    stroke="#FF8042"
+                                                    fillOpacity={1}
+                                                    fill="url(#colorDuration)"
+                                                />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Average Flashcard Rating */}
+                                    <div className="md:col-span-2">
+                                        <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRating')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={flashcardPieChartData}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    outerRadius={100}
+                                                    label
+                                                >
+                                                    {flashcardPieChartData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Planned Study Sessions */}
+                                    <div className="md:col-span-2">
+                                        <h4 className="text-lg font-semibold mb-2">{t('plannedStudySessions')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <LineChart data={nextReviewTimelineData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Line type="monotone" dataKey="count" name={t('numberOfFlashcards')} stroke="#82ca9d" />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Flashcards Solved Daily */}
+                                    <div className="md:col-span-2">
+                                        <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedDaily')}</h4>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={flashcardsSolvedDaily}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="date" />
+                                                <YAxis allowDecimals={false} />
+                                                <Tooltip />
+                                                <Legend />
+                                                <Bar dataKey="count" name={t('flashcardsSolved')} fill="#8884d8" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                        <div className="mt-4">
+                                            <p className="text-lg">
+                                                {t('averageFlashcardsSolvedDaily')} <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
+                                            </p>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
         </div>
-    );
+        );
 
-};
+    };
 
 export default Dashboard;

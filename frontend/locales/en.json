@@ -259,27 +259,14 @@
         "selectDeck": "Select flashcard deck:",
         "all": "All"
     },
-    "dashboardTitle": "Your Dashboard",
-    "examAnalysis": "Exam Analysis",
-    "flashcardAnalysis": "Flashcard Analysis",
-    "averageExamScoresOverTime": "Average Exam Scores Over Time",
-    "averageScore": "Average Score",
-    "timeSpentStudyingExams": "Time Spent Studying for Exams",
-    "studyTimeHours": "Study Time (h)",
-    "examScoreDistribution": "Exam Score Distribution",
-    "numberOfExams": "Number of Exams",
-    "sessionsAndExamsPerDay": "Number of Sessions and Exams per Day",
-    "studySessions": "Study Sessions",
-    "exams": "Exams",
-    "averageFlashcardRatingsOverTime": "Average Flashcard Ratings Over Time",
-    "averageRating": "Average Rating",
-    "totalTimeStudyingFlashcards": "Total Time Spent Studying Flashcards",
-    "totalTimeStudying": "Total Time Spent Studying",
-    "averageFlashcardRating": "Average Flashcard Rating",
-    "plannedStudySessions": "Planned Study Sessions",
-    "numberOfFlashcards": "Number of flashcards",
-    "flashcardsSolvedDaily": "Flashcards Solved Daily",
-    "flashcardsSolved": "Flashcards Solved",
-    "averageFlashcardsSolvedDaily": "Average number of flashcards solved daily:"
-
+    "noExams": {
+        "title": "You have no exams to analyze yet.",
+        "description": "You can add them manually by clicking the button below.",
+        "addExam": "Add Exam"
+    },
+    "noFlashcards": {
+        "title": "You have no flashcards to analyze yet.",
+        "description": "You can add them manually by clicking the button below.",
+        "addFlashcards": "Add Flashcards"
+    }
 }

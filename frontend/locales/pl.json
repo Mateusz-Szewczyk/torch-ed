@@ -262,7 +262,7 @@
     "hard": "Trudne",
     "good": "OK",
     "retake_session": "Powtórz ostatnią sesję",
-        "loadingData": "Ładowanie danych...",
+    "loadingData": "Ładowanie danych...",
     "pleaseLogin": "Proszę się zalogować, aby zobaczyć dashboard.",
     "fetchError": "Nie udało się pobrać danych: {{statusText}}",
     "fetchErrorGeneric": "Nie udało się pobrać danych.",
@@ -295,6 +295,15 @@
     "numberOfFlashcards": "Liczba fiszek",
     "flashcardsSolvedDaily": "Fiszki Rozwiązane Dziennie",
     "flashcardsSolved": "Fiszki rozwiązane",
-    "averageFlashcardsSolvedDaily": "Średnia liczba fiszek rozwiązanych dziennie:"
-
+    "averageFlashcardsSolvedDaily": "Średnia liczba fiszek rozwiązanych dziennie:",
+    "noExams": {
+        "title": "Nie masz jeszcze żadnych egzaminów do analizowania.",
+        "description": "Możesz dodać je ręcznie, klikając poniższy przycisk.",
+        "addExam": "Dodaj Egzamin"
+    },
+    "noFlashcards": {
+        "title": "Nie masz jeszcze żadnych fiszek do analizowania.",
+        "description": "Możesz dodać je ręcznie, klikając poniższy przycisk.",
+        "addFlashcards": "Dodaj Fiszki"
+    }
 }
