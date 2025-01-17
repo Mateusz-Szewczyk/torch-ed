@@ -1,10 +1,9 @@
 // File: Dashboard.tsx
 import React, { useEffect, useState, useContext, useMemo } from 'react';
-import Link from 'next/link'; // Import dla nawigacji
+import Link from 'next/link';
 import {
     LineChart, Line,
     BarChart, Bar,
-    PieChart, Pie, Cell,
     AreaChart, Area,
     XAxis, YAxis,
     Tooltip, Legend,
@@ -19,9 +18,6 @@ import {
 } from 'lucide-react';
 import { AuthContext } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
-
-// Define COLORS
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#FF6666'];
 
 // Types
 type DateString = string;
@@ -48,7 +44,6 @@ interface StudySession {
     id: number;
     user_id: number;
     deck_id: number;
-    deck_name: string;
     started_at: DateString;
     completed_at: DateString | null;
 }
@@ -296,6 +291,7 @@ const Dashboard: React.FC = () => {
                 if (end && sessionStartDate > end) return false;
                 return true;
             });
+            console.log(`Filtered Study Sessions by Date: ${filteredStudySessions.length}`);
 
             // Filtruj study_records na podstawie daty i session_id
             filteredStudyRecords = filteredStudyRecords.filter((record) => {
@@ -307,6 +303,7 @@ const Dashboard: React.FC = () => {
                 const session = filteredStudySessions.find((session) => session.id === record.session_id);
                 return session !== undefined;
             });
+            console.log(`Filtered Study Records by Date and Session ID: ${filteredStudyRecords.length}`);
 
             // Filtruj exam_results na podstawie daty
             filteredExamResults = filteredExamResults.filter((exam) => {
@@ -315,6 +312,7 @@ const Dashboard: React.FC = () => {
                 if (end && examDate > end) return false;
                 return true;
             });
+            console.log(`Filtered Exam Results by Date: ${filteredExamResults.length}`);
 
             // Filtruj exam_daily_average na podstawie daty
             filteredExamDailyAverage = filteredExamDailyAverage.filter((avg) => {
@@ -323,47 +321,54 @@ const Dashboard: React.FC = () => {
                 if (end && avgDate > end) return false;
                 return true;
             });
+            console.log(`Filtered Exam Daily Average by Date: ${filteredExamDailyAverage.length}`);
 
-            // Filtruj flashcard_daily_average na podstawie daty
-            filteredFlashcardDailyAverage = filteredFlashcardDailyAverage.filter((avg) => {
-                const avgDate = new Date(avg.date);
-                if (start && avgDate < start) return false;
-                if (end && avgDate > end) return false;
-                return true;
+            // Filtruj flashcard_daily_average na podstawie daty i przefiltrowanych fiszek
+            // Oblicz średnie oceny tylko dla przefiltrowanych fiszek
+            const flashcardRatingsMap = new Map<string, { total: number; count: number }>();
+            filteredStudyRecords.forEach((record) => {
+                if (record.reviewed_at && record.rating !== null) {
+                    const date = record.reviewed_at.split('T')[0];
+                    if (!flashcardRatingsMap.has(date)) {
+                        flashcardRatingsMap.set(date, { total: 0, count: 0 });
+                    }
+                    const entry = flashcardRatingsMap.get(date)!;
+                    entry.total += record.rating;
+                    entry.count += 1;
+                }
             });
 
-            // Filtruj session_durations na podstawie daty
-            filteredSessionDurations = filteredSessionDurations.filter((duration) => {
-                const durationDate = new Date(duration.date);
-                if (start && durationDate < start) return false;
-                if (end && durationDate > end) return false;
-                return true;
-            });
+            filteredFlashcardDailyAverage = Array.from(flashcardRatingsMap.entries()).map(([date, { total, count }]) => ({
+                date,
+                average_rating: count > 0 ? parseFloat((total / count).toFixed(2)) : 0,
+            }));
+            console.log(`Calculated Flashcard Daily Average based on Filtered Data: ${filteredFlashcardDailyAverage.length}`);
 
-            // Usuń filtrowanie user_flashcards na podstawie next_review
-            // filteredUserFlashcards = data.user_flashcards.filter((card) => {
-            //     const nextReviewDate = new Date(card.next_review);
-            //     if (start && nextReviewDate < start) return false;
-            //     if (end && nextReviewDate > end) return false;
-            //     return true;
-            // });
+            // Filtruj session_durations na podstawie przefiltrowanych study_sessions
+            // Załóżmy, że session_durations są agregowane na poziomie daty
+            const relevantSessionDates = new Set(filteredStudySessions.map(session => session.started_at.split('T')[0]));
+            filteredSessionDurations = filteredSessionDurations.filter((duration) => relevantSessionDates.has(duration.date));
+            console.log(`Filtered Session Durations by Relevant Sessions: ${filteredSessionDurations.length}`);
         }
 
         // Filtracja po egzaminie
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
+            console.log(`Filtered Exam Results by Exam ID (${selectedExamId}): ${filteredExamResults.length}`);
         }
 
         // Filtracja po zestawie fiszek
         if (selectedDeckId) {
             // Filtruj study_sessions na podstawie deck_id
             filteredStudySessions = filteredStudySessions.filter((session) => session.deck_id === selectedDeckId);
+            console.log(`Filtered Study Sessions by Deck ID (${selectedDeckId}): ${filteredStudySessions.length}`);
 
             // Pobierz zestawy session_ids po deck_id
             const sessionIds = new Set(filteredStudySessions.map(session => session.id));
 
             // Filtruj study_records na podstawie session_id w sessionIds
             filteredStudyRecords = filteredStudyRecords.filter((record) => record.session_id !== null && sessionIds.has(record.session_id));
+            console.log(`Filtered Study Records by Deck ID (${selectedDeckId}): ${filteredStudyRecords.length}`);
         }
 
         // Filtrowanie user_flashcards powiązanych z przefiltrowanymi study_records
@@ -373,6 +378,7 @@ const Dashboard: React.FC = () => {
                 .filter(id => id !== null) as number[]
         );
         filteredUserFlashcards = data.user_flashcards.filter(card => userFlashcardIds.has(card.id));
+        console.log(`Filtered User Flashcards: ${filteredUserFlashcards.length}`);
 
         return {
             ...data,
@@ -387,6 +393,8 @@ const Dashboard: React.FC = () => {
     }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
     // Przygotowanie danych do wykresów
+
+    // 1. Średnie Wyniki Egzaminów w Czasie
     const examLineChartData = useMemo(() => {
         if (!filteredData) return [];
         return sortByDateAscending(
@@ -397,6 +405,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
+    // 2. Czas Spędzony na Nauce do Egzaminów
     const examStudyTimeData = useMemo(() => {
         if (!filteredData) return [];
         const studyTimeMap = new Map<string, number>();
@@ -409,6 +418,7 @@ const Dashboard: React.FC = () => {
                 const date = start.toISOString().split('T')[0];
                 studyTimeMap.set(date, (studyTimeMap.get(date) || 0) + parseFloat(duration.toFixed(2)));
             });
+        console.log(`Exam Study Time Data: ${Array.from(studyTimeMap.entries()).length} entries`);
         return sortByDateAscending(
             Array.from(studyTimeMap.entries()).map(([date, study_time]) => ({
                 date,
@@ -417,6 +427,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
+    // 3. Rozkład Wyników Egzaminów
     const histogramExamResultsData = useMemo(() => {
         if (!filteredData) return [];
         // Tworzenie przedziałów dla rozkładu wyników egzaminów (0-9, 10-19, ..., 90-99, 100)
@@ -437,9 +448,11 @@ const Dashboard: React.FC = () => {
             }
         });
 
+        console.log(`Histogram Exam Results Data: ${buckets.length} buckets`);
         return buckets;
     }, [filteredData]);
 
+    // 4. Sesje Naukowe i Egzaminy na Dzień
     const combinedExamData = useMemo(() => {
         if (!filteredData) return [];
         const combinedMap = new Map<string, { study_sessions: number; exams_completed: number }>();
@@ -459,6 +472,7 @@ const Dashboard: React.FC = () => {
             const entry = combinedMap.get(date)!;
             entry.exams_completed += 1;
         });
+        console.log(`Combined Exam Data: ${combinedMap.size} dates`);
         return sortByDateAscending(
             Array.from(combinedMap.entries()).map(([date, counts]) => ({
                 date,
@@ -468,6 +482,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
+    // 5. Średnie Oceny Fiszek w Czasie
     const flashcardLineChartData = useMemo(() => {
         if (!filteredData) return [];
         return sortByDateAscending(
@@ -478,13 +493,22 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
+    // 6. Całkowity Czas Spędzony na Nauce Fiszek
     const totalStudyTimeData = useMemo(() => {
         if (!filteredData) return [];
         const studyTimeMap = new Map<string, number>();
-        filteredData.session_durations.forEach((record) => {
-            const date = record.date;
-            studyTimeMap.set(date, (studyTimeMap.get(date) || 0) + parseFloat(record.duration_hours.toFixed(2)));
+        // Pobierz tylko study_sessions, które są przefiltrowane
+        const relevantSessions = filteredData.study_sessions;
+        relevantSessions.forEach((session) => {
+            // Znajdź odpowiednie session_durations dla tej sesji
+            // Zakładam, że session_durations są agregowane na poziomie daty
+            const sessionDate = session.started_at.split('T')[0];
+            const durationRecord = filteredData.session_durations.find(d => d.date === sessionDate);
+            if (durationRecord) {
+                studyTimeMap.set(sessionDate, (studyTimeMap.get(sessionDate) || 0) + durationRecord.duration_hours);
+            }
         });
+        console.log(`Total Study Time Data: ${Array.from(studyTimeMap.entries()).length} entries`);
         return sortByDateAscending(
             Array.from(studyTimeMap.entries()).map(([date, total_study_time]) => ({
                 date,
@@ -493,23 +517,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    const flashcardPieChartData = useMemo(() => {
-        if (!filteredData) return [];
-        const averageRating = filteredData.flashcard_daily_average.length > 0
-            ? filteredData.flashcard_daily_average.reduce((acc, record) => acc + record.average_rating, 0) / filteredData.flashcard_daily_average.length
-            : 0;
-        return [
-            {
-                name: t('averageRating'),
-                value: averageRating,
-            },
-            {
-                name: t('remainingToFive'),
-                value: 5 - averageRating,
-            },
-        ];
-    }, [filteredData, t]);
-
+    // 8. Planowane Sesje Nauki (Wykres Liniowy)
     const nextReviewTimelineData = useMemo(() => {
         if (!filteredData) return [];
         const reviewMap = new Map<string, number>();
@@ -519,6 +527,7 @@ const Dashboard: React.FC = () => {
                 const date = card.next_review.split('T')[0];
                 reviewMap.set(date, (reviewMap.get(date) || 0) + 1);
             });
+        console.log(`Next Review Timeline Data: ${reviewMap.size} dates`);
         return sortByDateAscending(
             Array.from(reviewMap.entries()).map(([date, count]) => ({
                 date,
@@ -527,6 +536,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
+    // 9. Fiszki Rozwiązane Dziennie (Wykres Słupkowy)
     const flashcardsSolvedDaily = useMemo(() => {
         if (!filteredData) return [];
         const solvedMap = new Map<string, number>();
@@ -536,6 +546,7 @@ const Dashboard: React.FC = () => {
                 const date = record.reviewed_at.split('T')[0];
                 solvedMap.set(date, (solvedMap.get(date) || 0) + 1);
             });
+        console.log(`Flashcards Solved Daily: ${solvedMap.size} dates`);
         return sortByDateAscending(
             Array.from(solvedMap.entries()).map(([date, count]) => ({
                 date,
@@ -544,6 +555,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
+    // Średnia liczba fiszek rozwiązanych dziennie
     const averageFlashcardsSolved = useMemo(() => {
         if (flashcardsSolvedDaily.length === 0) return 0;
         const total = flashcardsSolvedDaily.reduce((acc, record) => acc + record.count, 0);
@@ -786,31 +798,7 @@ const Dashboard: React.FC = () => {
                                         </ResponsiveContainer>
                                     </div>
 
-                                    {/* Average Flashcard Rating */}
-                                    <div className="md:col-span-2">
-                                        <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRating')}</h4>
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <PieChart>
-                                                <Pie
-                                                    data={flashcardPieChartData}
-                                                    dataKey="value"
-                                                    nameKey="name"
-                                                    cx="50%"
-                                                    cy="50%"
-                                                    outerRadius={100}
-                                                    label
-                                                >
-                                                    {flashcardPieChartData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                                    ))}
-                                                </Pie>
-                                                <Tooltip />
-                                                <Legend />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    </div>
-
-                                    {/* Planned Study Sessions */}
+                                    {/* Planowane Sesje Nauki */}
                                     <div className="md:col-span-2">
                                         <h4 className="text-lg font-semibold mb-2">{t('plannedStudySessions')}</h4>
                                         <ResponsiveContainer width="100%" height={300}>
@@ -825,7 +813,7 @@ const Dashboard: React.FC = () => {
                                         </ResponsiveContainer>
                                     </div>
 
-                                    {/* Flashcards Solved Daily */}
+                                    {/* Fiszki Rozwiązane Dziennie */}
                                     <div className="md:col-span-2">
                                         <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedDaily')}</h4>
                                         <ResponsiveContainer width="100%" height={300}>
