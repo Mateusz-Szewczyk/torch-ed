@@ -327,8 +327,13 @@ const Dashboard: React.FC = () => {
                 return session?.deck_id === selectedDeckId;
             });
 
-            // Opcjonalnie: Możesz również filtrować user_flashcards powiązane z wybranym deck_id
-            // Jeśli struktura danych na to pozwala
+            // Filtrowanie user_flashcards powiązanych z przefiltrowanymi study_records
+            const filteredUserFlashcardIds = new Set(
+                filteredStudyRecords
+                    .map(record => record.user_flashcard_id)
+                    .filter(id => id !== null) as number[]
+            );
+            filteredUserFlashcards = data.user_flashcards.filter(card => filteredUserFlashcardIds.has(card.id));
         }
 
         return {
@@ -807,6 +812,7 @@ const Dashboard: React.FC = () => {
             </div>
         </div>
     );
+
 };
 
 export default Dashboard;
