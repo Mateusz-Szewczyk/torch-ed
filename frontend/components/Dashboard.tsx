@@ -48,7 +48,7 @@ interface StudySession {
     id: number;
     user_id: number;
     deck_id: number;
-    deck_name: string; // Możesz usunąć ten field, jeśli nie jest potrzebny
+    deck_name: string;
     started_at: DateString;
     completed_at: DateString | null;
 }
@@ -225,7 +225,7 @@ const Dashboard: React.FC = () => {
                     throw new Error(t('pleaseLogin'));
                 }
 
-                const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8043/api';
+                const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
                 const response = await fetch(`${API_BASE_URL}/dashboard/`, {
                     credentials: 'include',
                 });
@@ -280,6 +280,7 @@ const Dashboard: React.FC = () => {
         let filteredExamResults = data.exam_results;
         let filteredExamDailyAverage = data.exam_daily_average;
         let filteredFlashcardDailyAverage = data.flashcard_daily_average;
+        let filteredUserFlashcards = data.user_flashcards;
 
         // Filtracja po dacie
         if (filterStartDate && filterEndDate) {
@@ -305,6 +306,12 @@ const Dashboard: React.FC = () => {
                 const avgDate = new Date(avg.date);
                 return avgDate >= start && avgDate <= end;
             });
+
+            // Filtrowanie user_flashcards na podstawie next_review
+            filteredUserFlashcards = data.user_flashcards.filter((card) => {
+                const nextReviewDate = new Date(card.next_review);
+                return nextReviewDate >= start && nextReviewDate <= end;
+            });
         }
 
         // Filtracja po egzaminie
@@ -319,6 +326,9 @@ const Dashboard: React.FC = () => {
                 const session = data.study_sessions.find((session) => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
+
+            // Opcjonalnie: Możesz również filtrować user_flashcards powiązane z wybranym deck_id
+            // Jeśli struktura danych na to pozwala
         }
 
         return {
@@ -327,6 +337,7 @@ const Dashboard: React.FC = () => {
             exam_results: filteredExamResults,
             exam_daily_average: filteredExamDailyAverage,
             flashcard_daily_average: filteredFlashcardDailyAverage,
+            user_flashcards: filteredUserFlashcards,
         };
     }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
@@ -444,15 +455,15 @@ const Dashboard: React.FC = () => {
             : 0;
         return [
             {
-                name: 'Average Rating',
+                name: t('averageRating'),
                 value: averageRating,
             },
             {
-                name: 'Remaining to 5',
+                name: t('remainingToFive'),
                 value: 5 - averageRating,
             },
         ];
-    }, [filteredData]);
+    }, [filteredData, t]);
 
     const nextReviewTimelineData = useMemo(() => {
         if (!filteredData) return [];
@@ -494,7 +505,7 @@ const Dashboard: React.FC = () => {
         return total / flashcardsSolvedDaily.length;
     }, [flashcardsSolvedDaily]);
 
-    // Teraz, po wywołaniu wszystkich hooków, możemy wykonać warunkowe zwroty
+    // Warunkowe renderowanie
     if (loading) {
         return <LoadingSpinner progress={progress} />;
     }
@@ -795,8 +806,7 @@ const Dashboard: React.FC = () => {
                 </div>
             </div>
         </div>
-        );
-
-    };
+    );
+};
 
 export default Dashboard;
