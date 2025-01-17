@@ -45,6 +45,7 @@
     "react-syntax-highlighter": "^15.6.1",
     "react-tooltip": "^5.28.0",
     "recharts": "^2.15.0",
+    "redis-server": "^1.2.2",
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
