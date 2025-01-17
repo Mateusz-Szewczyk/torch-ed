@@ -298,12 +298,15 @@
     "averageFlashcardsSolvedDaily": "Średnia liczba fiszek rozwiązanych dziennie:",
     "noExams": {
         "title": "Nie masz jeszcze żadnych egzaminów do analizowania.",
-        "description": "Możesz dodać je ręcznie, klikając poniższy przycisk.",
+        "description": "Możesz dodać egzamin ręcznie, klikając poniższy przycisk. Możesz też skorzystać z naszego inteligentnego czatu, aby wygenerować egzamin dostosowany do Twoich potrzeb.",
         "addExam": "Dodaj Egzamin"
     },
     "noFlashcards": {
         "title": "Nie masz jeszcze żadnych fiszek do analizowania.",
-        "description": "Możesz dodać je ręcznie, klikając poniższy przycisk.",
+        "description": "Możesz dodać je ręcznie, klikając poniższy przycisk. Alternatywnie, skorzystaj z naszego inteligentnego czatu, aby wygenerować fiszki dla siebie. Wystarczy, że podasz liczbę fiszek, temat oraz poziom trudności, a gotowe fiszki automatycznie pojawią się na Twoim profilu.",
         "addFlashcards": "Dodaj Fiszki"
-    }
+    },
+    "no_files_uploaded": "Nie przesłano jeszcze żadnych plików.",
+    "upload": "Prześlij",
+    "my_profile": "Mój profil"
 }

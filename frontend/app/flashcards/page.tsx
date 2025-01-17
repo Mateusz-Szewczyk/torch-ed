@@ -237,9 +237,6 @@ export default function FlashcardsPage() {
     }
   };
 
-
-
-
   /**
    * Funkcja do wyjścia z trybu nauki
    */
@@ -582,10 +579,7 @@ export default function FlashcardsPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80 text-primary"
-                                onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                                  e.stopPropagation();
-                                  setOpenCollapsibles(prev => ({ ...prev, [deck.id]: false }));
-                                }}
+                                // Usunięto onClick handler, aby dialog mógł się otworzyć bez zamykania menu
                               >
                                 <Edit2 className="h-4 w-4 mr-2" />
                                 {t('edit')}

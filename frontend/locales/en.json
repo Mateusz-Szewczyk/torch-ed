@@ -268,5 +268,8 @@
         "title": "You have no flashcards to analyze yet.",
         "description": "You can add them manually by clicking the button below.",
         "addFlashcards": "Add Flashcards"
-    }
+    },
+    "no_files_uploaded": "No files uploaded yet.",
+    "upload": "Upload",
+    "my_profile": "My Profile"
 }
