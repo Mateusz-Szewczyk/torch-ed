@@ -276,107 +276,113 @@ const Dashboard: React.FC = () => {
     const filteredData = useMemo(() => {
         if (!data) return null;
 
+        let filteredStudySessions = data.study_sessions;
         let filteredStudyRecords = data.study_records;
         let filteredExamResults = data.exam_results;
         let filteredExamDailyAverage = data.exam_daily_average;
         let filteredFlashcardDailyAverage = data.flashcard_daily_average;
-        let filteredUserFlashcards = data.user_flashcards;
-        let filteredStudySessions = data.study_sessions;
         let filteredSessionDurations = data.session_durations;
+        let filteredUserFlashcards = data.user_flashcards;
 
         // Filtracja po dacie
         if (filterStartDate || filterEndDate) {
             const start = filterStartDate ? new Date(filterStartDate) : null;
             const end = filterEndDate ? new Date(filterEndDate) : null;
 
-            filteredStudyRecords = data.study_records.filter((record) => {
-                const recordDate = new Date(record.reviewed_at);
-                if (start && recordDate < start) return false;
-                if (end && recordDate > end) return false;
-                return true;
-            });
-
-            filteredExamResults = data.exam_results.filter((exam) => {
-                const examDate = new Date(exam.started_at);
-                if (start && examDate < start) return false;
-                if (end && examDate > end) return false;
-                return true;
-            });
-
-            filteredExamDailyAverage = data.exam_daily_average.filter((avg) => {
-                const avgDate = new Date(avg.date);
-                if (start && avgDate < start) return false;
-                if (end && avgDate > end) return false;
-                return true;
-            });
-
-            filteredFlashcardDailyAverage = data.flashcard_daily_average.filter((avg) => {
-                const avgDate = new Date(avg.date);
-                if (start && avgDate < start) return false;
-                if (end && avgDate > end) return false;
-                return true;
-            });
-
-            filteredUserFlashcards = data.user_flashcards.filter((card) => {
-                const nextReviewDate = new Date(card.next_review);
-                if (start && nextReviewDate < start) return false;
-                if (end && nextReviewDate > end) return false;
-                return true;
-            });
-
-            // Filtrowanie study_sessions na podstawie daty
-            filteredStudySessions = data.study_sessions.filter((session) => {
+            // Filtruj study_sessions na podstawie daty
+            filteredStudySessions = filteredStudySessions.filter((session) => {
                 const sessionStartDate = new Date(session.started_at);
                 if (start && sessionStartDate < start) return false;
                 if (end && sessionStartDate > end) return false;
                 return true;
             });
 
-            // Filtrowanie session_durations na podstawie daty
-            filteredSessionDurations = data.session_durations.filter((duration) => {
+            // Filtruj study_records na podstawie daty i session_id
+            filteredStudyRecords = filteredStudyRecords.filter((record) => {
+                const recordDate = new Date(record.reviewed_at);
+                if (start && recordDate < start) return false;
+                if (end && recordDate > end) return false;
+                // Dodatkowo upewnij się, że session_id jest w przefiltrowanych study_sessions
+                if (record.session_id === null) return false;
+                const session = filteredStudySessions.find((session) => session.id === record.session_id);
+                return session !== undefined;
+            });
+
+            // Filtruj exam_results na podstawie daty
+            filteredExamResults = filteredExamResults.filter((exam) => {
+                const examDate = new Date(exam.started_at);
+                if (start && examDate < start) return false;
+                if (end && examDate > end) return false;
+                return true;
+            });
+
+            // Filtruj exam_daily_average na podstawie daty
+            filteredExamDailyAverage = filteredExamDailyAverage.filter((avg) => {
+                const avgDate = new Date(avg.date);
+                if (start && avgDate < start) return false;
+                if (end && avgDate > end) return false;
+                return true;
+            });
+
+            // Filtruj flashcard_daily_average na podstawie daty
+            filteredFlashcardDailyAverage = filteredFlashcardDailyAverage.filter((avg) => {
+                const avgDate = new Date(avg.date);
+                if (start && avgDate < start) return false;
+                if (end && avgDate > end) return false;
+                return true;
+            });
+
+            // Filtruj session_durations na podstawie daty
+            filteredSessionDurations = filteredSessionDurations.filter((duration) => {
                 const durationDate = new Date(duration.date);
                 if (start && durationDate < start) return false;
                 if (end && durationDate > end) return false;
                 return true;
             });
+
+            // Usuń filtrowanie user_flashcards na podstawie next_review
+            // filteredUserFlashcards = data.user_flashcards.filter((card) => {
+            //     const nextReviewDate = new Date(card.next_review);
+            //     if (start && nextReviewDate < start) return false;
+            //     if (end && nextReviewDate > end) return false;
+            //     return true;
+            // });
         }
 
         // Filtracja po egzaminie
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
-            // Opcjonalnie, jeśli chcesz filtrować inne dane na podstawie egzaminu
         }
 
         // Filtracja po zestawie fiszek
         if (selectedDeckId) {
-            // Filtrowanie study_records na podstawie deck_id poprzez study_sessions
-            filteredStudyRecords = filteredStudyRecords.filter((record) => {
-                if (record.session_id === null) return false;
-                const session = filteredStudySessions.find((session) => session.id === record.session_id);
-                return session?.deck_id === selectedDeckId;
-            });
-
-            // Filtrowanie study_sessions na podstawie deck_id
+            // Filtruj study_sessions na podstawie deck_id
             filteredStudySessions = filteredStudySessions.filter((session) => session.deck_id === selectedDeckId);
 
-            // Filtrowanie user_flashcards powiązanych z przefiltrowanymi study_records
-            const filteredUserFlashcardIds = new Set(
-                filteredStudyRecords
-                    .map(record => record.user_flashcard_id)
-                    .filter(id => id !== null) as number[]
-            );
-            filteredUserFlashcards = filteredUserFlashcards.filter(card => filteredUserFlashcardIds.has(card.id));
+            // Pobierz zestawy session_ids po deck_id
+            const sessionIds = new Set(filteredStudySessions.map(session => session.id));
+
+            // Filtruj study_records na podstawie session_id w sessionIds
+            filteredStudyRecords = filteredStudyRecords.filter((record) => record.session_id !== null && sessionIds.has(record.session_id));
         }
+
+        // Filtrowanie user_flashcards powiązanych z przefiltrowanymi study_records
+        const userFlashcardIds = new Set(
+            filteredStudyRecords
+                .map(record => record.user_flashcard_id)
+                .filter(id => id !== null) as number[]
+        );
+        filteredUserFlashcards = data.user_flashcards.filter(card => userFlashcardIds.has(card.id));
 
         return {
             ...data,
+            study_sessions: filteredStudySessions,
             study_records: filteredStudyRecords,
             exam_results: filteredExamResults,
             exam_daily_average: filteredExamDailyAverage,
             flashcard_daily_average: filteredFlashcardDailyAverage,
-            user_flashcards: filteredUserFlashcards,
-            study_sessions: filteredStudySessions,
             session_durations: filteredSessionDurations,
+            user_flashcards: filteredUserFlashcards,
         };
     }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
