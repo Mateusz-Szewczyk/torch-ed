@@ -281,51 +281,83 @@ const Dashboard: React.FC = () => {
         let filteredExamDailyAverage = data.exam_daily_average;
         let filteredFlashcardDailyAverage = data.flashcard_daily_average;
         let filteredUserFlashcards = data.user_flashcards;
+        let filteredStudySessions = data.study_sessions;
+        let filteredSessionDurations = data.session_durations;
 
         // Filtracja po dacie
-        if (filterStartDate && filterEndDate) {
-            const start = new Date(filterStartDate);
-            const end = new Date(filterEndDate);
+        if (filterStartDate || filterEndDate) {
+            const start = filterStartDate ? new Date(filterStartDate) : null;
+            const end = filterEndDate ? new Date(filterEndDate) : null;
 
             filteredStudyRecords = data.study_records.filter((record) => {
                 const recordDate = new Date(record.reviewed_at);
-                return recordDate >= start && recordDate <= end;
+                if (start && recordDate < start) return false;
+                if (end && recordDate > end) return false;
+                return true;
             });
 
             filteredExamResults = data.exam_results.filter((exam) => {
                 const examDate = new Date(exam.started_at);
-                return examDate >= start && examDate <= end;
+                if (start && examDate < start) return false;
+                if (end && examDate > end) return false;
+                return true;
             });
 
             filteredExamDailyAverage = data.exam_daily_average.filter((avg) => {
                 const avgDate = new Date(avg.date);
-                return avgDate >= start && avgDate <= end;
+                if (start && avgDate < start) return false;
+                if (end && avgDate > end) return false;
+                return true;
             });
 
             filteredFlashcardDailyAverage = data.flashcard_daily_average.filter((avg) => {
                 const avgDate = new Date(avg.date);
-                return avgDate >= start && avgDate <= end;
+                if (start && avgDate < start) return false;
+                if (end && avgDate > end) return false;
+                return true;
             });
 
-            // Filtrowanie user_flashcards na podstawie next_review
             filteredUserFlashcards = data.user_flashcards.filter((card) => {
                 const nextReviewDate = new Date(card.next_review);
-                return nextReviewDate >= start && nextReviewDate <= end;
+                if (start && nextReviewDate < start) return false;
+                if (end && nextReviewDate > end) return false;
+                return true;
+            });
+
+            // Filtrowanie study_sessions na podstawie daty
+            filteredStudySessions = data.study_sessions.filter((session) => {
+                const sessionStartDate = new Date(session.started_at);
+                if (start && sessionStartDate < start) return false;
+                if (end && sessionStartDate > end) return false;
+                return true;
+            });
+
+            // Filtrowanie session_durations na podstawie daty
+            filteredSessionDurations = data.session_durations.filter((duration) => {
+                const durationDate = new Date(duration.date);
+                if (start && durationDate < start) return false;
+                if (end && durationDate > end) return false;
+                return true;
             });
         }
 
         // Filtracja po egzaminie
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
+            // Opcjonalnie, jeśli chcesz filtrować inne dane na podstawie egzaminu
         }
 
         // Filtracja po zestawie fiszek
         if (selectedDeckId) {
+            // Filtrowanie study_records na podstawie deck_id poprzez study_sessions
             filteredStudyRecords = filteredStudyRecords.filter((record) => {
                 if (record.session_id === null) return false;
-                const session = data.study_sessions.find((session) => session.id === record.session_id);
+                const session = filteredStudySessions.find((session) => session.id === record.session_id);
                 return session?.deck_id === selectedDeckId;
             });
+
+            // Filtrowanie study_sessions na podstawie deck_id
+            filteredStudySessions = filteredStudySessions.filter((session) => session.deck_id === selectedDeckId);
 
             // Filtrowanie user_flashcards powiązanych z przefiltrowanymi study_records
             const filteredUserFlashcardIds = new Set(
@@ -333,7 +365,7 @@ const Dashboard: React.FC = () => {
                     .map(record => record.user_flashcard_id)
                     .filter(id => id !== null) as number[]
             );
-            filteredUserFlashcards = data.user_flashcards.filter(card => filteredUserFlashcardIds.has(card.id));
+            filteredUserFlashcards = filteredUserFlashcards.filter(card => filteredUserFlashcardIds.has(card.id));
         }
 
         return {
@@ -343,6 +375,8 @@ const Dashboard: React.FC = () => {
             exam_daily_average: filteredExamDailyAverage,
             flashcard_daily_average: filteredFlashcardDailyAverage,
             user_flashcards: filteredUserFlashcards,
+            study_sessions: filteredStudySessions,
+            session_durations: filteredSessionDurations,
         };
     }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
