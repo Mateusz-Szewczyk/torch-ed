@@ -461,171 +461,184 @@ export default function FlashcardsPage() {
           </Card>
         </div>
       ) : (
-        <>
-          {/* Sekcja przycisków Import i Create New Deck */}
-          <div className="mb-8 flex justify-end space-x-4">
-            {/* Dialog Import Flashcards */}
-            <Dialog.Root>
-              <Dialog.Trigger asChild>
-                <Button className="flex items-center space-x-2 px-6 py-3">
-                  <Upload className="h-6 w-6" />
-                  <span>{t('import_flashcards')}</span>
-                </Button>
-              </Dialog.Trigger>
-              <Dialog.Content>
-                {/* Formularz importu */}
-                <form onSubmit={handleImport} className="flex flex-col space-y-4">
-                  <DialogHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <DialogTitle>{t('import_flashcards')}</DialogTitle>
-                      <DialogDescription>
-                        {t('select_flashcards_file')}
-                      </DialogDescription>
+          <>
+            {/* Sekcja przycisków Import i Create New Deck */}
+            <div
+                className="mb-8 flex flex-col md:flex-row justify-center md:justify-end space-y-4 md:space-y-0 md:space-x-4 px-4">
+              {/* Dialog Import Flashcards */}
+              <Dialog.Root>
+                <Dialog.Trigger asChild>
+                  <Button className="flex items-center space-x-2 px-4 py-2 md:px-6 md:py-3 w-full md:w-auto">
+                    <Upload className="h-5 w-5 md:h-6 md:w-6"/>
+                    <span className="block md:hidden">{t('import_flashcards')}</span>
+                    <span className="hidden md:block">{t('import_flashcards')}</span>
+                  </Button>
+                </Dialog.Trigger>
+                <Dialog.Content className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg">
+                  {/* Formularz importu */}
+                  <form onSubmit={handleImport} className="flex flex-col space-y-4">
+                    <DialogHeader className="flex flex-row items-center justify-between">
+                      <div>
+                        <DialogTitle>{t('import_flashcards')}</DialogTitle>
+                        <DialogDescription>
+                          {t('select_flashcards_file')}
+                        </DialogDescription>
+                      </div>
+                      <CustomTooltip
+                          content="Tutaj wgrywasz fiszki (CSV, APKG lub TXT). Możesz też ustawić nazwę i opis, które pojawią się jako nowa talia.">
+                        <Info className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground cursor-pointer"/>
+                      </CustomTooltip>
+                    </DialogHeader>
+
+                    {/* Pola nazwy i opisu talii */}
+                    <div className="flex flex-col">
+                      <label className="font-medium mb-1">{t('deck_name')}</label>
+                      <input
+                          type="text"
+                          name="deck_name"
+                          placeholder={t('optional_deck_name') || 'Opcjonalna nazwa talii'}
+                          className="border border-input rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
                     </div>
-                    <CustomTooltip content="Tutaj wgrywasz fiszki (CSV, APKG lub TXT). Możesz też ustawić nazwę i opis, które pojawią się jako nowa talia.">
-                      <Info className="h-6 w-6 text-muted-foreground cursor-pointer" />
-                    </CustomTooltip>
-                  </DialogHeader>
+                    <div className="flex flex-col">
+                      <label className="font-medium mb-1">{t('deck_description')}</label>
+                      <textarea
+                          name="deck_description"
+                          placeholder={t('optional_deck_description') || 'Opcjonalny opis talii'}
+                          className="border border-input rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                          rows={3}
+                      />
+                    </div>
 
-                  {/* Pola nazwy i opisu talii */}
-                  <label className="font-medium">{t('deck_name')}</label>
-                  <input
-                    type="text"
-                    name="deck_name"
-                    placeholder={t('optional_deck_name') || 'Opcjonalna nazwa talii'}
-                    className="border border-input rounded-md p-2"
-                  />
-                  <label className="font-medium">{t('deck_description')}</label>
-                  <textarea
-                    name="deck_description"
-                    placeholder={t('optional_deck_description') || 'Opcjonalny opis talii'}
-                    className="border border-input rounded-md p-2"
-                    rows={3}
-                  />
+                    <div className="flex flex-col">
+                      <label className="font-medium mb-1">{t('select_file')}</label>
+                      <input
+                          type="file"
+                          name="file"
+                          accept=".csv,.apkg,.txt"
+                          required
+                          className="border border-input rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
 
-                  <input
-                    type="file"
-                    name="file"
-                    accept=".csv,.apkg,.txt"
-                    required
-                    className="border border-input rounded-md p-2"
-                  />
+                    {importError && <p className="text-red-500 text-sm">{importError}</p>}
+                    {importSuccess && <p className="text-green-500 text-sm">{importSuccess}</p>}
 
-                  {importError && <p className="text-red-500">{importError}</p>}
-                  {importSuccess && <p className="text-green-500">{importSuccess}</p>}
-
-                  <DialogFooter className="flex justify-end space-x-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        setImportError(null);
-                        setImportSuccess(null);
-                      }}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button type="submit" disabled={importing}>
-                      {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                      {t('import')}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Dialog.Content>
-            </Dialog.Root>
-
-            {/* Dialog Create New Deck */}
-            <EditDeckDialog
-              deck={{ id: 0, name: '', description: '', flashcards: [] }}
-              onSave={handleSave}
-              trigger={
-                <Button className="flex items-center space-x-2 px-6 py-3 bg-primary hover:bg-primary-dark text-primary-foreground">
-                  <PlusCircle className="h-6 w-6" />
-                  <span>{t('create_new_deck')}</span>
-                </Button>
-              }
-            />
-          </div>
-
-          {/* Grid Decków */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {decks.map(deck => (
-              <Card key={deck.id} className="flex flex-col min-h-[350px] shadow-lg relative">
-                <CardHeader className="flex flex-col">
-                  <div className="flex justify-between items-center space-x-4">
-                    <CardTitle className="text-2xl font-bold truncate">{deck.name}</CardTitle>
-                    {/* Collapsible Menu for Edit/Delete */}
-                    <Collapsible
-                      open={openCollapsibles[deck.id] || false}
-                      onOpenChange={() => toggleCollapsible(deck.id)}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <Button
+                    <DialogFooter className="flex flex-col md:flex-row justify-end space-y-2 md:space-y-0 md:space-x-2">
+                      <Button
+                          type="button"
                           variant="ghost"
-                          size="sm"
-                          className="p-1 text-secondary hover:text-primary"
-                          aria-label="Opcje"
+                          onClick={() => {
+                            setImportError(null);
+                            setImportSuccess(null);
+                          }}
+                          className="w-full md:w-auto"
+                      >
+                        {t('cancel')}
+                      </Button>
+                      <Button type="submit" disabled={importing} className="w-full md:w-auto">
+                        {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                        {t('import')}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Dialog.Content>
+              </Dialog.Root>
+
+              {/* Dialog Create New Deck */}
+              <EditDeckDialog
+                  deck={{id: 0, name: '', description: '', flashcards: []}}
+                  onSave={handleSave}
+                  trigger={
+                    <Button
+                        className="flex items-center space-x-2 px-4 py-2 md:px-6 md:py-3 bg-primary hover:bg-primary-dark text-primary-foreground w-full md:w-auto">
+                      <PlusCircle className="h-5 w-5 md:h-6 md:w-6"/>
+                      <span className="block md:hidden">{t('create_new_deck')}</span>
+                      <span className="hidden md:block">{t('create_new_deck')}</span>
+                    </Button>
+                  }
+              />
+            </div>
+            {/* Grid Decków */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {decks.map(deck => (
+                  <Card key={deck.id} className="flex flex-col min-h-[350px] shadow-lg relative">
+                    <CardHeader className="flex flex-col">
+                      <div className="flex justify-between items-center space-x-4">
+                        <CardTitle className="text-2xl font-bold truncate">{deck.name}</CardTitle>
+                        {/* Collapsible Menu for Edit/Delete */}
+                        <Collapsible
+                            open={openCollapsibles[deck.id] || false}
+                            onOpenChange={() => toggleCollapsible(deck.id)}
                         >
-                          <MoreVertical className="h-5 w-5" />
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50 p-2">
-                        <div className="flex flex-col">
-                          <EditDeckDialog
-                            deck={deck}
-                            onSave={handleSave}
-                            trigger={
-                              <Button
+                          <CollapsibleTrigger asChild>
+                            <Button
                                 variant="ghost"
                                 size="sm"
-                                className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80 text-primary"
-                                // Usunięto onClick handler, aby dialog mógł się otworzyć bez zamykania menu
+                                className="p-1 text-secondary hover:text-primary"
+                                aria-label="Opcje"
+                            >
+                              <MoreVertical className="h-5 w-5"/>
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent
+                              className="absolute right-4 top-16 bg-card border border-border rounded-md shadow-lg z-50 p-2">
+                            <div className="flex flex-col">
+                              <EditDeckDialog
+                                  deck={deck}
+                                  onSave={handleSave}
+                                  trigger={
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="flex items-center justify-start w-full px-4 py-2 hover:bg-secondary/80 text-primary"
+                                        // Usunięto onClick handler, aby dialog mógł się otworzyć bez zamykania menu
+                                    >
+                                      <Edit2 className="h-4 w-4 mr-2"/>
+                                      {t('edit')}
+                                    </Button>
+                                  }
+                              />
+                              <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="flex items-center justify-start w-full px-4 py-2 text-destructive hover:bg-secondary/80"
+                                  onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                                    e.stopPropagation();
+                                    handleDelete(deck.id);
+                                  }}
                               >
-                                <Edit2 className="h-4 w-4 mr-2" />
-                                {t('edit')}
+                                <Trash2 className="h-4 w-4 mr-2"/>
+                                {t('delete')}
                               </Button>
-                            }
-                          />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="flex items-center justify-start w-full px-4 py-2 text-destructive hover:bg-secondary/80"
-                            onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                              e.stopPropagation();
-                              handleDelete(deck.id);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            {t('delete')}
-                          </Button>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                  <CardDescription className="mt-3 text-lg break-words">
-                    {deck.description || t('no_description')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex-grow">
-                  <p className="text-lg text-muted-foreground">
-                    {deck.flashcards.length} {t('flashcards_lowercase')}
-                  </p>
-                </CardContent>
-                <CardFooter className="mt-auto flex justify-end space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleStudy(deck)}
-                    className="flex items-center space-x-2 px-4 py-2"
-                  >
-                    <span>{t('study')}</span>
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-        </>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </div>
+                      <CardDescription className="mt-3 text-lg break-words">
+                        {deck.description || t('no_description')}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex-grow">
+                      <p className="text-lg text-muted-foreground">
+                        {deck.flashcards.length} {t('flashcards_lowercase')}
+                      </p>
+                    </CardContent>
+                    <CardFooter className="mt-auto flex justify-end space-x-2">
+                      <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStudy(deck)}
+                          className="flex items-center space-x-2 px-4 py-2"
+                      >
+                        <span>{t('study')}</span>
+                        <ChevronRight className="h-5 w-5"/>
+                      </Button>
+                    </CardFooter>
+                  </Card>
+              ))}
+            </div>
+          </>
       )}
     </div>
   );

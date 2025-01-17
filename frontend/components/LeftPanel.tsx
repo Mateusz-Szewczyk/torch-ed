@@ -471,20 +471,20 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
               </>)}
 
           {/* Close panel button */}
-          {(!isMobile || isPanelVisible) && (
-              <Button
-                  variant="ghost"
-                  className={`bg-card border-r-2 absolute top-1/2 -right-3 transform -translate-y-1/2 transition-transform duration-300 hover:bg-secondary/80 rounded-full w-8 h-8 flex items-center justify-center`}
-                  onClick={togglePanel}
-                  aria-label={isPanelVisible ? t('close_menu') || 'Close Menu' : t('open_menu') || 'Open Menu'}
-              >
-                {isPanelVisible ? (
-                    <ChevronLeft className="h-4 w-4"/>
-                ) : (
-                    <ChevronRight className="h-4 w-4"/>
-                )}
-              </Button>
-          )}
+            {(!isMobile || isPanelVisible) && (
+                <Button
+                    variant="ghost"
+                    className={`bg-card border-r-2 border-border absolute top-1/2 -right-3 transform -translate-y-1/2 transition-transform duration-300 hover:bg-secondary/80 rounded-full w-8 h-8 flex items-center justify-center`}
+                    onClick={togglePanel}
+                    aria-label={isPanelVisible ? t('close_menu') || 'Close Menu' : t('open_menu') || 'Open Menu'}
+                >
+                    {isPanelVisible ? (
+                        <ChevronLeft className="h-4 w-4" />
+                    ) : (
+                        <ChevronRight className="h-4 w-4" />
+                    )}
+                </Button>
+            )}
         </div>
 
         {/* Feedback Modal */}
