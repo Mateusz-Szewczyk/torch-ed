@@ -12,7 +12,7 @@ class Config:
     PRP_PATH: str = "prp_key.pem"
     PUP_PATH: str = "pup_key.pem"
     SALT = os.getenv('SALT')
-    DOMAIN = os.getenv('DOMAIN', '.up.railway.app')
+    DOMAIN = os.getenv('DOMAIN', '.torched.pl')
     IS_SECURE = os.getenv('IS_SECURE', True)
 
 
