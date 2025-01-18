@@ -336,6 +336,21 @@ class RAGTool(BaseTool):
             return "Nie udało się wygenerować końcowej odpowiedzi."
 
 
+import json
+import uuid
+import logging
+from typing import Any, Optional, Tuple, List, Dict
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage
+from langchain.output_parsers import JsonOutputParser
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 class ExamGenerator(BaseTool):
     name: str = "ExamGenerator"
     description: str = """This tool generates exams based on provided data.
@@ -357,192 +372,232 @@ class ExamGenerator(BaseTool):
         self._model = ChatOpenAI(model_name=model_name, openai_api_key=openai_api_key)
         self._output_parser = JsonOutputParser()
 
-    def _run(self, input_str: str) -> str:
-        """
-        Generate exams based on the input string and save them to the database.
-
-        Args:
-            input_str: A JSON-formatted string containing 'description' and 'query'.
-
-        Returns:
-            A string confirming the operation in JSON format or an error message.
-        """
+    def validate_input(self, input_str: str) -> tuple[str, str]:
+        """Validate input JSON and extract description and query."""
         try:
-            # Parsowanie wejścia JSON
             input_data = json.loads(input_str)
-            description = input_data.get('description', 'Matematyka - Algebra').strip()
-            query = input_data.get('query', 'Stwórz egzamin z algebry dla uczniów szkoły średniej, zawierający 10 pytań.').strip()
+            if not isinstance(input_data, dict):
+                raise ValueError("Input must be a JSON object")
 
-            # Konstruowanie prompta bezpośrednio w metodzie _run z przykładem poprawnego wyjścia
-            system_prompt = "Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku! ZWRÓĆ DOKŁADNIE TYLE ZADAŃ, ILE PODAŁ UŻYTKOWNIK."
-            user_prompt = f"""
-Generate an exam based on the following context:
-{description}
+            description = input_data.get('description', '').strip()
+            query = input_data.get('query', '').strip()
 
-And execute the user's command: {query}
-Please make the exact number of questions as specified by the user.
+            if not description or not query:
+                raise ValueError("Both description and query are required")
 
-The generated exam should be in the user's language, which is the same language as the description and title.
-Please generate exactly the number of questions as specified in the user's command.
+            return description, query
+        except json.JSONDecodeError:
+            raise ValueError("Invalid JSON format")
 
-Consider the best way to format the exam, the optimal combination of questions and answers.
-Please also think about what the name of the exam should be and its description.
+    def _get_prompts(self, description: str, query: str) -> tuple[str, str]:
+        """Generate system and user prompts for the exam generation."""
+        system_prompt = """
+        Return only in JSON format without additional text. Write the answer in the appropriate language! 
+        RETURN EXACTLY AS MANY TASKS AS THE USER SPECIFIED.
+        Do not include any explanations or additional text outside the JSON structure.
+        """
 
-Provide the exam in the exact following JSON format with an example:
+        user_prompt = f"""
+        Generate an exam based on the following context:
+        {description}
 
-{{
-    "topic": "Matematyka - Algebra",
-    "description": "Egzamin z podstaw algebry dla uczniów szkół średnich.",
-    "num_of_questions": 10,
-    "questions": [
+        And execute the user's command: {query}
+        Please make the exact number of questions as specified by the user.
+
+        The generated exam should be in the user's language, which is the same language as the description and title.
+        Please generate exactly the number of questions as specified in the user's command.
+
+        Consider the best way to format the exam, the optimal combination of questions and answers.
+        Please also think about what the name of the exam should be and its description.
+
+        Requirements for the generated exam:
+        1. Each question must have exactly 4 answer options
+        2. Exactly one answer must be correct for each question
+        3. All answers must be meaningful and relevant
+        4. Questions should vary in difficulty
+        5. Questions should cover different aspects of the topic
+        6. Each question and answer should be clear and unambiguous
+
+        Provide the exam in the exact following JSON format:
+
         {{
-            "question": "Jakie jest rozwiązanie równania 2x + 3 = 7?",
-            "answers": [
-                {{"text": "x = 1", "is_correct": false}},
-                {{"text": "x = 2", "is_correct": true}},
-                {{"text": "x = 3", "is_correct": false}},
-                {{"text": "x = 4", "is_correct": false}}
-            ]
-        }},
-        {{
-            "question": "Rozwiąż równanie kwadratowe x² - 5x + 6 = 0.",
-            "answers": [
-                {{"text": "x = 2 i x = 3", "is_correct": true}},
-                {{"text": "x = 1 i x = 6", "is_correct": false}},
-                {{"text": "x = -2 i x = -3", "is_correct": false}},
-                {{"text": "x = 0 i x = 5", "is_correct": false}}
-            ]
-        }},
-        // Dodaj więcej zadań w przykładzie, aż do liczby podanej przez użytkownika
-        {{
-            "question": "Oblicz pochodną funkcji f(x) = x^3 - 4x + 1.",
-            "answers": [
-                {{"text": "f'(x) = 3x^2 - 4", "is_correct": true}},
-                {{"text": "f'(x) = 3x^2 - 4x", "is_correct": false}},
-                {{"text": "f'(x) = x^2 - 4", "is_correct": false}},
-                {{"text": "f'(x) = 3x - 4", "is_correct": false}}
+            "topic": "Example Topic",
+            "description": "Detailed description of the exam's purpose and scope.",
+            "num_of_questions": <number specified in query>,
+            "questions": [
+                {{
+                    "question": "Clear, well-formed question text?",
+                    "answers": [
+                        {{"text": "First answer option", "is_correct": false}},
+                        {{"text": "Second answer option", "is_correct": true}},
+                        {{"text": "Third answer option", "is_correct": false}},
+                        {{"text": "Fourth answer option", "is_correct": false}}
+                    ]
+                }},
+                // Additional questions as needed
             ]
         }}
-        // ... kontynuuj aż do liczby zadań podanej przez użytkownika
-    ]
-}}
-"""
-            def exam_generator(system_prompt: str, user_prompt: str) -> str | tuple[str, str, int, list[Any]]:
-                # Formatowanie wiadomości
-                messages = [
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content=user_prompt)
-                ]
-                logger.debug(f"Formatted Messages:\n{messages}")
 
-                # Inwokacja modelu z sformatowanymi wiadomościami
-                response = self._model.invoke(messages)
+        Ensure that:
+        - The topic accurately reflects the exam content
+        - The description is informative and complete
+        - Each question is unique and relevant
+        - Answer options are distinct and plausible
+        - The correct answer is clearly marked
+        - The total number of questions matches exactly what was requested
+        """
 
-                # Ekstrakcja tekstu odpowiedzi
-                if isinstance(response, list):
-                    response_text = response[-1].content if response else ""
-                elif hasattr(response, 'content'):
-                    response_text = response.content
-                else:
-                    response_text = str(response)
+        return system_prompt.strip(), user_prompt.strip()
 
-                logger.debug(f"Model Response: {response_text}")
+    def generate_exam(self, system_prompt: str, user_prompt: str) -> tuple[str, str, int, list[dict]]:
+        """Generate exam using the language model."""
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ]
 
-                # Parsowanie odpowiedzi JSON
-                parsed_response = self._output_parser.parse(response_text)
+        response = self._model.invoke(messages)
+        response_text = response.content if hasattr(response, 'content') else str(response)
 
-                # Sprawdzenie, czy `parsed_response` jest słownikiem
-                if not isinstance(parsed_response, dict):
-                    logger.error("Parsed response is not a dictionary.")
-                    return json.dumps({
-                        "error": "Nieprawidłowa odpowiedź modelu. Oczekiwano formatu JSON."
-                    }, ensure_ascii=False)
+        try:
+            parsed_response = self._output_parser.parse(response_text)
+        except Exception as e:
+            logger.error(f"Failed to parse model response: {e}")
+            raise ValueError(f"Invalid model response format: {str(e)}")
 
-                # Walidacja struktury egzaminu
-                requested_num_questions = parsed_response.get('num_of_questions', 10)
-                questions = parsed_response.get('questions', [])
-                topic = parsed_response.get('topic', f'exam_{uuid.uuid4().hex[:8]}')
-                exam_description = parsed_response.get('description', 'Brak opisu egzaminu.')
-                return topic, exam_description, requested_num_questions, questions
-            topic, exam_description, requested_num_questions, questions = exam_generator(system_prompt, user_prompt)
-            # Sprawdzenie, czy liczba pytań jest zgodna z żądaniem
-            num_of_requests = 0
-            if (len(questions) < (requested_num_questions - int(requested_num_questions * 0.2))) and num_of_requests < 3:
-                topic, exam_description, requested_num_questions, questions = exam_generator()
-                logger.error(f"Oczekiwano {requested_num_questions} pytań, ale otrzymano {len(questions)}.")
-                num_of_requests += 1
-            else:
-                return json.dumps({
-                    "error": f"Oczekiwano {requested_num_questions} pytań, ale otrzymano {len(questions)}."
-                }, ensure_ascii=False)
+        if not isinstance(parsed_response, dict):
+            raise ValueError("Invalid model response format: not a dictionary")
 
-            # Konwersja odpowiedzi do stringa JSON
-            exam_json = json.dumps({
-                "topic": topic,
-                "description": exam_description,
-                "num_of_questions": requested_num_questions,
-                "questions": questions
-            }, ensure_ascii=False)
+        # Validate the response structure
+        required_fields = ['topic', 'description', 'num_of_questions', 'questions']
+        for field in required_fields:
+            if field not in parsed_response:
+                raise ValueError(f"Missing required field: {field}")
 
-            # Zapis egzaminu do bazy danych
-            db: Session = SessionLocal()
-            try:
-                # Tworzenie nowego egzaminu
-                new_exam = Exam(user_id=self.user_id, name=topic, description=exam_description)
-                db.add(new_exam)
+        # Validate questions structure
+        questions = parsed_response.get('questions', [])
+        for i, question in enumerate(questions):
+            if 'question' not in question:
+                raise ValueError(f"Question {i + 1} is missing question text")
+            if 'answers' not in question:
+                raise ValueError(f"Question {i + 1} is missing answers")
+            if len(question['answers']) != 4:
+                raise ValueError(f"Question {i + 1} must have exactly 4 answers")
+            correct_answers = sum(1 for ans in question['answers'] if ans.get('is_correct'))
+            if correct_answers != 1:
+                raise ValueError(f"Question {i + 1} must have exactly 1 correct answer")
+
+        return (
+            parsed_response.get('topic'),
+            parsed_response.get('description'),
+            parsed_response.get('num_of_questions'),
+            parsed_response.get('questions')
+        )
+
+    def save_to_database(self, topic: str, description: str, questions: list[dict]) -> int:
+        """Save exam data to database."""
+        db = SessionLocal()
+        try:
+            new_exam = Exam(
+                user_id=self.user_id,
+                name=topic,
+                description=description
+            )
+            db.add(new_exam)
+            db.commit()
+            db.refresh(new_exam)
+
+            for question in questions:
+                new_question = ExamQuestion(
+                    text=question.get('question', '').strip(),
+                    exam_id=new_exam.id
+                )
+                db.add(new_question)
                 db.commit()
-                db.refresh(new_exam)
+                db.refresh(new_question)
 
-                # Tworzenie pytań i odpowiedzi związanych z egzaminem
-                for q in questions:
-                    new_question = ExamQuestion(
-                        text=q.get('question', '').strip(),
-                        exam_id=new_exam.id
+                for answer in question.get('answers', []):
+                    new_answer = ExamAnswer(
+                        text=answer.get('text', '').strip(),
+                        is_correct=answer.get('is_correct', False),
+                        question_id=new_question.id
                     )
-                    db.add(new_question)
-                    db.commit()
-                    db.refresh(new_question)
+                    db.add(new_answer)
+                db.commit()
 
-                    for a in q.get('answers', []):
-                        new_answer = ExamAnswer(
-                            text=a.get('text', '').strip(),
-                            is_correct=a.get('is_correct', False),
-                            question_id=new_question.id
-                        )
-                        db.add(new_answer)
-                    db.commit()
+            return new_exam.id
+        except Exception as e:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
-                logger.info(f"Successfully created exam with ID {new_exam.id} and saved {len(questions)} questions.")
+    def _run(self, input_str: str) -> str:
+        """Generate exams based on the input string and save them to the database."""
+        try:
+            # Validate input and get description and query
+            description, query = self.validate_input(input_str)
 
-                # Formułowanie odpowiedzi do zwrócenia
-                formatted_response = f"""Topic: "{topic}"
-Description: "{exam_description}"
-Requested Number of Questions: {requested_num_questions}
-Questions:
-"""
-                for idx, question in enumerate(questions, start=1):
-                    formatted_response += f'{idx}. Q: "{question.get("question", "")}"\n'
-                    for a_idx, answer in enumerate(question.get('answers', []), start=1):
-                        correct_marker = " (Correct)" if answer.get("is_correct") else ""
-                        formatted_response += f'   {a_idx}. A: "{answer.get("text", "")}"{correct_marker}\n'
-                    formatted_response += '\n'
+            # Get prompts for exam generation
+            system_prompt, user_prompt = self._get_prompts(description, query)
 
-                return formatted_response
+            best_result = None
+            max_attempts = 3
 
-            except Exception as e:
-                db.rollback()
-                logger.error(f"Database error: {e}")
+            # Try generating the exam up to max_attempts times
+            for attempt in range(max_attempts):
+                try:
+                    logger.info(f"Attempting to generate exam (attempt {attempt + 1}/{max_attempts})")
+
+                    topic, exam_description, requested_num_questions, questions = self.generate_exam(
+                        system_prompt, user_prompt
+                    )
+
+                    # If we have at least 80% of requested questions, consider it good enough
+                    if len(questions) >= (requested_num_questions * 0.8):
+                        exam_id = self.save_to_database(topic, exam_description, questions)
+
+                        return json.dumps({
+                            "status": "success",
+                            "exam_id": exam_id,
+                            "topic": topic,
+                            "description": exam_description,
+                            "num_of_questions": len(questions),
+                            "questions": questions
+                        }, ensure_ascii=False)
+
+                    # Store this result if it's the best so far
+                    if not best_result or len(questions) > len(best_result[3]):
+                        best_result = (topic, exam_description, requested_num_questions, questions)
+
+                except Exception as e:
+                    logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                    if attempt == max_attempts - 1:
+                        raise
+
+            # If we got here, use the best result we had
+            if best_result:
+                topic, exam_description, requested_num_questions, questions = best_result
+                exam_id = self.save_to_database(topic, exam_description, questions)
+
                 return json.dumps({
-                    "error": f"Błąd zapisu do bazy danych: {str(e)}"
+                    "status": "partial_success",
+                    "exam_id": exam_id,
+                    "topic": topic,
+                    "description": exam_description,
+                    "num_of_questions": len(questions),
+                    "questions": questions,
+                    "warning": f"Could only generate {len(questions)} out of {requested_num_questions} requested questions"
                 }, ensure_ascii=False)
-            finally:
-                db.close()
+
+            raise ValueError("Failed to generate any valid exam")
+
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
             return json.dumps({
-                "error": "Przepraszam, wystąpił problem z generowaniem egzaminu."
+                "status": "error",
+                "error": str(e)
             }, ensure_ascii=False)
-
 
     async def _arun(self, input_str: str) -> str:
         """Asynchronous version of the run method."""
