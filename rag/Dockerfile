@@ -20,15 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     curl \
     git \
-    rustc \
-    cargo \
+    ca-certificates \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . $HOME/.cargo/env \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     # Instalacja zależności Pythona
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt \
-    # Czyszczenie niepotrzebnych plików
+    # Czyszczenie
     && apt-get purge -y --auto-remove build-essential curl git \
-    && rm -rf /root/.cache/pip/*
+    && rm -rf /root/.cache/pip/* \
+    && rm -rf /root/.cargo/registry
 
 # Kopiujemy kod aplikacji
 COPY . .
