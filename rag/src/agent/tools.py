@@ -374,7 +374,7 @@ class ExamGenerator(BaseTool):
             query = input_data.get('query', 'Stwórz egzamin z algebry dla uczniów szkoły średniej, zawierający 10 pytań.').strip()
 
             # Konstruowanie prompta bezpośrednio w metodzie _run z przykładem poprawnego wyjścia
-            system_prompt = "Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku!"
+            system_prompt = "Zwróć tylko w formacie JSON bez dodatkowego tekstu. Odpowiedź napisz w odpowiednim języku! ZWRÓĆ DOKŁADNIE TYLE ZADAŃ, ILE PODAŁ UŻYTKOWNIK."
             user_prompt = f"""
 Generate an exam based on the following context:
 {description}
@@ -427,46 +427,51 @@ Provide the exam in the exact following JSON format with an example:
     ]
 }}
 """
+            def exam_generator(system_prompt: str, user_prompt: str) -> str | tuple[str, str, int, list[Any]]:
+                # Formatowanie wiadomości
+                messages = [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content=user_prompt)
+                ]
+                logger.debug(f"Formatted Messages:\n{messages}")
 
-            # Formatowanie wiadomości
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
-            logger.debug(f"Formatted Messages:\n{messages}")
+                # Inwokacja modelu z sformatowanymi wiadomościami
+                response = self._model.invoke(messages)
 
-            # Inwokacja modelu z sformatowanymi wiadomościami
-            response = self._model.invoke(messages)
+                # Ekstrakcja tekstu odpowiedzi
+                if isinstance(response, list):
+                    response_text = response[-1].content if response else ""
+                elif hasattr(response, 'content'):
+                    response_text = response.content
+                else:
+                    response_text = str(response)
 
-            # Ekstrakcja tekstu odpowiedzi
-            if isinstance(response, list):
-                response_text = response[-1].content if response else ""
-            elif hasattr(response, 'content'):
-                response_text = response.content
-            else:
-                response_text = str(response)
+                logger.debug(f"Model Response: {response_text}")
 
-            logger.debug(f"Model Response: {response_text}")
+                # Parsowanie odpowiedzi JSON
+                parsed_response = self._output_parser.parse(response_text)
 
-            # Parsowanie odpowiedzi JSON
-            parsed_response = self._output_parser.parse(response_text)
+                # Sprawdzenie, czy `parsed_response` jest słownikiem
+                if not isinstance(parsed_response, dict):
+                    logger.error("Parsed response is not a dictionary.")
+                    return json.dumps({
+                        "error": "Nieprawidłowa odpowiedź modelu. Oczekiwano formatu JSON."
+                    }, ensure_ascii=False)
 
-            # Sprawdzenie, czy `parsed_response` jest słownikiem
-            if not isinstance(parsed_response, dict):
-                logger.error("Parsed response is not a dictionary.")
-                return json.dumps({
-                    "error": "Nieprawidłowa odpowiedź modelu. Oczekiwano formatu JSON."
-                }, ensure_ascii=False)
-
-            # Walidacja struktury egzaminu
-            requested_num_questions = parsed_response.get('num_of_questions', 10)
-            questions = parsed_response.get('questions', [])
-            topic = parsed_response.get('topic', f'exam_{uuid.uuid4().hex[:8]}')
-            exam_description = parsed_response.get('description', 'Brak opisu egzaminu.')
-
+                # Walidacja struktury egzaminu
+                requested_num_questions = parsed_response.get('num_of_questions', 10)
+                questions = parsed_response.get('questions', [])
+                topic = parsed_response.get('topic', f'exam_{uuid.uuid4().hex[:8]}')
+                exam_description = parsed_response.get('description', 'Brak opisu egzaminu.')
+                return topic, exam_description, requested_num_questions, questions
+            topic, exam_description, requested_num_questions, questions = exam_generator(system_prompt, user_prompt)
             # Sprawdzenie, czy liczba pytań jest zgodna z żądaniem
-            if len(questions) != requested_num_questions:
+            num_of_requests = 0
+            if (len(questions) < (requested_num_questions - int(requested_num_questions * 0.2))) and num_of_requests < 3:
+                topic, exam_description, requested_num_questions, questions = exam_generator()
                 logger.error(f"Oczekiwano {requested_num_questions} pytań, ale otrzymano {len(questions)}.")
+                num_of_requests += 1
+            else:
                 return json.dumps({
                     "error": f"Oczekiwano {requested_num_questions} pytań, ale otrzymano {len(questions)}."
                 }, ensure_ascii=False)
