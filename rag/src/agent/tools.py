@@ -336,16 +336,6 @@ class RAGTool(BaseTool):
             return "Nie udało się wygenerować końcowej odpowiedzi."
 
 
-import json
-import uuid
-import logging
-from typing import Any, Optional, Tuple, List, Dict
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
-from langchain.output_parsers import JsonOutputParser
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
