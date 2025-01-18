@@ -28,6 +28,9 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
   const [registerPassword, setRegisterPassword] = useState('');
   const [registerPassword2, setRegisterPassword2] = useState('');
 
+  // State to track if registration confirmation is needed
+  const [registrationConfirmationMessage, setRegistrationConfirmationMessage] = useState('');
+
   // Local state for success message after login
   const [loginSuccessMessage, setLoginSuccessMessage] = useState('');
 
@@ -102,9 +105,12 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
         throw new Error(errData.error || 'Failed to register');
       }
 
-      // You could also set a success message for registration
-      // For now, we just close the dialog
+      // Show confirmation message after successful registration
+      setRegistrationConfirmationMessage('Rejestracja zakończona! Sprawdź swoją pocztę, aby potwierdzić konto. Wystarczy kliknąć w link rejestracyjny.');
+
+      // Hide the dialog
       setIsOpen(false);
+
     } catch (err) {
       console.error('Error registering:', err);
       alert('Nie udało się zarejestrować: ' + String(err));
@@ -216,6 +222,15 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      {/* Conditional message for registration confirmation */}
+      {registrationConfirmationMessage && (
+        <div className="fixed bottom-4 left-0 w-full flex justify-center z-50">
+          <div className="bg-yellow-500 text-white px-4 py-2 rounded shadow-lg animate-fadeIn">
+            {registrationConfirmationMessage}
+          </div>
+        </div>
+      )}
 
       {/* This conditionally rendered "toast" for successful login */}
       {loginSuccessMessage && (
