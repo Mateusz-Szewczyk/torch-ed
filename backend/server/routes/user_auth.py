@@ -123,7 +123,7 @@ def register() -> Response | str | tuple:
               f"If you didn't register for our website please ignore this email." \
               f"\nBest regards,\nTorchED team"
 
-    send_email(email, message)
+    send_email(email, "Potwierdź rejestrację, TorchED" ,message)
 
     return jsonify({'Success': 'User has been successfully created!'}), 201
 
