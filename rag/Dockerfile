@@ -21,8 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     ca-certificates \
-    pandoc \  # Dodanie Pandoc
-    binutils \ # Narzędzia do rozpakowywania, w tym 'ar'
+    pandoc \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && . $HOME/.cargo/env \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
