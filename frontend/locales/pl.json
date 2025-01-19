@@ -309,5 +309,18 @@
     "no_files_uploaded": "Nie przesłano jeszcze żadnych plików.",
     "upload": "Prześlij",
     "my_profile": "Mój profil",
-    "profile_description": "Tutaj w przyszłości będą dostępne informacje o Twoim profilu."
+    "profile_description": "Tutaj w przyszłości będą dostępne informacje o Twoim profilu.",
+    "cookbookTitle": "Cookbook",
+    "cookbookIntro": "Instrukcje dotyczące prawidłowego korzystania z naszej strony.",
+    "cookbook.flashcardsLimit": "Limit Fiszek",
+    "cookbook.flashcardsLimitInfo": "Optymalną największą ilością fiszek, jakie można wygenerować automatycznie w jednej talii, jest 40.",
+    "cookbook.promptInstructions": "Instrukcje dotyczące pisania promptów",
+    "cookbook.promptIntro": "Oto kilka przykładów, jak pisać prompty do naszego chatbota AI:",
+    "cookbook.example1Title": "Przykład 1",
+    "cookbook.example2Title": "Przykład 2",
+    "cookbook.usageTips": "Pamiętaj, aby używać chatbota głównie do nauki oraz generowania treści. Nie zalecamy korzystania z niego jako alternatywy dla ChatGPT czy Claude.ai.",
+    "cookbook.chatUseExplanation": "Korzystanie z Chatbota AI",
+    "cookbook.chatUseExplanationInfo": "Chatbot powinien służyć głównie do wspomagania procesu nauki oraz generowania treści edukacyjnych. Unikaj używania go do innych celów.",
+    "cookbook.waitTimeExplanation": "Czas Oczekiwania na Odpowiedź",
+    "cookbook.waitTimeExplanationInfo": "Ze względu na to, że w tle wykonuje się wiele wymagających akcji, oczekiwanie na odpowiedź może trwać do minuty."
 }

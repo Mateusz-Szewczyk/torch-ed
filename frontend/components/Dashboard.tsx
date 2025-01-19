@@ -1,4 +1,6 @@
 // File: Dashboard.tsx
+'use client';
+
 import React, { useEffect, useState, useContext, useMemo } from 'react';
 import Link from 'next/link';
 import {
@@ -188,6 +190,56 @@ const FilterSection = ({
                     ))}
                 </select>
             </div>
+        </div>
+    );
+};
+
+const CookbookSection = () => {
+    const { t } = useTranslation();
+
+    return (
+        <div className="border-2 border-gray-300 rounded-lg p-6 mt-8 bg-gray-50">
+            <h2 className="text-2xl font-bold mb-4">{t('cookbookTitle')}</h2>
+
+            <p className="mb-4 text-lg">
+                {t('cookbookIntro')}
+            </p>
+
+            <h3 className="text-xl font-semibold mb-2">{t('cookbook.flashcardsLimit')}</h3>
+            <p className="mb-4">
+                {t('cookbook.flashcardsLimitInfo')}
+            </p>
+
+            <h3 className="text-xl font-semibold mb-2">{t('cookbook.promptInstructions')}</h3>
+            <p className="mb-4">{t('cookbook.promptIntro')}</p>
+
+            <div className="bg-white p-4 rounded-lg shadow-sm mb-4">
+                <h4 className="font-semibold text-lg mb-2">{t('cookbook.example1Title')}</h4>
+                <p className="text-sm mb-2">
+                    &#34;Proszę wygeneruj mi 40 fiszek do nauki przed egzaminem z sieci komputerowych, w tym celu wykorzystaj plik który Ci wcześniej wgrałem.&#34;
+                </p>
+            </div>
+
+            <div className="bg-white p-4 rounded-lg shadow-sm mb-4">
+                <h4 className="font-semibold text-lg mb-2">{t('cookbook.example2Title')}</h4>
+                <p className="text-sm mb-2">
+                    &#34;Proszę stwórz dla mnie egzamin do nauki przed egzaminem z sieci komputerowych składający się z 30 zadań, proszę w tym celu wykorzystaj plik który Ci wcześniej wgrałem.&#34;
+                </p>
+            </div>
+
+            <p className="mb-4 text-lg">
+                {t('cookbook.usageTips')}
+            </p>
+
+            <h3 className="text-xl font-semibold mb-2">{t('cookbook.chatUseExplanation')}</h3>
+            <p className="mb-4">
+                {t('cookbook.chatUseExplanationInfo')}
+            </p>
+
+            <h3 className="text-xl font-semibold mb-2">{t('cookbook.waitTimeExplanation')}</h3>
+            <p className="mb-4">
+                {t('cookbook.waitTimeExplanationInfo')}
+            </p>
         </div>
     );
 };
@@ -517,7 +569,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 8. Planowane Sesje Nauki (Wykres Liniowy)
+    // 7. Planowane Sesje Nauki (Wykres Liniowy)
     const nextReviewTimelineData = useMemo(() => {
         if (!filteredData) return [];
         const reviewMap = new Map<string, number>();
@@ -536,7 +588,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 9. Fiszki Rozwiązane Dziennie (Wykres Słupkowy)
+    // 8. Fiszki Rozwiązane Dziennie (Wykres Słupkowy)
     const flashcardsSolvedDaily = useMemo(() => {
         if (!filteredData) return [];
         const solvedMap = new Map<string, number>();
@@ -562,6 +614,9 @@ const Dashboard: React.FC = () => {
         return total / flashcardsSolvedDaily.length;
     }, [flashcardsSolvedDaily]);
 
+    // Przygotowanie przefiltrowanych danych do wykresów innych niż już wymienione
+    // ... Możesz dodać więcej przetworzeń danych tutaj, jeśli to konieczne
+
     // Warunkowe renderowanie
     if (loading) {
         return <LoadingSpinner progress={progress} />;
@@ -579,6 +634,7 @@ const Dashboard: React.FC = () => {
         <div className="p-4 w-full">
             <h2 className="text-2xl font-bold mb-6 text-center">{t('dashboardTitle')}</h2>
 
+            {/* Filter section */}
             <FilterSection
                 filterStartDate={filterStartDate}
                 filterEndDate={filterEndDate}
@@ -592,6 +648,10 @@ const Dashboard: React.FC = () => {
                 deckOptions={deckOptions}
             />
 
+            {/* Cookbook section */}
+            <CookbookSection />
+
+            {/* Rest of the dashboard content */}
             <div className="space-y-8">
                 {/* Exam Analysis */}
                 <div className="border rounded-lg p-4">
@@ -840,7 +900,6 @@ const Dashboard: React.FC = () => {
             </div>
         </div>
     );
-
 };
 
 export default Dashboard;
