@@ -28,7 +28,7 @@ interface StudyDeckProps {
   onExit: () => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
 export function StudyDeck({ deck, study_session_id, available_cards, next_session_date, onExit }: StudyDeckProps) {
   const { t } = useTranslation();
