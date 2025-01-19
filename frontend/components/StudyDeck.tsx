@@ -30,42 +30,77 @@ interface StudyDeckProps {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
-export function StudyDeck({ deck, study_session_id, available_cards, next_session_date, onExit }: StudyDeckProps) {
+/**
+ * Utility function to shuffle an array in place
+ * using the Fisher-Yates algorithm.
+ */
+function shuffle<T>(array: T[]): T[] {
+  let currentIndex = array.length;
+  while (currentIndex !== 0) {
+    const randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+    // Swap
+    [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+  }
+  return array;
+}
+
+export function StudyDeck({
+  deck,
+  study_session_id,
+  available_cards,
+  next_session_date,
+  onExit
+}: StudyDeckProps) {
   const { t } = useTranslation();
 
-  // Queue of flashcards
-  const [cardsQueue, setCardsQueue] = useState<Flashcard[]>(Array.isArray(available_cards) ? available_cards : []);
+  // 1. Shuffle the initial set of flashcards
+  const shuffledCards = Array.isArray(available_cards)
+    ? shuffle([...available_cards]) // create a copy, then shuffle
+    : [];
+
+  /**
+   * State for:
+   * - cardsQueue: the current queue of flashcards in the session.
+   * - initialTotalCards: the original total count of flashcards (for progress).
+   * - currentIndex: index of the card currently shown.
+   */
+  const [cardsQueue, setCardsQueue] = useState<Flashcard[]>(shuffledCards);
+  const [initialTotalCards] = useState<number>(shuffledCards.length);
   const [currentIndex, setCurrentIndex] = useState(0);
-  // Rated flashcards
+
+  // 2. Local ratings and how many times user has seen a card
   const [localRatings, setLocalRatings] = useState<LocalRating[]>([]);
-  // How many times user has seen a card
   const [cardSeenCount, setCardSeenCount] = useState<CardSeenCount>({});
 
-  // State for card flipping
+  // 3. Card flipping state
   const [isFlipped, setIsFlipped] = useState(false);
-  // Chat
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  // State for submission
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  // State for loading (retake operations)
-  const [isLoading, setIsLoading] = useState(false);
 
-  // ConversationId for Chat
+  // 4. Chat
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const conversationId = deck.id;
 
-  // Initialize seen count from available_cards
+  // 5. Submission states
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // 6. Loading state for retake operations
+  const [isLoading, setIsLoading] = useState(false);
+
+  /**
+   * Initialize seenCount for each flashcard to 0.
+   */
   useEffect(() => {
     const initialSeenCount: CardSeenCount = {};
-    if (Array.isArray(available_cards)) {
-      available_cards.forEach(card => {
-        initialSeenCount[card.id] = 0;
-      });
-    }
+    shuffledCards.forEach(card => {
+      initialSeenCount[card.id] = 0;
+    });
     setCardSeenCount(initialSeenCount);
-  }, [available_cards]);
+  }, [shuffledCards]);
 
-  // Update seen count when currentIndex changes
+  /**
+   * Update seen count whenever currentIndex changes.
+   */
   useEffect(() => {
     if (cardsQueue.length === 0) return;
     const cardId = cardsQueue[currentIndex].id;
@@ -75,7 +110,11 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     }));
   }, [currentIndex, cardsQueue]);
 
-  // Save state to localStorage
+  /**
+   * Save localRatings and cardSeenCount to localStorage
+   * so that if user refreshes or leaves the page,
+   * data is preserved for the session.
+   */
   useEffect(() => {
     if (study_session_id !== null) {
       localStorage.setItem(`session-${study_session_id}-ratings`, JSON.stringify(localRatings));
@@ -83,12 +122,16 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     }
   }, [study_session_id, localRatings, cardSeenCount]);
 
-  // Function to rate a card
+  /**
+   * Handle rating:
+   * - rating = 0 (Hard) or 3 (Good) => move card to the end of the queue (reloop).
+   * - rating = 5 (Easy) => remove card from the queue entirely (don't show again).
+   */
   const handleRating = (rating: number) => {
     if (cardsQueue.length === 0) return;
     const currentCard = cardsQueue[currentIndex];
 
-    // Add rating to localRatings
+    // Record this rating
     setLocalRatings(prev => [
       ...prev,
       {
@@ -100,23 +143,23 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
 
     const updatedQueue = [...cardsQueue];
 
-    // Hard (0) / Good(3) => recycling
     if (rating === 0 || rating === 3) {
+      // Move card to the end of the queue
       const [removed] = updatedQueue.splice(currentIndex, 1);
       updatedQueue.push(removed);
     } else if (rating === 5) {
-      // Easy => remove
+      // Easy => remove the card from the queue
       updatedQueue.splice(currentIndex, 1);
     }
 
-    // If queue is empty
+    // If queue is empty after removal, end the session
     if (updatedQueue.length === 0) {
       setCardsQueue([]);
       setCurrentIndex(0);
       return;
     }
 
-    // Move to next card
+    // Move to the next card. If currentIndex is out of range, adjust it
     let nextIndex = currentIndex;
     if (nextIndex >= updatedQueue.length) {
       nextIndex = updatedQueue.length - 1;
@@ -126,7 +169,10 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     setIsFlipped(false);
   };
 
-  // Function to submit ratings and finish the session
+  /**
+   * Submit ratings and finish the session.
+   * Only relevant if there are any localRatings.
+   */
   const handleFinish = async () => {
     if (localRatings.length === 0) {
       clearLocalStorage();
@@ -136,12 +182,6 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     try {
       setIsSubmitting(true);
       setSubmitError(null);
-
-      console.log('Submitting bulk record:', {
-        session_id: study_session_id,
-        deck_id: deck.id,
-        ratings: localRatings,
-      });
 
       if (study_session_id !== null) {
         const response = await fetchJson(`${API_BASE_URL}/study_sessions/bulk_record`, {
@@ -181,12 +221,16 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     }
   };
 
-  // Function to flip the card
+  /**
+   * Flip the card: front <-> back
+   */
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
   };
 
-  // Function to retake hard cards
+  /**
+   * Retake Hard Cards: fetch them from the server, reset the queue
+   */
   const handleRetakeHardCards = async () => {
     try {
       setIsLoading(true);
@@ -209,7 +253,9 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
         return;
       }
 
-      setCardsQueue(hardCards);
+      // Shuffle them if you want them random again
+      const newShuffled = shuffle([...hardCards]);
+      setCardsQueue(newShuffled);
       setCurrentIndex(0);
       setLocalRatings([]);
       setIsFlipped(false);
@@ -226,7 +272,9 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     }
   };
 
-  // Function to retake session (using the latest session)
+  /**
+   * Retake Entire Session
+   */
   const handleRetakeSession = async () => {
     try {
       setIsLoading(true);
@@ -249,7 +297,9 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
         return;
       }
 
-      setCardsQueue(retakeCards);
+      // Shuffle them if you want them random again
+      const newShuffled = shuffle([...retakeCards]);
+      setCardsQueue(newShuffled);
       setCurrentIndex(0);
       setLocalRatings([]);
       setIsFlipped(false);
@@ -266,7 +316,9 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     }
   };
 
-  // When cardsQueue is empty, show completion screen
+  /**
+   * If the queue is empty, the session is effectively completed.
+   */
   if (cardsQueue.length === 0) {
     return (
       <div className="h-screen flex items-center justify-center bg-background p-4">
@@ -282,7 +334,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
             <p className="text-center">{t('no_future_session_date_found')}</p>
           )}
 
-          {/* Przyciski do retake */}
+          {/* Retake buttons */}
           <Button
             variant="outline"
             onClick={handleRetakeSession}
@@ -346,12 +398,18 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
     );
   }
 
-  // If have flashcards, show study screen
+  /**
+   * If there are still cards in the queue, show the study interface.
+   * For progress, we only count how many flashcards have rating=5.
+   */
   const currentCard = cardsQueue[currentIndex];
-
-  const totalCards = cardsQueue.length;
-  const answeredCount = localRatings.length;
-  const progressPercent = totalCards > 0 ? Math.round((answeredCount / totalCards) * 100) : 0;
+  // The total number of *original* cards is in `initialTotalCards`.
+  // Only rating=5 flashcards count as "answered."
+  const answeredCount = localRatings.filter(r => r.rating === 5).length;
+  const progressPercent = initialTotalCards > 0
+    ? Math.round((answeredCount / initialTotalCards) * 100)
+    : 0;
+  // We keep the queue length for reference if needed
   const seenCount = cardSeenCount[currentCard.id] || 0;
 
   return (
@@ -384,10 +442,10 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
         </div>
 
         <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-4">
-          {/* Progress bar and single flashcard counter */}
+          {/* Progress bar for rating=5 cards out of initial total */}
           <div className="w-full mb-2">
             <div className="text-sm text-muted-foreground">
-              {t('progress')}: {answeredCount}/{totalCards} ({progressPercent}%)
+              {t('progress')}: {answeredCount}/{initialTotalCards} ({progressPercent}%)
             </div>
             <div className="h-2 w-full bg-muted rounded-md overflow-hidden">
               <div
@@ -400,7 +458,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
           <div className="mb-4 text-sm font-medium text-primary">
             {t('flashcard_counter', {
               current: answeredCount,
-              total: totalCards
+              total: initialTotalCards
             })}
           </div>
 
@@ -455,7 +513,7 @@ export function StudyDeck({ deck, study_session_id, available_cards, next_sessio
             {t('seen_this_card_x_times', { count: seenCount })}
           </div>
 
-          {/* Rating buttons */}
+          {/* Rating buttons (only visible when the card is flipped) */}
           <div className="h-20 flex justify-center items-center">
             {isFlipped && (
               <div className="flex space-x-4">
