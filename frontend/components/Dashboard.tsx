@@ -87,14 +87,16 @@ const sortByDateAscending = <T extends { date: string }>(data: T[]): T[] =>
     [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
 // Components
+
+// LoadingSpinner Component
 const LoadingSpinner = ({ progress }: { progress: number }) => {
     const { t } = useTranslation();
     return (
-        <div className="flex flex-col items-center justify-center h-screen">
+        <div className="flex flex-col items-center justify-center h-screen text-foreground">
             <h2 className="text-2xl mb-4">{t('loadingData')}</h2>
-            <div className="w-1/2 bg-gray-300 rounded-full">
+            <div className="w-1/2 bg-muted rounded-full">
                 <div
-                    className="bg-blue-500 text-xs font-medium text-blue-100 text-center p-0.5 leading-none rounded-full"
+                    className="bg-primary text-xs font-medium text-primary-foreground text-center p-0.5 leading-none rounded-full"
                     style={{ width: `${progress}%` }}
                 >
                     {progress}%
@@ -104,6 +106,7 @@ const LoadingSpinner = ({ progress }: { progress: number }) => {
     );
 };
 
+// FilterSection Component
 const FilterSection = ({
     filterStartDate,
     filterEndDate,
@@ -129,7 +132,7 @@ const FilterSection = ({
 }) => {
     const { t } = useTranslation();
     return (
-        <div className="flex flex-wrap justify-center mb-8 space-x-4">
+        <div className="flex flex-wrap justify-center mb-8 space-x-4 text-foreground">
             <div>
                 <label htmlFor="start-date" className="block mb-2">
                     {t('filter.dateFrom')}
@@ -139,7 +142,7 @@ const FilterSection = ({
                     type="date"
                     value={filterStartDate}
                     onChange={(e) => setFilterStartDate(e.target.value)}
-                    className="border p-2 rounded"
+                    className="border border-border p-2 rounded bg-background text-foreground"
                 />
             </div>
             <div>
@@ -151,7 +154,7 @@ const FilterSection = ({
                     type="date"
                     value={filterEndDate}
                     onChange={(e) => setFilterEndDate(e.target.value)}
-                    className="border p-2 rounded"
+                    className="border border-border p-2 rounded bg-background text-foreground"
                 />
             </div>
             <div>
@@ -162,7 +165,7 @@ const FilterSection = ({
                     id="exam-select"
                     value={selectedExamId ?? ''}
                     onChange={(e) => setSelectedExamId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="border p-2 rounded"
+                    className="border border-border p-2 rounded bg-background text-foreground"
                 >
                     <option value="">{t('filter.all')}</option>
                     {examOptions.map(({ id, name }) => (
@@ -180,7 +183,7 @@ const FilterSection = ({
                     id="deck-select"
                     value={selectedDeckId ?? ''}
                     onChange={(e) => setSelectedDeckId(e.target.value ? parseInt(e.target.value) : null)}
-                    className="border p-2 rounded"
+                    className="border border-border p-2 rounded bg-background text-foreground"
                 >
                     <option value="">{t('filter.all')}</option>
                     {deckOptions.map(({ id, name }) => (
@@ -194,11 +197,12 @@ const FilterSection = ({
     );
 };
 
+// CookbookSection Component
 const CookbookSection = () => {
     const { t } = useTranslation();
 
     return (
-        <div className="border-2 border-gray-300 rounded-lg p-6 mt-8 bg-gray-50">
+        <div className="border-2 border-border rounded-lg p-6 bg-card text-card-foreground">
             <h2 className="text-2xl font-bold mb-4">{t('cookbookTitle')}</h2>
 
             <p className="mb-4 text-lg">
@@ -213,17 +217,17 @@ const CookbookSection = () => {
             <h3 className="text-xl font-semibold mb-2">{t('cookbook.promptInstructions')}</h3>
             <p className="mb-4">{t('cookbook.promptIntro')}</p>
 
-            <div className="bg-white p-4 rounded-lg shadow-sm mb-4">
+            <div className="bg-card p-4 rounded-lg shadow-sm mb-4 border border-border">
                 <h4 className="font-semibold text-lg mb-2">{t('cookbook.example1Title')}</h4>
                 <p className="text-sm mb-2">
-                    &#34;Proszę wygeneruj mi 40 fiszek do nauki przed egzaminem z sieci komputerowych, w tym celu wykorzystaj plik który Ci wcześniej wgrałem.&#34;
+                    &#34;Please generate 40 flashcards for studying before the computer networks exam, using the file I uploaded earlier.&#34;
                 </p>
             </div>
 
-            <div className="bg-white p-4 rounded-lg shadow-sm mb-4">
+            <div className="bg-card p-4 rounded-lg shadow-sm mb-4 border border-border">
                 <h4 className="font-semibold text-lg mb-2">{t('cookbook.example2Title')}</h4>
                 <p className="text-sm mb-2">
-                    &#34;Proszę stwórz dla mnie egzamin do nauki przed egzaminem z sieci komputerowych składający się z 30 zadań, proszę w tym celu wykorzystaj plik który Ci wcześniej wgrałem.&#34;
+                    &#34;Please create an exam for studying before the computer networks exam consisting of 30 questions, using the file I uploaded earlier.&#34;
                 </p>
             </div>
 
@@ -240,10 +244,17 @@ const CookbookSection = () => {
             <p className="mb-4">
                 {t('cookbook.waitTimeExplanationInfo')}
             </p>
+
+            {/* New Information Added */}
+            <h3 className="text-xl font-semibold mb-2">{t('cookbook.progressTracking')}</h3>
+            <p className="mb-4">
+                {t('cookbook.progressTrackingInfo')}
+            </p>
         </div>
     );
 };
 
+// Dashboard Component
 const Dashboard: React.FC = () => {
     const { t } = useTranslation();
     const { isAuthenticated } = useContext(AuthContext);
@@ -298,7 +309,7 @@ const Dashboard: React.FC = () => {
         fetchDashboardData();
     }, [isAuthenticated, t]);
 
-    // Przygotowanie opcji filtrów z deduplikacją na podstawie deck_names
+    // Prepare filter options by deduplicating based on deck_names
     const deckOptions = useMemo(() => {
         if (!data) return [];
         return Object.entries(data.deck_names).map(([id, name]) => ({
@@ -307,7 +318,7 @@ const Dashboard: React.FC = () => {
         }));
     }, [data]);
 
-    // Przygotowanie opcji egzaminów z deduplikacją na podstawie exam_id
+    // Prepare exam options by deduplicating based on exam_id
     const examOptions = useMemo(() => {
         if (!data) return [];
         const uniqueExamsMap = new Map<number, string>();
@@ -319,7 +330,7 @@ const Dashboard: React.FC = () => {
         return Array.from(uniqueExamsMap, ([id, name]) => ({ id, name }));
     }, [data, t]);
 
-    // Przetwarzanie filtrowanych danych
+    // Process filtered data
     const filteredData = useMemo(() => {
         if (!data) return null;
 
@@ -331,12 +342,12 @@ const Dashboard: React.FC = () => {
         let filteredSessionDurations = data.session_durations;
         let filteredUserFlashcards = data.user_flashcards;
 
-        // Filtracja po dacie
+        // Filter by date
         if (filterStartDate || filterEndDate) {
             const start = filterStartDate ? new Date(filterStartDate) : null;
             const end = filterEndDate ? new Date(filterEndDate) : null;
 
-            // Filtruj study_sessions na podstawie daty
+            // Filter study_sessions by date
             filteredStudySessions = filteredStudySessions.filter((session) => {
                 const sessionStartDate = new Date(session.started_at);
                 if (start && sessionStartDate < start) return false;
@@ -345,19 +356,19 @@ const Dashboard: React.FC = () => {
             });
             console.log(`Filtered Study Sessions by Date: ${filteredStudySessions.length}`);
 
-            // Filtruj study_records na podstawie daty i session_id
+            // Filter study_records by date and session_id
             filteredStudyRecords = filteredStudyRecords.filter((record) => {
                 const recordDate = new Date(record.reviewed_at);
                 if (start && recordDate < start) return false;
                 if (end && recordDate > end) return false;
-                // Dodatkowo upewnij się, że session_id jest w przefiltrowanych study_sessions
+                // Additionally ensure session_id is in the filtered study_sessions
                 if (record.session_id === null) return false;
                 const session = filteredStudySessions.find((session) => session.id === record.session_id);
                 return session !== undefined;
             });
             console.log(`Filtered Study Records by Date and Session ID: ${filteredStudyRecords.length}`);
 
-            // Filtruj exam_results na podstawie daty
+            // Filter exam_results by date
             filteredExamResults = filteredExamResults.filter((exam) => {
                 const examDate = new Date(exam.started_at);
                 if (start && examDate < start) return false;
@@ -366,7 +377,7 @@ const Dashboard: React.FC = () => {
             });
             console.log(`Filtered Exam Results by Date: ${filteredExamResults.length}`);
 
-            // Filtruj exam_daily_average na podstawie daty
+            // Filter exam_daily_average by date
             filteredExamDailyAverage = filteredExamDailyAverage.filter((avg) => {
                 const avgDate = new Date(avg.date);
                 if (start && avgDate < start) return false;
@@ -375,8 +386,7 @@ const Dashboard: React.FC = () => {
             });
             console.log(`Filtered Exam Daily Average by Date: ${filteredExamDailyAverage.length}`);
 
-            // Filtruj flashcard_daily_average na podstawie daty i przefiltrowanych fiszek
-            // Oblicz średnie oceny tylko dla przefiltrowanych fiszek
+            // Filter flashcard_daily_average based on filtered study_records
             const flashcardRatingsMap = new Map<string, { total: number; count: number }>();
             filteredStudyRecords.forEach((record) => {
                 if (record.reviewed_at && record.rating !== null) {
@@ -396,34 +406,33 @@ const Dashboard: React.FC = () => {
             }));
             console.log(`Calculated Flashcard Daily Average based on Filtered Data: ${filteredFlashcardDailyAverage.length}`);
 
-            // Filtruj session_durations na podstawie przefiltrowanych study_sessions
-            // Załóżmy, że session_durations są agregowane na poziomie daty
+            // Filter session_durations based on filtered study_sessions
             const relevantSessionDates = new Set(filteredStudySessions.map(session => session.started_at.split('T')[0]));
             filteredSessionDurations = filteredSessionDurations.filter((duration) => relevantSessionDates.has(duration.date));
             console.log(`Filtered Session Durations by Relevant Sessions: ${filteredSessionDurations.length}`);
         }
 
-        // Filtracja po egzaminie
+        // Filter by exam
         if (selectedExamId) {
             filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
             console.log(`Filtered Exam Results by Exam ID (${selectedExamId}): ${filteredExamResults.length}`);
         }
 
-        // Filtracja po zestawie fiszek
+        // Filter by deck
         if (selectedDeckId) {
-            // Filtruj study_sessions na podstawie deck_id
+            // Filter study_sessions by deck_id
             filteredStudySessions = filteredStudySessions.filter((session) => session.deck_id === selectedDeckId);
             console.log(`Filtered Study Sessions by Deck ID (${selectedDeckId}): ${filteredStudySessions.length}`);
 
-            // Pobierz zestawy session_ids po deck_id
+            // Get session_ids based on deck_id
             const sessionIds = new Set(filteredStudySessions.map(session => session.id));
 
-            // Filtruj study_records na podstawie session_id w sessionIds
+            // Filter study_records based on session_id in sessionIds
             filteredStudyRecords = filteredStudyRecords.filter((record) => record.session_id !== null && sessionIds.has(record.session_id));
             console.log(`Filtered Study Records by Deck ID (${selectedDeckId}): ${filteredStudyRecords.length}`);
         }
 
-        // Filtrowanie user_flashcards powiązanych z przefiltrowanymi study_records
+        // Filter user_flashcards associated with filtered study_records
         const userFlashcardIds = new Set(
             filteredStudyRecords
                 .map(record => record.user_flashcard_id)
@@ -444,9 +453,9 @@ const Dashboard: React.FC = () => {
         };
     }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
-    // Przygotowanie danych do wykresów
+    // Prepare data for charts
 
-    // 1. Średnie Wyniki Egzaminów w Czasie
+    // 1. Average Exam Scores Over Time
     const examLineChartData = useMemo(() => {
         if (!filteredData) return [];
         return sortByDateAscending(
@@ -457,7 +466,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 2. Czas Spędzony na Nauce do Egzaminów
+    // 2. Time Spent Studying for Exams
     const examStudyTimeData = useMemo(() => {
         if (!filteredData) return [];
         const studyTimeMap = new Map<string, number>();
@@ -479,16 +488,16 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 3. Rozkład Wyników Egzaminów
+    // 3. Exam Score Distribution (Histogram)
     const histogramExamResultsData = useMemo(() => {
         if (!filteredData) return [];
-        // Tworzenie przedziałów dla rozkładu wyników egzaminów (0-9, 10-19, ..., 90-99, 100)
+        // Create buckets for exam score distribution (0-9, 10-19, ..., 90-99, 100)
         const buckets = Array.from({ length: 11 }, (_, i) => ({
             score: i < 10 ? `${i * 10}-${i * 10 + 9}` : '100',
             count: 0,
         }));
 
-        // Wypełnienie przedziałów danymi
+        // Fill buckets with data
         filteredData.exam_results.forEach((exam) => {
             if (exam.score === 100) {
                 buckets[10].count += 1;
@@ -504,7 +513,7 @@ const Dashboard: React.FC = () => {
         return buckets;
     }, [filteredData]);
 
-    // 4. Sesje Naukowe i Egzaminy na Dzień
+    // 4. Study Sessions and Exams per Day
     const combinedExamData = useMemo(() => {
         if (!filteredData) return [];
         const combinedMap = new Map<string, { study_sessions: number; exams_completed: number }>();
@@ -534,7 +543,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 5. Średnie Oceny Fiszek w Czasie
+    // 5. Average Flashcard Ratings Over Time
     const flashcardLineChartData = useMemo(() => {
         if (!filteredData) return [];
         return sortByDateAscending(
@@ -545,15 +554,13 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 6. Całkowity Czas Spędzony na Nauce Fiszek
+    // 6. Total Time Spent Studying Flashcards
     const totalStudyTimeData = useMemo(() => {
         if (!filteredData) return [];
         const studyTimeMap = new Map<string, number>();
-        // Pobierz tylko study_sessions, które są przefiltrowane
+        // Get only filtered study_sessions
         const relevantSessions = filteredData.study_sessions;
         relevantSessions.forEach((session) => {
-            // Znajdź odpowiednie session_durations dla tej sesji
-            // Zakładam, że session_durations są agregowane na poziomie daty
             const sessionDate = session.started_at.split('T')[0];
             const durationRecord = filteredData.session_durations.find(d => d.date === sessionDate);
             if (durationRecord) {
@@ -569,7 +576,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 7. Planowane Sesje Nauki (Wykres Liniowy)
+    // 7. Planned Study Sessions (Line Chart)
     const nextReviewTimelineData = useMemo(() => {
         if (!filteredData) return [];
         const reviewMap = new Map<string, number>();
@@ -588,7 +595,7 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 8. Fiszki Rozwiązane Dziennie (Wykres Słupkowy)
+    // 8. Flashcards Solved Daily (Bar Chart)
     const flashcardsSolvedDaily = useMemo(() => {
         if (!filteredData) return [];
         const solvedMap = new Map<string, number>();
@@ -607,31 +614,28 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // Średnia liczba fiszek rozwiązanych dziennie
+    // Average number of flashcards solved daily
     const averageFlashcardsSolved = useMemo(() => {
         if (flashcardsSolvedDaily.length === 0) return 0;
         const total = flashcardsSolvedDaily.reduce((acc, record) => acc + record.count, 0);
         return total / flashcardsSolvedDaily.length;
     }, [flashcardsSolvedDaily]);
 
-    // Przygotowanie przefiltrowanych danych do wykresów innych niż już wymienione
-    // ... Możesz dodać więcej przetworzeń danych tutaj, jeśli to konieczne
-
-    // Warunkowe renderowanie
+    // Conditional rendering
     if (loading) {
         return <LoadingSpinner progress={progress} />;
     }
 
     if (error) {
-        return <div className="text-red-500 text-center mt-10">{error}</div>;
+        return <div className="text-destructive text-center mt-10">{error}</div>;
     }
 
     if (!filteredData) {
-        return <div className="text-center mt-10">{t('noData')}</div>;
+        return <div className="text-center mt-10 text-foreground">{t('noData')}</div>;
     }
 
     return (
-        <div className="p-4 w-full">
+        <div className="p-4 w-full text-foreground">
             <h2 className="text-2xl font-bold mb-6 text-center">{t('dashboardTitle')}</h2>
 
             {/* Filter section */}
@@ -648,38 +652,38 @@ const Dashboard: React.FC = () => {
                 deckOptions={deckOptions}
             />
 
-            {/* Cookbook section */}
-            <CookbookSection />
-
             {/* Rest of the dashboard content */}
             <div className="space-y-8">
                 {/* Exam Analysis */}
-                <div className="border rounded-lg p-4">
+                <div className="border border-border rounded-lg p-4">
                     <button
                         className="flex justify-between items-center w-full text-left focus:outline-none"
                         onClick={() => setIsExamAnalysisOpen(!isExamAnalysisOpen)}
                     >
                         <div className="flex items-center space-x-2">
-                            <TestTube className="h-6 w-6 text-blue-500" />
+                            <TestTube className="h-6 w-6 text-primary" />
                             <h3 className="text-xl font-bold">{t('examAnalysis')}</h3>
                         </div>
                         {isExamAnalysisOpen ? (
-                            <ChevronUp className="h-6 w-6 text-blue-500" />
+                            <ChevronUp className="h-6 w-6 text-primary" />
                         ) : (
-                            <ChevronDown className="h-6 w-6 text-blue-500" />
+                            <ChevronDown className="h-6 w-6 text-primary" />
                         )}
                     </button>
                     {isExamAnalysisOpen && (
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
                             {filteredData.exam_results.length === 0 ? (
-                                <div className="col-span-2 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                                <div
+                                    className="col-span-2 bg-accent border border-accent-foreground text-accent-foreground px-4 py-3 rounded relative"
+                                    role="alert"
+                                >
                                     <strong className="font-bold">{t('noExams.title')}</strong>
                                     <span className="block sm:inline">
                                         {t('noExams.description')}
                                     </span>
                                     <div className="mt-4">
                                         <Link href="/tests">
-                                            <a className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                            <a className="bg-primary text-primary-foreground font-bold py-2 px-4 rounded hover:brightness-110">
                                                 {t('noExams.addExam')}
                                             </a>
                                         </Link>
@@ -697,7 +701,12 @@ const Dashboard: React.FC = () => {
                                                 <YAxis domain={[0, 100]} />
                                                 <Tooltip />
                                                 <Legend />
-                                                <Line type="monotone" dataKey="average_score" name={t('averageScore')} stroke="#82ca9d" />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="average_score"
+                                                    name={t('averageScore')}
+                                                    stroke="#82ca9d"
+                                                />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -754,32 +763,35 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 {/* Flashcard Analysis */}
-                <div className="border rounded-lg p-4">
+                <div className="border border-border rounded-lg p-4">
                     <button
                         className="flex justify-between items-center w-full text-left focus:outline-none"
                         onClick={() => setIsFlashcardAnalysisOpen(!isFlashcardAnalysisOpen)}
                     >
                         <div className="flex items-center space-x-2">
-                            <BookOpen className="h-6 w-6 text-green-500" />
+                            <BookOpen className="h-6 w-6 text-secondary" />
                             <h3 className="text-xl font-bold">{t('flashcardAnalysis')}</h3>
                         </div>
                         {isFlashcardAnalysisOpen ? (
-                            <ChevronUp className="h-6 w-6 text-green-500" />
+                            <ChevronUp className="h-6 w-6 text-secondary" />
                         ) : (
-                            <ChevronDown className="h-6 w-6 text-green-500" />
+                            <ChevronDown className="h-6 w-6 text-secondary" />
                         )}
                     </button>
                     {isFlashcardAnalysisOpen && (
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
                             {filteredData.user_flashcards.length === 0 ? (
-                                <div className="col-span-2 bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative" role="alert">
+                                <div
+                                    className="col-span-2 bg-accent border border-accent-foreground text-accent-foreground px-4 py-3 rounded relative"
+                                    role="alert"
+                                >
                                     <strong className="font-bold">{t('noFlashcards.title')}</strong>
                                     <span className="block sm:inline">
                                         {t('noFlashcards.description')}
                                     </span>
                                     <div className="mt-4">
                                         <Link href="/flashcards">
-                                            <a className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                                            <a className="bg-secondary text-secondary-foreground font-bold py-2 px-4 rounded hover:brightness-110">
                                                 {t('noFlashcards.addFlashcards')}
                                             </a>
                                         </Link>
@@ -797,7 +809,12 @@ const Dashboard: React.FC = () => {
                                                 <YAxis domain={[0, 5]} />
                                                 <Tooltip />
                                                 <Legend />
-                                                <Line type="monotone" dataKey="average_rating" name={t('averageRating')} stroke="#82ca9d" />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="average_rating"
+                                                    name={t('averageRating')}
+                                                    stroke="#82ca9d"
+                                                />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -858,7 +875,7 @@ const Dashboard: React.FC = () => {
                                         </ResponsiveContainer>
                                     </div>
 
-                                    {/* Planowane Sesje Nauki */}
+                                    {/* Planned Study Sessions */}
                                     <div className="md:col-span-2">
                                         <h4 className="text-lg font-semibold mb-2">{t('plannedStudySessions')}</h4>
                                         <ResponsiveContainer width="100%" height={300}>
@@ -868,12 +885,17 @@ const Dashboard: React.FC = () => {
                                                 <YAxis />
                                                 <Tooltip />
                                                 <Legend />
-                                                <Line type="monotone" dataKey="count" name={t('numberOfFlashcards')} stroke="#82ca9d" />
+                                                <Line
+                                                    type="monotone"
+                                                    dataKey="count"
+                                                    name={t('numberOfFlashcards')}
+                                                    stroke="#82ca9d"
+                                                />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
 
-                                    {/* Fiszki Rozwiązane Dziennie */}
+                                    {/* Flashcards Solved Daily */}
                                     <div className="md:col-span-2">
                                         <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedDaily')}</h4>
                                         <ResponsiveContainer width="100%" height={300}>
@@ -888,7 +910,8 @@ const Dashboard: React.FC = () => {
                                         </ResponsiveContainer>
                                         <div className="mt-4">
                                             <p className="text-lg">
-                                                {t('averageFlashcardsSolvedDaily')} <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
+                                                {t('averageFlashcardsSolvedDaily')}{' '}
+                                                <strong>{averageFlashcardsSolved.toFixed(2)}</strong>
                                             </p>
                                         </div>
                                     </div>
@@ -898,6 +921,12 @@ const Dashboard: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Horizontal Line */}
+            <hr className="my-8 border-t border-gray-300" />
+
+            {/* Cookbook section */}
+            <CookbookSection />
         </div>
     );
 };

@@ -322,5 +322,8 @@
     "cookbook.chatUseExplanation": "Korzystanie z Chatbota AI",
     "cookbook.chatUseExplanationInfo": "Chatbot powinien służyć głównie do wspomagania procesu nauki oraz generowania treści edukacyjnych. Unikaj używania go do innych celów.",
     "cookbook.waitTimeExplanation": "Czas Oczekiwania na Odpowiedź",
-    "cookbook.waitTimeExplanationInfo": "Ze względu na to, że w tle wykonuje się wiele wymagających akcji, oczekiwanie na odpowiedź może trwać do minuty."
+    "cookbook.waitTimeExplanationInfo": "Ze względu na to, że w tle wykonuje się wiele wymagających akcji, oczekiwanie na odpowiedź może trwać do minuty.",
+    "cookbook.progressTracking": "Progress Tracking",
+    "cookbook.progressTrackingInfo": "Your learning progress and all study sessions are recorded. On this page, you can analyze your study habits and performance in detail."
+
 }
