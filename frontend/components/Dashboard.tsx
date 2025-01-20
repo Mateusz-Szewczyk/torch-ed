@@ -475,7 +475,7 @@ const Dashboard: React.FC = () => {
             .forEach((exam) => {
                 const start = new Date(exam.started_at);
                 const end = new Date(exam.completed_at!);
-                const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60); // Duration in hours
+                const duration = (end.getTime() - start.getTime()) / (1000 * 60 * 60); // in hours
                 const date = start.toISOString().split('T')[0];
                 studyTimeMap.set(date, (studyTimeMap.get(date) || 0) + parseFloat(duration.toFixed(2)));
             });
@@ -497,7 +497,6 @@ const Dashboard: React.FC = () => {
             count: 0,
         }));
 
-        // Fill buckets with data
         filteredData.exam_results.forEach((exam) => {
             if (exam.score === 100) {
                 buckets[10].count += 1;
@@ -554,11 +553,10 @@ const Dashboard: React.FC = () => {
         );
     }, [filteredData]);
 
-    // 6. Total Time Spent Studying Flashcards
+    // 6. Total Time Spent Studying Flashcards (unchanged: used for "Total Time Studying Flashcards")
     const totalStudyTimeData = useMemo(() => {
         if (!filteredData) return [];
         const studyTimeMap = new Map<string, number>();
-        // Get only filtered study_sessions
         const relevantSessions = filteredData.study_sessions;
         relevantSessions.forEach((session) => {
             const sessionDate = session.started_at.split('T')[0];
@@ -612,6 +610,28 @@ const Dashboard: React.FC = () => {
                 count,
             }))
         );
+    }, [filteredData]);
+
+    // 9. Flashcards Solved by Hour (NEW CHART)
+    // Aggregates all "reviewed_at" times to show how many flashcards were solved at each hour of the day (0–23).
+    const flashcardsByHourData = useMemo(() => {
+        if (!filteredData) return [];
+        const hourMap = new Map<number, number>();
+
+        // Consider each study record's reviewed_at to extract the hour
+        filteredData.study_records.forEach((record) => {
+            if (!record.reviewed_at) return;
+            const hour = new Date(record.reviewed_at).getHours(); // 0–23
+            hourMap.set(hour, (hourMap.get(hour) || 0) + 1);
+        });
+
+        // Convert the map to an array of { hour, count } sorted by hour
+        const result = Array.from(hourMap.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([hour, count]) => ({ hour, count }));
+
+        console.log('Flashcards By Hour Data:', result);
+        return result;
     }, [filteredData]);
 
     // Average number of flashcards solved daily
@@ -847,31 +867,21 @@ const Dashboard: React.FC = () => {
                                         </ResponsiveContainer>
                                     </div>
 
-                                    {/* Total Time Spent Studying */}
+                                    {/* Flashcards Solved by Hour (NEW) */}
                                     <div className="md:col-span-2">
-                                        <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudying')}</h4>
+                                        <h4 className="text-lg font-semibold mb-2">
+                                            {t('flashcardsSolvedByHour')}
+                                        </h4>
                                         <ResponsiveContainer width="100%" height={300}>
-                                            <AreaChart data={totalStudyTimeData}>
-                                                <defs>
-                                                    <linearGradient id="colorDuration" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#FF8042" stopOpacity={0.8} />
-                                                        <stop offset="95%" stopColor="#FF8042" stopOpacity={0} />
-                                                    </linearGradient>
-                                                </defs>
+                                            <BarChart data={flashcardsByHourData}>
                                                 <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis dataKey="date" />
-                                                <YAxis domain={[0, 'auto']} />
+                                                {/* X-axis for hours (0-23) */}
+                                                <XAxis dataKey="hour" />
+                                                <YAxis allowDecimals={false} />
                                                 <Tooltip />
                                                 <Legend />
-                                                <Area
-                                                    type="monotone"
-                                                    dataKey="total_study_time"
-                                                    name={t('studyTimeHours')}
-                                                    stroke="#FF8042"
-                                                    fillOpacity={1}
-                                                    fill="url(#colorDuration)"
-                                                />
-                                            </AreaChart>
+                                                <Bar dataKey="count" name={t('flashcardsSolved')} fill="#8884d8" />
+                                            </BarChart>
                                         </ResponsiveContainer>
                                     </div>
 
