@@ -831,13 +831,13 @@ const Dashboard: React.FC = () => {
             onClick={() => setIsFlashcardAnalysisOpen(!isFlashcardAnalysisOpen)}
           >
             <div className="flex items-center space-x-2">
-              <BookOpen className="h-6 w-6 text-secondary" />
+              <BookOpen className="h-6 w-6 text-primary" />
               <h3 className="text-xl font-bold">{t('flashcardAnalysis')}</h3>
             </div>
             {isFlashcardAnalysisOpen ? (
-              <ChevronUp className="h-6 w-6 text-secondary" />
+              <ChevronUp className="h-6 w-6 text-primary" />
             ) : (
-              <ChevronDown className="h-6 w-6 text-secondary" />
+              <ChevronDown className="h-6 w-6 text-primary" />
             )}
           </button>
           {isFlashcardAnalysisOpen && (

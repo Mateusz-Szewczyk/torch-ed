@@ -228,7 +228,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()}
                 placeholder={t('type_message') || 'Type your message...'}
-                className="flex-1 text-base sm:text-lg md:text-xl text-muted-foreground"
+                className="flex-1 text-base sm:text-sm md:text-sm text-muted-foreground"
                 disabled={isLoading}
               />
             </div>
