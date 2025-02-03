@@ -2,7 +2,8 @@
 
 'use client';
 
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -20,6 +21,17 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const router = useRouter();
+
+  // Funkcja opakowująca fetch, zapamiętywana dzięki useCallback
+  const customFetch = useCallback(async (url: string, options?: RequestInit) => {
+    const response = await fetch(url, { credentials: 'include', ...options });
+    // Jeśli status 401 i endpoint nie zawiera "/auth/me", przekieruj na stronę główną
+    if (!response.ok && response.status === 401 && !url.includes('/auth/me')) {
+      router.push('/');
+    }
+    return response;
+  }, [router]);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -28,15 +40,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           process.env.NEXT_PUBLIC_API_FLASK_URL ||
           'https://torch-ed-production.up.railway.app/api/v1';
 
-        // Logowanie URL i dostępnych ciasteczek
-        console.log('Auth Request URL:', `${API_BASE_URL}/auth/me`);
+        const authUrl = `${API_BASE_URL}/auth/me`;
+        console.log('Auth Request URL:', authUrl);
         console.log('Available cookies:', document.cookie);
 
-        const res = await fetch(`${API_BASE_URL}/auth/me`, {
-          credentials: 'include',
-        });
-
-        // Logowanie statusu odpowiedzi
+        // Używamy customFetch – dla endpointu /auth/me przekierowanie nie nastąpi
+        const res = await customFetch(authUrl);
         console.log('Auth Response status:', res.status);
         console.log('Auth Response status text:', res.statusText);
 
@@ -53,8 +62,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     };
 
-    checkSession();
-  }, []);
+    void checkSession();
+  }, [customFetch]);
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, setIsAuthenticated }}>
