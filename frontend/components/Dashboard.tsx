@@ -17,11 +17,12 @@ import {
   ChevronUp,
   BookOpen,
   TestTube,
+  Calendar,
 } from 'lucide-react';
 import { AuthContext } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
-// Typy
+// --- Types ---
 type DateString = string;
 
 interface ExamResult {
@@ -82,20 +83,56 @@ interface DashboardData {
   deck_names: Record<number, string>;
 }
 
-// Funkcja pomocnicza do sortowania
+// --- Helpers ---
 const sortByDateAscending = <T extends { date: string }>(data: T[]): T[] =>
   [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-// Definiujemy kolory pobierane z CSS (globals.css)
+// Używamy zmiennych CSS z globalnych ustawień
 const chartColors = {
   primary: 'hsl(var(--primary))',
   secondary: 'hsl(var(--secondary))',
   accent: 'hsl(var(--accent))',
   border: 'hsl(var(--border))',
   foreground: 'hsl(var(--foreground))',
+  chart: 'hsl(var(--chart))',
 };
 
-// Komponent spinnera ładowania
+interface CustomTooltipPayload {
+  name?: string;
+  value?: number | string;
+  color?: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: CustomTooltipPayload[];
+  label?: string;
+}
+const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div
+        style={{
+          backgroundColor: 'hsl(var(--popover))',
+          border: `1px solid hsl(var(--border))`,
+          borderRadius: 'var(--radius)',
+          color: 'hsl(var(--popover-foreground))',
+          fontWeight: 600,
+          padding: '0.5rem',
+        }}
+      >
+        <p>{label}</p>
+        {payload.map((item, index) => (
+          <p key={index} style={{ color: item.color || 'inherit' }}>
+            {item.name}: {item.value}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return null;
+};
+
 const LoadingSpinner = ({ progress }: { progress: number }) => {
   const { t } = useTranslation();
   return (
@@ -113,19 +150,35 @@ const LoadingSpinner = ({ progress }: { progress: number }) => {
   );
 };
 
-// Sekcja filtrowania
-const FilterSection = ({
-  filterStartDate,
-  filterEndDate,
-  selectedExamId,
-  selectedDeckId,
-  setFilterStartDate,
-  setFilterEndDate,
-  setSelectedExamId,
-  setSelectedDeckId,
-  examOptions,
-  deckOptions,
-}: {
+// --- DateInput ---
+// Pole wyboru daty z ikoną kalendarza
+interface DateInputProps {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  label: string;
+}
+const DateInput: React.FC<DateInputProps> = ({ id, value, onChange, label }) => {
+  return (
+    <div className="relative w-full">
+      <label htmlFor={id} className="block text-sm font-semibold text-foreground mb-1">
+        {label}
+      </label>
+      <Calendar className="absolute left-2 top-2/3 transform -translate-y-1/2 text-muted" />
+      <input
+        id={id}
+        type="date"
+        value={value}
+        onChange={onChange}
+        className="pl-8 pr-3 py-2 w-full border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
+      />
+    </div>
+  );
+};
+
+// --- FilterCard ---
+// Panel filtrów w formie karty, responsywny i spójny
+const FilterCard: React.FC<{
   filterStartDate: string;
   filterEndDate: string;
   selectedExamId: number | null;
@@ -136,131 +189,112 @@ const FilterSection = ({
   setSelectedDeckId: (id: number | null) => void;
   examOptions: { id: number; name: string }[];
   deckOptions: { id: number; name: string }[];
+}> = ({
+  filterStartDate,
+  filterEndDate,
+  selectedExamId,
+  selectedDeckId,
+  setFilterStartDate,
+  setFilterEndDate,
+  setSelectedExamId,
+  setSelectedDeckId,
+  examOptions,
+  deckOptions,
 }) => {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-wrap justify-center mb-8 gap-4 text-foreground">
-      <div className="flex flex-col space-y-1">
-        <label htmlFor="start-date" className="text-sm font-medium">
-          {t('filter.dateFrom')}
-        </label>
-        <input
+    <div className="bg-card p-4 rounded-lg shadow-md flex flex-col gap-4 md:flex-row md:items-end">
+      <div className="flex-1 flex flex-col gap-4 md:flex-row md:items-center">
+        <DateInput
           id="start-date"
-          type="date"
+          label={t('filter.dateFrom')}
           value={filterStartDate}
           onChange={(e) => setFilterStartDate(e.target.value)}
-          className="border border-border px-3 py-2 rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
         />
-      </div>
-      <div className="flex flex-col space-y-1">
-        <label htmlFor="end-date" className="text-sm font-medium">
-          {t('filter.dateTo')}
-        </label>
-        <input
+        <DateInput
           id="end-date"
-          type="date"
+          label={t('filter.dateTo')}
           value={filterEndDate}
           onChange={(e) => setFilterEndDate(e.target.value)}
-          className="border border-border px-3 py-2 rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
         />
       </div>
-      <div className="flex flex-col space-y-1">
-        <label htmlFor="exam-select" className="text-sm font-medium">
-          {t('filter.selectExam')}
-        </label>
-        <select
-          id="exam-select"
-          value={selectedExamId ?? ''}
-          onChange={(e) => setSelectedExamId(e.target.value ? parseInt(e.target.value) : null)}
-          className="border border-border px-3 py-2 rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-        >
-          <option value="">{t('filter.all')}</option>
-          {examOptions.map(({ id, name }) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex flex-col space-y-1">
-        <label htmlFor="deck-select" className="text-sm font-medium">
-          {t('filter.selectDeck')}
-        </label>
-        <select
-          id="deck-select"
-          value={selectedDeckId ?? ''}
-          onChange={(e) => setSelectedDeckId(e.target.value ? parseInt(e.target.value) : null)}
-          className="border border-border px-3 py-2 rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none"
-        >
-          <option value="">{t('filter.all')}</option>
-          {deckOptions.map(({ id, name }) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center w-full md:w-auto">
+        <div className="flex flex-col w-full md:w-40">
+          <label htmlFor="exam-select" className="text-sm font-semibold text-foreground mb-1">
+            {t('filter.selectExam')}
+          </label>
+          <select
+            id="exam-select"
+            value={selectedExamId ?? ''}
+            onChange={(e) => setSelectedExamId(e.target.value ? parseInt(e.target.value) : null)}
+            className="border border-border px-3 py-2 rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none w-full"
+          >
+            <option value="">{t('filter.all')}</option>
+            {examOptions.map(({ id, name }) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col w-full md:w-40">
+          <label htmlFor="deck-select" className="text-sm font-semibold text-foreground mb-1">
+            {t('filter.selectDeck')}
+          </label>
+          <select
+            id="deck-select"
+            value={selectedDeckId ?? ''}
+            onChange={(e) => setSelectedDeckId(e.target.value ? parseInt(e.target.value) : null)}
+            className="border border-border px-3 py-2 rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary focus:outline-none w-full"
+          >
+            <option value="">{t('filter.all')}</option>
+            {deckOptions.map(({ id, name }) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   );
 };
 
-// Sekcja z „Cookbookiem”
+// --- CookbookSection ---
 const CookbookSection = () => {
   const { t } = useTranslation();
-
   return (
     <div className="border border-border rounded-lg p-6 bg-card text-card-foreground shadow-sm">
       <h2 className="text-2xl font-bold mb-4 text-primary">{t('cookbookTitle')}</h2>
-
-      <p className="mb-4 text-foreground/90">
-        {t('cookbookIntro')}
-      </p>
-
+      <p className="mb-4 text-foreground/90">{t('cookbookIntro')}</p>
       <h3 className="text-xl font-semibold mb-2 text-primary">{t('cookbook.flashcardsLimit')}</h3>
-      <p className="mb-4 text-foreground/80">
-        {t('cookbook.flashcardsLimitInfo')}
-      </p>
-
+      <p className="mb-4 text-foreground/80">{t('cookbook.flashcardsLimitInfo')}</p>
       <h3 className="text-xl font-semibold mb-2 text-primary">{t('cookbook.promptInstructions')}</h3>
       <p className="mb-4 text-foreground/80">{t('cookbook.promptIntro')}</p>
-
       <div className="bg-accent/10 p-4 rounded-lg mb-4 border border-border">
         <h4 className="font-semibold text-lg mb-2 text-secondary-foreground">{t('cookbook.example1Title')}</h4>
         <p className="text-sm mb-2 text-foreground/80">
           &#34;Please generate 40 flashcards for studying before the computer networks exam, using the file I uploaded earlier.&#34;
         </p>
       </div>
-
       <div className="bg-accent/10 p-4 rounded-lg mb-4 border border-border">
         <h4 className="font-semibold text-lg mb-2 text-secondary-foreground">{t('cookbook.example2Title')}</h4>
         <p className="text-sm mb-2 text-foreground/80">
           &#34;Please create an exam for studying before the computer networks exam consisting of 30 questions, using the file I uploaded earlier.&#34;
         </p>
       </div>
-
-      <p className="mb-4 text-foreground/90">
-        {t('cookbook.usageTips')}
-      </p>
-
+      <p className="mb-4 text-foreground/90">{t('cookbook.usageTips')}</p>
       <h3 className="text-xl font-semibold mb-2 text-primary">{t('cookbook.chatUseExplanation')}</h3>
-      <p className="mb-4 text-foreground/80">
-        {t('cookbook.chatUseExplanationInfo')}
-      </p>
-
+      <p className="mb-4 text-foreground/80">{t('cookbook.chatUseExplanationInfo')}</p>
       <h3 className="text-xl font-semibold mb-2 text-primary">{t('cookbook.waitTimeExplanation')}</h3>
-      <p className="mb-4 text-foreground/80">
-        {t('cookbook.waitTimeExplanationInfo')}
-      </p>
-
+      <p className="mb-4 text-foreground/80">{t('cookbook.waitTimeExplanationInfo')}</p>
       <h3 className="text-xl font-semibold mb-2 text-primary">{t('cookbook.progressTracking')}</h3>
-      <p className="mb-4 text-foreground/80">
-        {t('cookbook.progressTrackingInfo')}
-      </p>
+      <p className="mb-4 text-foreground/80">{t('cookbook.progressTrackingInfo')}</p>
     </div>
   );
 };
 
-// Główny komponent Dashboard
+// --- Main Component Dashboard ---
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
   const { isAuthenticated } = useContext(AuthContext);
@@ -275,7 +309,7 @@ const Dashboard: React.FC = () => {
   const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
   const [selectedDeckId, setSelectedDeckId] = useState<number | null>(null);
 
-  // Stan UI
+  // UI state for collapsible sections
   const [isExamAnalysisOpen, setIsExamAnalysisOpen] = useState<boolean>(false);
   const [isFlashcardAnalysisOpen, setIsFlashcardAnalysisOpen] = useState<boolean>(false);
 
@@ -315,7 +349,7 @@ const Dashboard: React.FC = () => {
     fetchDashboardData();
   }, [isAuthenticated, t]);
 
-  // Opcje talii (deckOptions)
+  // Opcje talii
   const deckOptions = useMemo(() => {
     if (!data) return [];
     return Object.entries(data.deck_names).map(([id, name]) => ({
@@ -324,7 +358,7 @@ const Dashboard: React.FC = () => {
     }));
   }, [data]);
 
-  // Opcje egzaminów (examOptions)
+  // Opcje egzaminów
   const examOptions = useMemo(() => {
     if (!data) return [];
     const uniqueExamsMap = new Map<number, string>();
@@ -348,12 +382,10 @@ const Dashboard: React.FC = () => {
     let filteredSessionDurations = data.session_durations;
     let filteredUserFlashcards = data.user_flashcards;
 
-    // Filtrowanie po dacie
     if (filterStartDate || filterEndDate) {
       const start = filterStartDate ? new Date(filterStartDate) : null;
       const end = filterEndDate ? new Date(filterEndDate) : null;
 
-      // Sesje nauki
       filteredStudySessions = filteredStudySessions.filter((session) => {
         const sessionStartDate = new Date(session.started_at);
         if (start && sessionStartDate < start) return false;
@@ -361,7 +393,6 @@ const Dashboard: React.FC = () => {
         return true;
       });
 
-      // Rekordy nauki
       filteredStudyRecords = filteredStudyRecords.filter((record) => {
         const recordDate = new Date(record.reviewed_at);
         if (start && recordDate < start) return false;
@@ -371,7 +402,6 @@ const Dashboard: React.FC = () => {
         return session !== undefined;
       });
 
-      // Wyniki egzaminów
       filteredExamResults = filteredExamResults.filter((exam) => {
         const examDate = new Date(exam.started_at);
         if (start && examDate < start) return false;
@@ -379,7 +409,6 @@ const Dashboard: React.FC = () => {
         return true;
       });
 
-      // Średnie dzienne egzaminów
       filteredExamDailyAverage = filteredExamDailyAverage.filter((avg) => {
         const avgDate = new Date(avg.date);
         if (start && avgDate < start) return false;
@@ -387,7 +416,6 @@ const Dashboard: React.FC = () => {
         return true;
       });
 
-      // Średnie dzienne fiszek
       const flashcardRatingsMap = new Map<string, { total: number; count: number }>();
       filteredStudyRecords.forEach((record) => {
         if (record.reviewed_at && record.rating !== null) {
@@ -400,22 +428,21 @@ const Dashboard: React.FC = () => {
           entry.count += 1;
         }
       });
-      filteredFlashcardDailyAverage = Array.from(flashcardRatingsMap.entries()).map(([date, { total, count }]) => ({
-        date,
-        average_rating: count > 0 ? parseFloat((total / count).toFixed(2)) : 0,
-      }));
+      filteredFlashcardDailyAverage = Array.from(flashcardRatingsMap.entries()).map(
+        ([date, { total, count }]) => ({
+          date,
+          average_rating: count > 0 ? parseFloat((total / count).toFixed(2)) : 0,
+        })
+      );
 
-      // Czas trwania sesji
       const relevantSessionDates = new Set(filteredStudySessions.map((s) => s.started_at.split('T')[0]));
       filteredSessionDurations = filteredSessionDurations.filter((dur) => relevantSessionDates.has(dur.date));
     }
 
-    // Filtrowanie po egzaminie
     if (selectedExamId) {
       filteredExamResults = filteredExamResults.filter((exam) => exam.exam_id === selectedExamId);
     }
 
-    // Filtrowanie po talii
     if (selectedDeckId) {
       filteredStudySessions = filteredStudySessions.filter((session) => session.deck_id === selectedDeckId);
       const sessionIds = new Set(filteredStudySessions.map((s) => s.id));
@@ -424,7 +451,6 @@ const Dashboard: React.FC = () => {
       );
     }
 
-    // Filtrowanie fiszek powiązanych z tymi rekordami nauki
     const userFlashcardIds = new Set(
       filteredStudyRecords.map((r) => r.user_flashcard_id).filter((id) => id !== null) as number[]
     );
@@ -442,7 +468,6 @@ const Dashboard: React.FC = () => {
     };
   }, [data, filterStartDate, filterEndDate, selectedExamId, selectedDeckId]);
 
-  // Przygotowanie danych do wykresów
   const examLineChartData = useMemo(() => {
     if (!filteredData) return [];
     return sortByDateAscending(
@@ -593,7 +618,6 @@ const Dashboard: React.FC = () => {
     return total / flashcardsSolvedDaily.length;
   }, [flashcardsSolvedDaily]);
 
-  // Renderowanie warunkowe
   if (loading) {
     return <LoadingSpinner progress={progress} />;
   }
@@ -608,11 +632,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="p-4 w-full text-foreground bg-background">
-      <h2 className="text-3xl font-bold mb-6 text-center text-primary">
-        {t('dashboardTitle')}
-      </h2>
+      <h2 className="text-3xl font-bold mb-6 text-center text-primary">{t('dashboardTitle')}</h2>
 
-      <FilterSection
+      {/* Górny panel filtrów */}
+      <FilterCard
         filterStartDate={filterStartDate}
         filterEndDate={filterEndDate}
         selectedExamId={selectedExamId}
@@ -625,11 +648,11 @@ const Dashboard: React.FC = () => {
         deckOptions={deckOptions}
       />
 
-      <div className="space-y-8">
+      <div className="space-y-8 mt-6">
         {/* Analiza egzaminów */}
         <div className="border border-border rounded-lg p-4 bg-card shadow-sm">
           <button
-            className="flex justify-between items-center w-full text-left focus:outline-none hover:bg-accent/10 p-2 rounded-lg"
+            className="flex justify-between items-center w-full text-left focus:outline-none hover:bg-accent/10 p-2 rounded-lg transition-colors"
             onClick={() => setIsExamAnalysisOpen(!isExamAnalysisOpen)}
           >
             <div className="flex items-center space-x-2">
@@ -646,12 +669,8 @@ const Dashboard: React.FC = () => {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
               {filteredData.exam_results.length === 0 ? (
                 <div className="col-span-2 bg-accent/10 border border-accent p-4 rounded-lg">
-                  <strong className="font-bold block mb-2">
-                    {t('noExams.title')}
-                  </strong>
-                  <span className="block mb-4">
-                    {t('noExams.description')}
-                  </span>
+                  <strong className="font-bold block mb-2">{t('noExams.title')}</strong>
+                  <span className="block mb-4">{t('noExams.description')}</span>
                   <Link
                     href="/tests"
                     className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:brightness-110 transition-all"
@@ -662,15 +681,10 @@ const Dashboard: React.FC = () => {
               ) : (
                 <>
                   <div>
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('averageExamScoresOverTime')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('averageExamScoresOverTime')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={examLineChartData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
                         <XAxis
                           dataKey="date"
                           stroke={chartColors.foreground}
@@ -681,37 +695,23 @@ const Dashboard: React.FC = () => {
                           stroke={chartColors.foreground}
                           tick={{ fill: chartColors.foreground }}
                         />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
-                        <Legend
-                          wrapperStyle={{ color: chartColors.foreground }}
-                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
                         <Line
                           type="monotone"
                           dataKey="average_score"
-                          stroke={chartColors.primary}
+                          stroke={chartColors.chart}
                           strokeWidth={2}
-                          dot={{ fill: chartColors.primary }}
+                          dot={{ fill: chartColors.chart }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-
                   <div>
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('timeSpentStudyingExams')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('timeSpentStudyingExams')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={examStudyTimeData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
                         <XAxis
                           dataKey="date"
                           stroke={chartColors.foreground}
@@ -721,34 +721,18 @@ const Dashboard: React.FC = () => {
                           stroke={chartColors.foreground}
                           tick={{ fill: chartColors.foreground }}
                         />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar
-                          dataKey="study_time"
-                          fill={chartColors.primary}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Bar dataKey="study_time" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-
                   {/* Histogram wyników egzaminów */}
                   <div className="md:col-span-2">
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('examScoreDistribution')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('examScoreDistribution')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={histogramExamResultsData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
                         <XAxis
                           dataKey="score"
                           stroke={chartColors.foreground}
@@ -759,34 +743,18 @@ const Dashboard: React.FC = () => {
                           stroke={chartColors.foreground}
                           tick={{ fill: chartColors.foreground }}
                         />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar
-                          dataKey="count"
-                          fill={chartColors.secondary}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Bar dataKey="count" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-
                   {/* Sesje i egzaminy na dzień */}
                   <div className="md:col-span-2">
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('sessionsAndExamsPerDay')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('sessionsAndExamsPerDay')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={combinedExamData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
                         <XAxis
                           dataKey="date"
                           stroke={chartColors.foreground}
@@ -797,24 +765,10 @@ const Dashboard: React.FC = () => {
                           stroke={chartColors.foreground}
                           tick={{ fill: chartColors.foreground }}
                         />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar
-                          dataKey="study_sessions"
-                          fill={chartColors.primary}
-                          radius={[4, 4, 0, 0]}
-                        />
-                        <Bar
-                          dataKey="exams_completed"
-                          fill={chartColors.secondary}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend wrapperStyle={{ color: chartColors.secondary }} />
+                        <Bar dataKey="study_sessions" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="exams_completed" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -827,7 +781,7 @@ const Dashboard: React.FC = () => {
         {/* Analiza fiszek */}
         <div className="border border-border rounded-lg p-4 bg-card shadow-sm">
           <button
-            className="flex justify-between items-center w-full text-left focus:outline-none hover:bg-accent/10 p-2 rounded-lg"
+            className="flex justify-between items-center w-full text-left focus:outline-none hover:bg-accent/10 p-2 rounded-lg transition-colors"
             onClick={() => setIsFlashcardAnalysisOpen(!isFlashcardAnalysisOpen)}
           >
             <div className="flex items-center space-x-2">
@@ -844,12 +798,8 @@ const Dashboard: React.FC = () => {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8">
               {filteredData.user_flashcards.length === 0 ? (
                 <div className="col-span-2 bg-accent/10 border border-accent p-4 rounded-lg">
-                  <strong className="font-bold block mb-2">
-                    {t('noFlashcards.title')}
-                  </strong>
-                  <span className="block mb-4">
-                    {t('noFlashcards.description')}
-                  </span>
+                  <strong className="font-bold block mb-2">{t('noFlashcards.title')}</strong>
+                  <span className="block mb-4">{t('noFlashcards.description')}</span>
                   <Link
                     href="/flashcards"
                     className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md hover:brightness-110 transition-all"
@@ -860,195 +810,90 @@ const Dashboard: React.FC = () => {
               ) : (
                 <>
                   <div>
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('averageFlashcardRatingsOverTime')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('averageFlashcardRatingsOverTime')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={flashcardLineChartData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
-                        <XAxis
-                          dataKey="date"
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <YAxis
-                          domain={[0, 5]}
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <YAxis domain={[0, 5]} stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
                         <Line
                           type="monotone"
                           dataKey="average_rating"
-                          stroke={chartColors.primary}
+                          stroke={chartColors.chart}
                           strokeWidth={2}
-                          dot={{ fill: chartColors.primary }}
+                          dot={{ fill: chartColors.chart }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-
                   <div>
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('totalTimeStudyingFlashcards')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('totalTimeStudyingFlashcards')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <AreaChart data={totalStudyTimeData}>
                         <defs>
                           <linearGradient id="colorTotalStudy" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={chartColors.primary} stopOpacity={0.8} />
-                            <stop offset="95%" stopColor={chartColors.primary} stopOpacity={0} />
+                            <stop offset="5%" stopColor={chartColors.chart} stopOpacity={0.8} />
+                            <stop offset="95%" stopColor={chartColors.chart} stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
-                        <XAxis
-                          dataKey="date"
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <YAxis
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <YAxis stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
                         <Area
                           type="monotone"
                           dataKey="total_study_time"
-                          stroke={chartColors.primary}
+                          stroke={chartColors.chart}
                           fill="url(#colorTotalStudy)"
                         />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
-
                   <div className="md:col-span-2">
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('flashcardsSolvedByHour')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedByHour')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={flashcardsByHourData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
-                        <XAxis
-                          dataKey="hour"
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <YAxis
-                          allowDecimals={false}
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
+                        <XAxis dataKey="hour" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <YAxis allowDecimals={false} stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar
-                          dataKey="count"
-                          fill={chartColors.secondary}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Bar dataKey="count" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-
                   <div className="md:col-span-2">
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('plannedStudySessions')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('plannedStudySessions')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={nextReviewTimelineData}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
-                        <XAxis
-                          dataKey="date"
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <YAxis
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <YAxis stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
                         <Line
                           type="monotone"
                           dataKey="count"
-                          stroke={chartColors.primary}
+                          stroke={chartColors.chart}
                           strokeWidth={2}
-                          dot={{ fill: chartColors.primary }}
+                          dot={{ fill: chartColors.chart }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-
                   <div className="md:col-span-2">
-                    <h4 className="text-lg font-semibold mb-2">
-                      {t('flashcardsSolvedDaily')}
-                    </h4>
+                    <h4 className="text-lg font-semibold mb-2">{t('flashcardsSolvedDaily')}</h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={flashcardsSolvedDaily}>
-                        <CartesianGrid
-                          stroke={chartColors.border}
-                          strokeDasharray="3 3"
-                        />
-                        <XAxis
-                          dataKey="date"
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <YAxis
-                          allowDecimals={false}
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            borderColor: chartColors.border,
-                            borderRadius: 'var(--radius)',
-                          }}
-                        />
+                        <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <YAxis allowDecimals={false} stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <Tooltip content={<CustomTooltip />} />
                         <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar
-                          dataKey="count"
-                          fill={chartColors.secondary}
-                          radius={[4, 4, 0, 0]}
-                        />
+                        <Bar dataKey="count" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                     <div className="mt-4">

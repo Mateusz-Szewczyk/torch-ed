@@ -267,7 +267,7 @@ export default function ExamsPage() {
         </h1>
         <div className="flex items-center space-x-2">
           <CustomTooltip content={t('tests_tooltip')}>
-            <Button variant="ghost" size="icon" className="text-secondary hover:text-primary">
+            <Button variant="ghost" size="icon" className="hover:text-primary">
               <Info className="h-6 w-6" />
               <span className="sr-only">{t('more_information')}</span>
             </Button>
@@ -347,7 +347,7 @@ export default function ExamsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="p-1 text-secondary hover:text-primary"
+                          className="p-1 hover:text-primary"
                           aria-label="Opcje"
                         >
                           <MoreVertical className="h-5 w-5" />

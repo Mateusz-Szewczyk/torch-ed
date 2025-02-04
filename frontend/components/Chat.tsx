@@ -1,5 +1,4 @@
 // src/components/Chat.tsx
-
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -15,7 +14,6 @@ import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import BouncingDots from "@/components/BouncingDots";
 
-// Definicje typów
 type Message = {
   id: string;
   conversation_id: number;
@@ -99,7 +97,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         throw new Error(errData.detail || 'Error sending user message.');
       }
 
-      // Endpoint zapytania
+      // Wywołanie endpointu zapytania
       const response = await fetch(`${API_BASE_URL}/query/`, {
         method: 'POST',
         credentials: 'include',
@@ -142,7 +140,6 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     } catch (err) {
       console.error('Error sending message:', err);
       const errorText = err instanceof Error ? err.message : String(err);
-
       const errorMessage: Message = {
         id: uuidv4(),
         conversation_id: conversationId,
@@ -159,97 +156,95 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
-      {/* Lista wiadomości */}
-      <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full md:w-4/5">
-        {messages.map((message) => {
-          const alignmentClass =
-            message.sender === 'user'
-              ? 'ml-auto mr-0'
-              : 'mr-auto ml-0';
-          return (
-            <div key={message.id} className="flex">
-              <div
-                className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-full sm:max-w-4/5 break-words ${
-                  message.sender === 'user'
-                    ? 'bg-secondary text-secondary-foreground'
-                    : 'bg-background text-foreground'
-                }`}
-              >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  className="prose dark:prose-invert break-words max-w-none"
-                  components={{
-                    code({ className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      const language = match ? match[1] : '';
-                      const isInline = !match;
-
-                      return isInline ? (
-                        <code className={className} {...props}>
-                          {children}
-                        </code>
-                      ) : (
-                        <SyntaxHighlighter
-                          style={oneDark}
-                          language={language}
-                          PreTag="div"
-                          {...(props as SyntaxHighlighterProps)}
-                        >
-                          {String(children).replace(/\n$/, '')}
-                        </SyntaxHighlighter>
-                      );
-                    },
-                  }}
-                >
-                  {message.text}
-                </ReactMarkdown>
+      <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
+        {/* Lista wiadomości */}
+        <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full md:w-3/5">
+          {messages.map((message) => {
+            const alignmentClass =
+                message.sender === 'user' ? 'ml-auto mr-0' : 'mr-auto ml-0';
+            return (
+                <div key={message.id} className="flex">
+                  <div
+                      className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-full sm:max-w-4/5 break-words ${
+                          message.sender === 'user'
+                              ? 'bg-secondary text-secondary-foreground'
+                              : 'bg-background text-foreground'
+                      }`}
+                  >
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        className="prose dark:prose-invert break-words max-w-none"
+                        components={{
+                          code({className, children, ...props}) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const language = match ? match[1] : '';
+                            const isInline = !match;
+                            return isInline ? (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                            ) : (
+                                <SyntaxHighlighter
+                                    style={oneDark}
+                                    language={language}
+                                    PreTag="div"
+                                    {...(props as SyntaxHighlighterProps)}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                            );
+                          },
+                        }}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+            );
+          })}
+          {isLoading && (
+              <div className="flex">
+                <div
+                    className="inline-block p-3 rounded-lg mr-auto max-w-full sm:max-w-4/5 bg-secondary text-secondary-foreground break-words">
+                  <BouncingDots/>
+                </div>
               </div>
-            </div>
-          );
-        })}
-        {isLoading && (
-          <div className="flex">
-            <div className="inline-block p-3 rounded-lg mr-auto max-w-full sm:max-w-4/5 bg-secondary text-secondary-foreground break-words">
-              <BouncingDots />
-            </div>
-          </div>
-        )}
-        <div ref={endRef} />
-      </div>
-      {/* Pole tekstowe */}
-      <div className="border-t border-border p-4 w-full bg-background">
-        <div className="flex justify-center mx-auto w-full md:w-4/5">
-          <div className="flex gap-2 w-full">
-            <div className="flex-grow">
-              <Input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()}
-                placeholder={t('type_message') || 'Type your message...'}
-                className="flex-1 text-base sm:text-sm md:text-sm text-muted-foreground"
-                disabled={isLoading}
-              />
-            </div>
-            <Button
-              onClick={handleSend}
-              disabled={isLoading || !input.trim()}
-              variant="default"
-              className="shrink-0"
-            >
-              <SendIcon className="h-4 w-4" />
-              <span className="sr-only">{t('send')}</span>
-            </Button>
-          </div>
+          )}
+          <div ref={endRef}/>
         </div>
-        {error && (
-          <p className="mt-2 text-sm sm:text-base text-destructive text-center">
-            {error}
-          </p>
-        )}
+        {/* Kontener z polem tekstowym i przyciskiem */}
+        <div className="p-2 w-full md:w-2/3 bg-muted rounded-2xl self-center m-6">
+          <div className="flex justify-center mx-auto w-full">
+            <div className="flex gap-2 w-full">
+              <div className="flex-grow">
+                <Input
+                    multiline
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={t('type_message') || 'Type your message...'}
+                    className="flex-1 text-base sm:text-sm md:text-lg text-muted-foreground"
+                    disabled={isLoading}
+                />
+              </div>
+              <Button
+                  onClick={handleSend}
+                  disabled={isLoading || !input.trim()}
+                  variant="default"
+                  className="shrink-0 self-center"
+              >
+                <SendIcon className="h-4 w-4"/>
+                <span className="sr-only">{t('send')}</span>
+              </Button>
+            </div>
+          </div>
+          {error && (
+              <p className="mt-2 text-sm sm:text-base text-destructive text-center">
+                {error}
+              </p>
+          )}
+        </div>
+
       </div>
-    </div>
   );
 };
 

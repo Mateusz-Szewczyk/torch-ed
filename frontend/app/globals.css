@@ -34,11 +34,12 @@
     --ring: 215 20.2% 65.1%;
 
     --radius: 0.5rem;
+    --chart: 53 90% 60%
   }
 
   .dark {
-    --background: 220 10% 7%;
-    --foreground: 210 40% 92%;
+    --background: 220 10% 9%;
+    --foreground: 210 40% 90%;
 
     --muted: 220 10% 12%;
     --muted-foreground: 215 20.2% 60%;
@@ -46,7 +47,7 @@
     --popover: 220 10% 5%;
     --popover-foreground: 210 40% 98%;
 
-    --card: 220 10% 5%;
+    --card: 220 10% 8%;
     --card-foreground: 210 40% 92%;
 
     --border: 220 10% 15%;
@@ -65,6 +66,7 @@
     --destructive-foreground: 0 85.7% 97.3%;
 
     --ring: 220 10% 15%;
+    --chart: 50 30% 80%
   }
 }
 

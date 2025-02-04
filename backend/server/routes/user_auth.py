@@ -65,7 +65,7 @@ def login() -> Response | tuple:
     response.set_cookie(COOKIE_AUTH,
                         token,
                         samesite='None',
-                        max_age=60 * 60 * 24 * 7,
+                        max_age=60 * 60 * 24 * 5,
                         httponly=True, secure=Config.IS_SECURE,
                         path='/',
                         domain=Config.DOMAIN)

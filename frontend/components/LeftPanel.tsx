@@ -68,7 +68,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const FLASK_API_BASE_URL =
-      process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1/auth';
+      process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1';
 
   const AI_API_BASE_URL =
       process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
