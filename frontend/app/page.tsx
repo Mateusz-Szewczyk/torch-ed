@@ -123,24 +123,11 @@ export default function HomePage() {
       className="relative flex flex-col min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]"
     >
       {/* Bąbelki w tle */}
-      <div className="absolute inset-0 -z-1 overflow-hidden">
-        <div
-          className="absolute w-72 h-72 bg-pink-300/50 rounded-full animate-randomBallOne"
-          style={{ top: '20%', left: '10%' }}
-        />
-        <div
-          className="absolute w-80 h-80 bg-blue-300/50 rounded-full animate-randomBallTwo"
-          style={{ top: '50%', left: '60%' }}
-        />
-        <div
-          className="absolute w-96 h-96 bg-green-300/40 rounded-full animate-randomBallThree"
-          style={{ top: '10%', left: '70%' }}
-        />
-        <div
-          className="absolute w-64 h-64 bg-purple-300/40 rounded-full animate-randomBallFour"
-          style={{ top: '70%', left: '20%' }}
-        />
-      </div>
+      <div className="absolute bubbleOne"/>
+      <div className="absolute bubbleTwo"/>
+      <div className="absolute bubbleThree"/>
+      <div className="absolute bubbleFour"/>
+
 
       {/* Hero / Intro */}
       <section className="py-20 px-4 flex flex-col items-center text-center z-10">
