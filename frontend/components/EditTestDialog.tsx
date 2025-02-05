@@ -9,22 +9,22 @@ import { Textarea } from '@/components/ui/textarea'
 import { useTranslation } from 'react-i18next'
 
 interface Test {
-  id: number;
-  name: string;
-  description?: string;
-  questions: Question[];
+  id: number
+  name: string
+  description?: string
+  questions: Question[]
 }
 
 interface Question {
-  id?: number;
-  question: string;
-  answer: string;
+  id?: number
+  question: string
+  answer: string
 }
 
 interface EditTestDialogProps {
-  test: Test;
-  onSave: (updatedTest: Test) => void;
-  trigger: React.ReactElement;
+  test: Test
+  onSave: (updatedTest: Test) => void
+  trigger: React.ReactElement
 }
 
 export function EditTestDialog({ test, onSave, trigger }: EditTestDialogProps) {
@@ -38,7 +38,7 @@ export function EditTestDialog({ test, onSave, trigger }: EditTestDialogProps) {
       ...test,
       name,
       description,
-      // Zakładając, że pytania są edytowane osobno
+      // Zakładamy, że pytania są edytowane osobno
     }
     onSave(updatedTest)
     setIsOpen(false)
@@ -48,23 +48,39 @@ export function EditTestDialog({ test, onSave, trigger }: EditTestDialogProps) {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{test.id === 0 ? t('create_test') : t('edit_test')}</DialogTitle>
+          <DialogTitle>
+            {test.id === 0 ? t('create_test') : t('edit_test')}
+          </DialogTitle>
         </DialogHeader>
+
         <div className="space-y-4 mt-4">
-          <Input
-            label={t('test_name')}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t('enter_test_name')}
-          />
-          <Textarea
-            label={t('test_description')}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={t('enter_test_description')}
-          />
+          {/* Pole nazwy testu */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-foreground">
+              {t('test_name')}
+            </label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('enter_test_name') || 'Enter a test name'}
+            />
+          </div>
+
+          {/* Pole opisu testu */}
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-foreground">
+              {t('test_description')}
+            </label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={t('enter_test_description') || 'Enter a test description'}
+            />
+          </div>
+
           {/* Możesz dodać pola do edycji pytań, jeśli jest to potrzebne */}
         </div>
+
         <DialogFooter>
           <Button variant="secondary" onClick={() => setIsOpen(false)}>
             {t('cancel')}
@@ -74,7 +90,8 @@ export function EditTestDialog({ test, onSave, trigger }: EditTestDialogProps) {
           </Button>
         </DialogFooter>
       </DialogContent>
-      {/* Trigger Button */}
+
+      {/* Przycisk wywołujący okno dialogowe */}
       {React.cloneElement(trigger, { onClick: () => setIsOpen(true) })}
     </Dialog>
   )
