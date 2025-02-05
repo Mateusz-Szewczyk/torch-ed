@@ -151,7 +151,6 @@ const LoadingSpinner = ({ progress }: { progress: number }) => {
 };
 
 // --- DateInput ---
-// Pole wyboru daty z ikoną kalendarza
 interface DateInputProps {
   id: string;
   value: string;
@@ -177,7 +176,6 @@ const DateInput: React.FC<DateInputProps> = ({ id, value, onChange, label }) => 
 };
 
 // --- FilterCard ---
-// Panel filtrów w formie karty, responsywny i spójny
 const FilterCard: React.FC<{
   filterStartDate: string;
   filterEndDate: string;
@@ -696,10 +694,11 @@ const Dashboard: React.FC = () => {
                           tick={{ fill: chartColors.foreground }}
                         />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
                         <Line
                           type="monotone"
                           dataKey="average_score"
+                          name={t('average_score')}
                           stroke={chartColors.chart}
                           strokeWidth={2}
                           dot={{ fill: chartColors.chart }}
@@ -717,13 +716,15 @@ const Dashboard: React.FC = () => {
                           stroke={chartColors.foreground}
                           tick={{ fill: chartColors.foreground }}
                         />
-                        <YAxis
-                          stroke={chartColors.foreground}
-                          tick={{ fill: chartColors.foreground }}
-                        />
+                        <YAxis stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar dataKey="study_time" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
+                        <Bar
+                          dataKey="study_time"
+                          name={t('study_time')}
+                          fill={chartColors.chart}
+                          radius={[4, 4, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -744,8 +745,13 @@ const Dashboard: React.FC = () => {
                           tick={{ fill: chartColors.foreground }}
                         />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar dataKey="count" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
+                        <Bar
+                          dataKey="count"
+                          name={t('count')}
+                          fill={chartColors.chart}
+                          radius={[4, 4, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -766,9 +772,19 @@ const Dashboard: React.FC = () => {
                           tick={{ fill: chartColors.foreground }}
                         />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.secondary }} />
-                        <Bar dataKey="study_sessions" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="exams_completed" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.secondary }} />
+                        <Bar
+                          dataKey="study_sessions"
+                          name={t('study_sessions')}
+                          fill={chartColors.chart}
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="exams_completed"
+                          name={t('exams_completed')}
+                          fill={chartColors.chart}
+                          radius={[4, 4, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -814,13 +830,18 @@ const Dashboard: React.FC = () => {
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={flashcardLineChartData}>
                         <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <XAxis
+                          dataKey="date"
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
                         <YAxis domain={[0, 5]} stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
                         <Line
                           type="monotone"
                           dataKey="average_rating"
+                          name={t('average_rating')}
                           stroke={chartColors.chart}
                           strokeWidth={2}
                           dot={{ fill: chartColors.chart }}
@@ -839,13 +860,18 @@ const Dashboard: React.FC = () => {
                           </linearGradient>
                         </defs>
                         <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <XAxis
+                          dataKey="date"
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
                         <YAxis stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
                         <Area
                           type="monotone"
                           dataKey="total_study_time"
+                          name={t('total_study_time')}
                           stroke={chartColors.chart}
                           fill="url(#colorTotalStudy)"
                         />
@@ -857,11 +883,24 @@ const Dashboard: React.FC = () => {
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={flashcardsByHourData}>
                         <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
-                        <XAxis dataKey="hour" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
-                        <YAxis allowDecimals={false} stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <XAxis
+                          dataKey="hour"
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar dataKey="count" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
+                        <Bar
+                          dataKey="count"
+                          name={t('count')}
+                          fill={chartColors.chart}
+                          radius={[4, 4, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -870,13 +909,18 @@ const Dashboard: React.FC = () => {
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={nextReviewTimelineData}>
                         <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <XAxis
+                          dataKey="date"
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
                         <YAxis stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
                         <Line
                           type="monotone"
                           dataKey="count"
+                          name={t('count')}
                           stroke={chartColors.chart}
                           strokeWidth={2}
                           dot={{ fill: chartColors.chart }}
@@ -889,11 +933,24 @@ const Dashboard: React.FC = () => {
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={flashcardsSolvedDaily}>
                         <CartesianGrid stroke={chartColors.border} strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
-                        <YAxis allowDecimals={false} stroke={chartColors.foreground} tick={{ fill: chartColors.foreground }} />
+                        <XAxis
+                          dataKey="date"
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          stroke={chartColors.foreground}
+                          tick={{ fill: chartColors.foreground }}
+                        />
                         <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: chartColors.foreground }} />
-                        <Bar dataKey="count" fill={chartColors.chart} radius={[4, 4, 0, 0]} />
+                        <Legend formatter={(value) => t(value)} wrapperStyle={{ color: chartColors.foreground }} />
+                        <Bar
+                          dataKey="count"
+                          name={t('count')}
+                          fill={chartColors.chart}
+                          radius={[4, 4, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                     <div className="mt-4">
