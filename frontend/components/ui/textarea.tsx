@@ -31,7 +31,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
 
             // Default variant
             variant === 'default' && [
-              'bg-primary text-foreground',
+              'bg-background text-foreground',
               'border-input',
               'placeholder:text-muted-foreground',
               'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent'

@@ -319,6 +319,28 @@ def produce_conversation_name(query: str, model: ChatAnthropic) -> str:
         logger.error(f"Error generating conversation title: {e}", exc_info=True)
         return "New Conversation"
 
+def direct_response(query: str, model: ChatAnthropic) -> str:
+    """
+    Szybko generuje odpowiedź bez dodatkowej analizy, korzystając z narzędzia DirectAnswer.
+    """
+    try:
+        # Używamy istniejącego prompta dla bezpośredniej odpowiedzi
+        system_prompt = (
+            "You are a helpful assistant providing a direct and concise answer."
+        )
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{question}")
+        ])
+        messages = prompt.format_messages(question=query)
+        response = model.invoke(messages)
+        if hasattr(response, 'content'):
+            return response.content.strip()
+        else:
+            return str(response).strip()
+    except Exception as e:
+        logger.error(f"Error in direct_response: {e}", exc_info=True)
+        return "Przepraszam, wystąpił problem z generowaniem odpowiedzi."
 
 class ChatAgent:
     MAX_HISTORY_LENGTH = 4
@@ -380,9 +402,14 @@ class ChatAgent:
         )
         self.router = create_router_chain(self.tool_chains)
 
-    def handle_query(self, query: str) -> str:
-        logger.info(f"Handling query: '{query}'")
+    def handle_query(self, query: str, selected_tools: Optional[list[str]] = None) -> str:
+        logger.info(f"Handling query: '{query}' with selected_tools: {selected_tools}")
 
+        # Jeśli użytkownik wybrał narzędzia w przyborniku, obsłuż to oddzielnie:
+        if selected_tools and len(selected_tools) > 0:
+            return self.handle_toolkit(query, selected_tools)
+
+        # Dotychczasowa logika klasyfikacji i routingu
         try:
             conversation = get_latest_checkpoint(self.user_id, self.conversation_id)
             if not conversation:
@@ -395,7 +422,6 @@ class ChatAgent:
             logger.error(f"Error retrieving latest conversation: {e}")
             return "Przepraszam, wystąpił problem z przetworzeniem Twojego zapytania."
 
-        # If conversation just started
         if len(conversation_history) <= 2:
             set_conversation_title_if_needed(conversation, query, self.model)
 
@@ -430,25 +456,64 @@ class ChatAgent:
                         aggregated_context = context
                         current_query = f"Context:\n{aggregated_context}\nQuestion: {query}" if aggregated_context else query
                         response = tool_function(current_query)
-
                     responses.append(response)
                     if not response.startswith("Przepraszam"):
                         aggregated_context += f"\n\nPrevious tool response:\n{response}"
                 except Exception as e:
                     logger.error(f"Error using tool {datasource}: {e}")
                     responses.append(f"Przepraszam, wystąpił problem z narzędziem {datasource}.")
-            logger.info(f"Aggregated context: {aggregated_context}")
-                # Poprawione wywołanie final_answer z dwoma argumentami
             final_response = final_answer(aggregated_context, query)
             logger.info(f"Finalized response: '{final_response}'")
-
         except Exception as e:
             logger.error(f"Query routing failed: {e}")
             return "Przepraszam, wystąpił problem podczas generowania odpowiedzi."
 
         return final_response
 
+    def handle_toolkit(self, query: str, selected_tools: list[str]) -> str:
+        """
+        Obsługuje zapytanie, wywołując narzędzia w kolejności określonej przez użytkownika.
+        Mapowanie:
+          - "Wiedza z plików": wywołuje metodę handle_file_knowledge (stub)
+          - "Generowanie fiszek": FlashcardGenerator
+          - "Generowanie egzaminu": ExamGenerator
+          - "Wyszukaj w internecie": używa tavily search tool
+        """
+        responses = []
+        aggregated_context = ""
+        for tool in selected_tools:
+            try:
+                if tool == "Wiedza z plików":
+                    response = self.handle_file_knowledge(query)
+                elif tool == "Generowanie fiszek":
+                    input_data = json.dumps({"description": aggregated_context, "query": query}, ensure_ascii=False)
+                    response = self.tool_chains.get("FlashcardGenerator", self.tool_chains["DirectAnswer"])(input_data)
+                elif tool == "Generowanie egzaminu":
+                    input_data = json.dumps({"description": aggregated_context, "query": query}, ensure_ascii=False)
+                    response = self.tool_chains.get("ExamGenerator", self.tool_chains["DirectAnswer"])(input_data)
+                elif tool == "Wyszukaj w internecie":
+                    response = self.tool_chains.get("TavilySearchResults", self.tool_chains["DirectAnswer"])(query)
+                else:
+                    # Domyślnie, jeśli opcja nieznana, użyj DirectAnswer
+                    response = self.direct_answer_tool._run(query, "")
+                responses.append(response)
+                if not response.startswith("Przepraszam"):
+                    aggregated_context += f"\n{response}"
+            except Exception as e:
+                logger.error(f"Error using toolkit option {tool}: {e}")
+                responses.append(f"Przepraszam, wystąpił problem z narzędziem {tool}.")
+        # Możemy złożyć wyniki – np. po prostu konkatenacją:
+        return "\n".join(responses)
 
+    def handle_file_knowledge(self, query: str) -> str:
+        """
+        Stub – funkcja obsługująca wiedzę z plików. W przyszłości tutaj można zaimplementować
+        logikę analizującą zawartość załadowanych plików.
+        """
+        # Na razie zwracamy przykładową odpowiedź.
+        return "Wynik analizy plików: [przykładowa wiedza]"
+
+# Zaktualizowana funkcja agent_response
 def agent_response(
         user_id: str,
         query: str,
@@ -456,7 +521,8 @@ def agent_response(
         anthropic_api_key: str = None,
         tavily_api_key: str = None,
         conversation_id: int = None,
-        openai_api_key: str = None
+        openai_api_key: str = None,
+        selected_tools: Optional[list[str]] = None
 ) -> str:
     logger.info(f"Generating response for user_id: {user_id} with query: '{query}'")
 
@@ -465,12 +531,10 @@ def agent_response(
         if not anthropic_api_key:
             raise ValueError("Anthropic API key is not set.")
 
-
     if not openai_api_key:
         openai_api_key = os.getenv('OPENAI_API_KEY')
         if not openai_api_key:
             raise ValueError("OpenAI API key is not set.")
-
 
     if not tavily_api_key:
         tavily_api_key = os.getenv('TAVILY_API_KEY')
@@ -494,7 +558,7 @@ def agent_response(
             openai_api_key=openai_api_key
         )
 
-        response = agent.handle_query(query)
+        response = agent.handle_query(query, selected_tools)
         logger.info(f"Generated response: '{response}'")
         return response
 

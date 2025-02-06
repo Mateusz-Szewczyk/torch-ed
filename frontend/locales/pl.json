@@ -328,5 +328,6 @@
   "total_study_time": "Całkowity czas nauki",
   "study_sessions": "Sesje nauki",
   "exams_completed": "Egzaminy zakończone",
-  "hour": "Godzina"
+  "hour": "Godzina",
+  "select_file": "Wybierz plik"
 }

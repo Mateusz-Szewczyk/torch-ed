@@ -408,3 +408,63 @@
   background-color: rgba(0, 0, 0, 0.5);
   z-index: 50;
 }
+
+.toggle-switch {
+  position: relative;
+  width: 50px;       /* Zmniejszona szerokość */
+  height: 30px;      /* Zmniejszona wysokość */
+
+  --light: #d8dbe0;
+  --dark: #28292c;
+  --link: rgb(27, 129, 112);
+  --link-hover: rgb(24, 94, 82);
+}
+
+.switch-label {
+  position: absolute;
+  width: 100%;
+  height: 30px;      /* Dopasowanie do wysokości toggle-switch */
+  background-color: var(--dark);
+  border-radius: 15px;  /* Połowa wysokości – zaokrąglony prostokąt */
+  cursor: pointer;
+  border: 2px solid var(--dark); /* Możesz zmniejszyć na 2px, by lepiej pasowało */
+}
+
+.checkbox {
+  position: absolute;
+  display: none;
+}
+
+.slider {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 15px;  /* Dopasowanie promienia do wysokości */
+  transition: 0.3s;
+}
+
+/* Tło po zaznaczeniu */
+.checkbox:checked ~ .slider {
+  background-color: var(--light);
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;    /* Około (wysokość - 2 * margines) */
+  height: 22px;
+  border-radius: 50%;  /* Nadaje kształt kółka */
+  box-shadow: inset 8px -4px 0px 0px var(--light);
+  background-color: var(--dark);
+  transition: 0.3s;
+}
+
+/* Przesunięcie kółka w prawo po zaznaczeniu */
+.checkbox:checked ~ .slider::before {
+  transform: translateX(20px); /* Około width - (2*margines + szerokość kółka) */
+  background-color: var(--dark);
+  box-shadow: none;
+}
+

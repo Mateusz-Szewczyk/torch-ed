@@ -1,5 +1,3 @@
-# src/routers/query.py
-
 import os
 import logging
 import asyncio
@@ -18,9 +16,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
@@ -42,17 +38,19 @@ async def query_knowledge(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Odpowiada na zapytania użytkownika, opierając się na agent_response().
-    user_id pobieramy z current_user, a conversation_id z requestu.
+    Odpowiada na zapytania użytkownika. Jeśli w request dodatkowo przesłano listę
+    wybranych narzędzi (selected_tools), to zapytanie będzie przetwarzane przez nie w zadanej kolejności.
+    Jeśli lista jest pusta, zostanie wywołana funkcja direct_response.
     """
     user_id = current_user.id_  # Dekodowane z tokenu
     query = request.query
     conversation_id = request.conversation_id
+    # Przyjmujemy, że QueryRequest ma opcjonalne pole selected_tools: List[str]
+    selected_tools = request.selected_tools if hasattr(request, 'selected_tools') else None
 
-    logger.info(f"Received query from user_id: {user_id} - '{query}'")
+    logger.info(f"Received query from user_id: {user_id} - '{query}', selected_tools: {selected_tools}")
 
     try:
-        # Wykonujemy agent_response w wątku synchronicznym
         answer = await asyncio.to_thread(
             agent_response,
             user_id,
@@ -60,12 +58,14 @@ async def query_knowledge(
             conversation_id=conversation_id,
             model_name="claude-3-haiku-20240307",
             anthropic_api_key=ANTHROPIC_API_KEY,
-            tavily_api_key=TAVILY_API_KEY
+            tavily_api_key=TAVILY_API_KEY,
+            openai_api_key=OPENAI_API_KEY,
+            selected_tools=selected_tools  # Nowa opcja
         )
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
 
         return QueryResponse(
-            user_id=user_id,        # Zwracamy w odpowiedzi
+            user_id=user_id,
             query=query,
             answer=answer
         )
