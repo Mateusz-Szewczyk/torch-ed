@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-import { SendIcon, Settings, ArrowDown, ArrowUp } from "lucide-react"
+import { SendIcon, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import ReactMarkdown from "react-markdown"
@@ -12,7 +12,8 @@ import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { useTranslation } from "react-i18next"
 import { v4 as uuidv4 } from "uuid"
 import BouncingDots from "@/components/BouncingDots"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import ToolSelectionDialog from "@/components/ToolSelectionDialog";
+
 
 type Message = {
   id: string
@@ -34,93 +35,6 @@ const availableTools = [
   "Wyszukaj w internecie"
 ]
 
-const ToolSelectionDialog: React.FC<{
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
-  selectedTools: string[]
-  setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>
-  availableTools: string[]
-}> = ({ isOpen, onOpenChange, selectedTools, setSelectedTools, availableTools }) => {
-  const [tempSelectedTools, setTempSelectedTools] = useState<string[]>(selectedTools)
-
-  useEffect(() => {
-    setTempSelectedTools(selectedTools)
-  }, [selectedTools])
-
-  const moveToolUp = (index: number) => {
-    if (index > 0) {
-      const newTools = [...tempSelectedTools]
-      ;[newTools[index - 1], newTools[index]] = [newTools[index], newTools[index - 1]]
-      setTempSelectedTools(newTools)
-    }
-  }
-
-  const moveToolDown = (index: number) => {
-    if (index < tempSelectedTools.length - 1) {
-      const newTools = [...tempSelectedTools]
-      ;[newTools[index], newTools[index + 1]] = [newTools[index + 1], newTools[index]]
-      setTempSelectedTools(newTools)
-    }
-  }
-
-  const handleSave = () => {
-    setSelectedTools(tempSelectedTools)
-    onOpenChange(false)
-  }
-
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold mb-4">Select and Order Tools</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-6">
-          <div className="space-y-4">
-            {tempSelectedTools.map((tool, index) => (
-              <div key={tool} className="flex items-center space-x-2 bg-secondary p-3 rounded-lg relative">
-                <span className="font-medium">{tool}</span>
-                <div className="flex-grow" />
-                <Button variant="ghost" size="sm" onClick={() => moveToolUp(index)} disabled={index === 0}>
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => moveToolDown(index)} disabled={index === tempSelectedTools.length - 1}>
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setTempSelectedTools((prev) => prev.filter((t) => t !== tool))}>
-                  Remove
-                </Button>
-                {index < tempSelectedTools.length - 1 && (
-                  <ArrowDown className="h-4 w-4 top-16 text-primary absolute -bottom-3 left-1/2 transform -translate-x-1/2" />
-                )}
-              </div>
-            ))}
-          </div>
-          <div>
-            <h4 className="text-lg font-semibold mb-3">Available Tools</h4>
-            <div className="flex flex-wrap gap-2">
-              {availableTools
-                .filter((tool) => !tempSelectedTools.includes(tool))
-                .map((tool) => (
-                  <Button key={tool} variant="outline" size="sm" onClick={() => setTempSelectedTools((prev) => [...prev, tool])}>
-                    {tool}
-                  </Button>
-                ))}
-            </div>
-          </div>
-        </div>
-        <div className="flex justify-end space-x-2 mt-6">
-          <DialogClose>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          <Button onClick={handleSave}>
-            Save
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
@@ -131,7 +45,8 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const endRef = useRef<HTMLDivElement>(null)
   const { t } = useTranslation()
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
 
   // Autoscroll do najnowszej wiadomości
   useEffect(() => {
@@ -141,11 +56,14 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   // Fetch wiadomości z API
   const fetchMessages = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        method: "GET",
-      })
+      const res = await fetch(
+        `${API_BASE_URL}/chats/${conversationId}/messages/`,
+        {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          method: "GET",
+        }
+      )
       if (res.ok) {
         const data: Message[] = await res.json()
         setMessages(data.map((msg) => ({ ...msg, isError: false })))
@@ -183,12 +101,15 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       setError("")
 
       // Zapisz wiadomość użytkownika
-      const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "user", text: userInput }),
-      })
+      const userMessageResponse = await fetch(
+        `${API_BASE_URL}/chats/${conversationId}/messages/`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sender: "user", text: userInput }),
+        }
+      )
 
       if (!userMessageResponse.ok) {
         const errData = await userMessageResponse.json()
@@ -223,12 +144,15 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       }
 
       // Zapisz wiadomość bota
-      const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "bot", text: data.answer }),
-      })
+      const botMessageResponse = await fetch(
+        `${API_BASE_URL}/chats/${conversationId}/messages/`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sender: "bot", text: data.answer }),
+        }
+      )
 
       if (!botMessageResponse.ok) {
         const errData = await botMessageResponse.json()
@@ -258,10 +182,11 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
-      {/* Lista wiadomości */}
+      {/* Obszar wyświetlania wiadomości */}
       <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full md:w-3/5">
         {messages.map((message) => {
-          const alignmentClass = message.sender === "user" ? "ml-auto mr-0" : "mr-auto ml-0"
+          const alignmentClass =
+            message.sender === "user" ? "ml-auto mr-0" : "mr-auto ml-0"
           return (
             <div key={message.id} className="flex">
               <div
@@ -311,48 +236,59 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
         )}
         <div ref={endRef} />
       </div>
-      {/* Kontener z polem tekstowym, przybornikiem i przyciskiem */}
-      <div className="p-2 w-4/5 bg-secondary rounded-2xl self-center m-6 flex flex-col sm:flex-row items-center">
+
+      {/* Nowy container wejścia z buttonem Tools */}
+      <div className="p-4 w-4/5 bg-background/50 border border-border rounded-xl self-center mb-6 flex flex-col gap-3 shadow-lg backdrop-blur-sm">
         <div className="flex gap-2 w-full">
-          <Button
-            onClick={() => setIsToolDialogOpen(true)}
-            variant="outline"
-            className="shrink-0 self-center"
-          >
-            <Settings className="h-4 w-4" />
-            <span className="sr-only">Select Tools</span>
-          </Button>
-          <div className="flex-grow m-2">
-            <Input
-              multiline
-              maxRows={12}
-              value={input}
-              onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-                setInput(e.target.value)
-              }
-              placeholder={t("type_message") || "Type your message..."}
-              className="bg-secondary rounded-2xl flex-1 text-black dark:text-white text-base sm:text-sm md:text-lg"
-              disabled={isLoading}
-            />
-          </div>
+          <Input
+            multiline
+            maxRows={6}
+            value={input}
+            onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+              setInput(e.target.value)
+            }
+            placeholder={t("type_message") || "Type your message..."}
+            className="flex-1 py-4 px-4 rounded-xl border border-input bg-background text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 placeholder:text-muted-foreground/60 resize-none"
+            disabled={isLoading}
+            onKeyDown={(e) =>
+              e.key === "Enter" && !e.shiftKey && handleSend()
+            }
+          />
           <Button
             onClick={handleSend}
             disabled={isLoading || !input.trim()}
-            variant="default"
-            className="shrink-0 self-center mr-2"
+            className="px-6 py-4 h-auto rounded-xl gap-2 hover:scale-105 transition-transform"
+            size="lg"
           >
-            <SendIcon className="h-4 w-4" />
-            <span className="sr-only">{t("send")}</span>
+            <SendIcon className="h-5 w-5" />
           </Button>
         </div>
+
+        {/* Przycisk Tools */}
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => setIsToolDialogOpen(true)}
+            className="px-4 py-2 rounded-lg border-dashed hover:border-solid transition-all group w-full max-w-xs"
+          >
+            <Settings className="h-4 w-4 mr-2 text-primary group-hover:rotate-90 transition-transform" />
+            <span className="text-primary">{t("tools")}</span>
+            {selectedTools.length > 0 && (
+              <span className="ml-2 bg-primary text-primary-foreground rounded-full px-2 py-1 text-xs">
+                {selectedTools.length} {t("selected")}
+              </span>
+            )}
+          </Button>
+        </div>
+
         {error && (
-          <p className="mt-2 text-sm sm:text-base text-destructive text-center">
+          <p className="mt-2 text-sm text-destructive text-center animate-pulse">
             {error}
           </p>
         )}
       </div>
 
-      {/* Tool Selection Dialog */}
+      {/* Dialog z wyborem narzędzi */}
       <ToolSelectionDialog
         isOpen={isToolDialogOpen}
         onOpenChange={setIsToolDialogOpen}

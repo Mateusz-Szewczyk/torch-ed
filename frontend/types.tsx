@@ -32,6 +32,7 @@ export interface Deck {
   name: string;
   description?: string;
   flashcards: Flashcard[];
+  conversation_id: number;
 }
 
 export interface ErrorDetail {

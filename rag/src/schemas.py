@@ -74,21 +74,23 @@ class StudySessionUpdate(BaseModel):
 class DeckBase(BaseModel):
     name: str
     description: Optional[str] = None
+    conversation_id: Optional[int] = None
 
 class DeckCreate(DeckBase):
     flashcards: List[FlashcardCreate]
 
-    @field_validator('name')
-    def name_not_empty(cls, v):
+    @classmethod
+    def validate_name(cls, v: str) -> str:
         if not v.strip():
             raise ValueError('Deck name cannot be empty')
         return v
 
 class DeckRead(BaseModel):
     id: int
-    user_id: int  # Zmieniono z str na int
+    user_id: int
     name: str
     description: Optional[str] = None
+    conversation_id: Optional[int] = None
     flashcards: List[FlashcardRead]
 
     class Config:

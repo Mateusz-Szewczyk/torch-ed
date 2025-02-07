@@ -329,5 +329,18 @@
   "study_sessions": "Sesje nauki",
   "exams_completed": "Egzaminy zakończone",
   "hour": "Godzina",
-  "select_file": "Wybierz plik"
+  "select_file": "Wybierz plik",
+  "toolbox": {
+    "select_order_title": "Wybierz i ustaw kolejność narzędzi",
+    "tooltip_description": "W tym toolboxie możesz przeciągać narzędzia, aby ustawić ich kolejność. Narzędzia wykonują się od góry do dołu.",
+    "available_tools": "Dostępne narzędzia",
+    "cancel": "Anuluj",
+    "save": "Zapisz",
+    "wiedza_z_plików": "Wiedza z plików",
+    "generowanie_fiszek": "Generowanie fiszek",
+    "generowanie_egzaminu": "Generowanie egzaminu",
+    "wyszukaj_w_internecie": "Wyszukaj w internecie"
+  },
+  "selected": "wybrano",
+  "tools": "Narzędzia"
 }

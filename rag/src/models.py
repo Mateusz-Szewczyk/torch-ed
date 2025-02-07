@@ -54,22 +54,15 @@ class ORMFile(Base):
 
 class Deck(Base):
     __tablename__ = 'decks'
-
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    conversation_id = Column(Integer, ForeignKey('conversations.id'), nullable=True)
 
-    flashcards = relationship(
-        "Flashcard",
-        back_populates="deck",
-        cascade="all, delete-orphan"
-    )
-    study_sessions = relationship(
-        "StudySession",
-        back_populates="deck",
-        cascade="all, delete-orphan"
-    )
+    flashcards = relationship("Flashcard", back_populates="deck", cascade="all, delete-orphan")
+    study_sessions = relationship("StudySession", back_populates="deck", cascade="all, delete-orphan")
+
 
 
 class Flashcard(Base):

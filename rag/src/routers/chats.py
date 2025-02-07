@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends, status, Response, Body
+from fastapi import APIRouter, HTTPException, Depends, Response, Body
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
-from ..models import Conversation, Message, User
+from ..models import Conversation, Message, User, Deck
 from ..schemas import (
     ConversationRead,
     MessageCreate,
@@ -20,15 +20,16 @@ logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=ConversationRead, status_code=201)
 async def create_conversation(
+    deck_id: Optional[int] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Utwórz nową konwersację dla zalogowanego użytkownika.
-    user_id jest pobierane z current_user.id_, nie z request body.
+    Jeśli podany zostanie deck_id, to po utworzeniu konwersacji
+    zostanie zaktualizowane pole conversation_id w tabeli decków.
     """
     logger.info(f"Creating a new conversation for user_id: {current_user.id_}")
-
     try:
         new_conversation = Conversation(
             user_id=current_user.id_,
@@ -38,9 +39,14 @@ async def create_conversation(
         db.commit()
         db.refresh(new_conversation)
 
+        # Jeśli przekazano deck_id, spróbuj zaktualizować odpowiedni deck
+        if deck_id is not None:
+            deck = db.query(Deck).filter_by(id=deck_id, user_id=current_user.id_).first()
+            if deck:
+                deck.conversation_id = new_conversation.id
+                db.commit()
         logger.info(f"Created new conversation with ID {new_conversation.id}")
         return new_conversation
-
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating conversation: {e}", exc_info=True)
@@ -55,12 +61,10 @@ async def get_conversations(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Pobierz wszystkie konwersacje dla ZALOGOWANEGO użytkownika.
-    user_id pobieramy z current_user, nie z query param.
+    Pobierz wszystkie konwersacje dla zalogowanego użytkownika.
     """
     user_id = current_user.id_
     logger.info(f"Fetching conversations for user_id: {user_id}")
-
     try:
         conversations = db.query(Conversation).filter_by(user_id=user_id).all()
         return conversations
@@ -87,7 +91,6 @@ async def delete_conversation(
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Autoryzacja
         if conversation.user_id != current_user.id_:
             raise HTTPException(
                 status_code=403,
@@ -98,7 +101,6 @@ async def delete_conversation(
         db.commit()
         logger.info(f"Deleted conversation {conversation_id}")
         return Response(status_code=204)
-
     except Exception as e:
         db.rollback()
         logger.error(f"Error deleting conversation: {e}", exc_info=True)
@@ -115,18 +117,17 @@ async def create_message(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Dodaj nową wiadomość w konwersacji, o ile konwersacja należy do zalogowanego usera.
+    Dodaj nową wiadomość w konwersacji, o ile konwersacja należy do zalogowanego użytkownika.
     """
     try:
         if not message.text or not message.sender:
             raise HTTPException(status_code=400, detail="Invalid message data")
 
-        conversation = db.query(Conversation).filter_by(id=conversation_id).first()
-        if not conversation:
+        const_conversation = db.query(Conversation).filter_by(id=conversation_id).first()
+        if not const_conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Autoryzacja
-        if conversation.user_id != current_user.id_:
+        if const_conversation.user_id != current_user.id_:
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: You cannot post messages to a conversation that isn't yours."
@@ -142,7 +143,6 @@ async def create_message(
         db.refresh(new_message)
 
         return new_message
-
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -164,7 +164,7 @@ async def get_messages(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Pobierz wiadomości dla konwersacji, o ile należy do zalogowanego usera.
+    Pobierz wiadomości dla konwersacji, o ile należy do zalogowanego użytkownika.
     """
     logger.info(f"Fetching messages for conversation {conversation_id}")
     try:
@@ -185,7 +185,6 @@ async def get_messages(
             .all()
         )
         return messages
-
     except Exception as e:
         logger.error(f"Error fetching messages: {e}")
         raise HTTPException(
@@ -201,7 +200,7 @@ async def update_conversation(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Zmień tytuł konwersacji, o ile należy do zalogowanego usera.
+    Zmień tytuł konwersacji, o ile należy do zalogowanego użytkownika.
     """
     logger.info(f"Updating conversation {conversation_id}")
     try:
@@ -223,7 +222,6 @@ async def update_conversation(
 
         logger.info(f"Updated conversation {conversation_id}")
         return conversation
-
     except Exception as e:
         db.rollback()
         logger.error(f"Error updating conversation: {e}", exc_info=True)

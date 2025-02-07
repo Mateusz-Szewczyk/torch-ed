@@ -121,7 +121,7 @@ async def update_deck(
     """
     Aktualizuje deck po ID, jeśli należy do zalogowanego użytkownika.
     """
-    logger.info(f"Aktualizacja decka z ID={deck_id} dla user_id={current_user.id_}")
+    logger.info(f"Updating deck with ID={deck_id} for user_id={current_user.id_}")
     try:
         existing_deck = (
             db.query(Deck)
@@ -130,61 +130,45 @@ async def update_deck(
             .first()
         )
         if not existing_deck:
-            logger.error(f"Deck z ID={deck_id} nie znaleziony lub nie należy do użytkownika.")
-            raise HTTPException(status_code=404, detail="Deck nie znaleziony.")
-
-        logger.debug(f"Przed aktualizacją decka: {existing_deck}")
-
-        # Aktualizacja pól decka
+            logger.error(f"Deck with ID={deck_id} not found or does not belong to user.")
+            raise HTTPException(status_code=404, detail="Deck not found.")
+        # Aktualizacja podstawowych pól decka, w tym conversation_id
         existing_deck.name = deck.name
         existing_deck.description = deck.description
-
-        # Zbieranie istniejących ID fiszek
+        existing_deck.conversation_id = deck.conversation_id  # Kluczowa linia
+        # Aktualizacja flashcards – tutaj zachowujemy oryginalną logikę
         existing_flashcard_ids = set(fc.id for fc in existing_deck.flashcards if fc.id)
-        logger.debug(f"Istniejące ID fiszek: {existing_flashcard_ids}")
-
-        # Zbieranie ID edytowanych fiszek
         edited_flashcards_ids = set(fc.id for fc in deck.flashcards if fc.id is not None)
-        logger.debug(f"ID edytowanych fiszek: {edited_flashcards_ids}")
 
-        # Aktualizacja istniejących lub dodawanie nowych fiszek
         for fc in deck.flashcards:
             if fc.id:
                 if fc.id in existing_flashcard_ids:
-                    existing_fc = next(
-                        (flash for flash in existing_deck.flashcards if flash.id == fc.id),
-                        None
-                    )
+                    existing_fc = next((flash for flash in existing_deck.flashcards if flash.id == fc.id), None)
                     if existing_fc:
                         existing_fc.question = fc.question
                         existing_fc.answer = fc.answer
                         existing_fc.media_url = fc.media_url
-                        logger.debug(f"Aktualizowana fiszka ID={fc.id}: {existing_fc}")
                 else:
-                    logger.warning(f"Fiszka ID={fc.id} nie znaleziono w tym decku. Pomijanie.")
+                    logger.warning(f"Flashcard with ID={fc.id} not found in deck. Skipping.")
             else:
-                # Dodawanie nowej fiszki
                 new_flashcard = Flashcard(
                     question=fc.question,
-                    answer=fc.answer
+                    answer=fc.answer,
+                    media_url=fc.media_url
                 )
                 db.add(new_flashcard)
                 existing_deck.flashcards.append(new_flashcard)
-                logger.debug(f"Dodano nową fiszkę: {new_flashcard}")
 
-        # Usuwanie fiszek, które nie są w przesłanych danych
+        # Usuwanie flashcards, które nie są przesłane
         flashcards_to_remove = existing_flashcard_ids - edited_flashcards_ids
-        logger.debug(f"Fiszki do usunięcia: {flashcards_to_remove}")
-
         for fc_id in flashcards_to_remove:
-            logger.debug(f"Usuwanie fiszki ID={fc_id}")
             fc_to_delete = db.query(Flashcard).filter(Flashcard.id == fc_id).first()
             if fc_to_delete:
                 db.delete(fc_to_delete)
 
         db.commit()
         db.refresh(existing_deck)
-        logger.info(f"Zaktualizowano deck z ID={deck_id}")
+        logger.info(f"Deck with ID={deck_id} updated successfully.")
         return existing_deck
 
     except HTTPException:
@@ -192,8 +176,8 @@ async def update_deck(
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Błąd podczas aktualizacji decka: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Błąd podczas aktualizacji decka: {str(e)}")
+        logger.error(f"Error updating deck: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error updating deck: {str(e)}")
 
 
 @router.delete("/{deck_id}/", response_model=DeckRead)

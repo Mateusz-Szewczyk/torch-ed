@@ -271,5 +271,18 @@
     },
     "no_files_uploaded": "No files uploaded yet.",
     "upload": "Upload",
-    "my_profile": "My Profile"
+    "my_profile": "My Profile",
+    "toolbox": {
+        "select_order_title": "Select and Order Tools",
+        "tooltip_description": "In this toolbox, you can drag tools to set their order. Tools execute from top to bottom.",
+        "available_tools": "Available Tools",
+        "cancel": "Cancel",
+        "save": "Save",
+        "wiedza_z_plików": "Knowledge from Files",
+        "generowanie_fiszek": "Flashcard Generation",
+        "generowanie_egzaminu": "Exam Generation",
+        "wyszukaj_w_internecie": "Search the Internet"
+    },
+    "selected": "selected",
+    "tools": "Tools"
 }
