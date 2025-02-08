@@ -172,6 +172,11 @@ class ConversationUpdate(BaseModel):
             raise ValueError('Title cannot be empty')
         return v
 
+class ExamBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    conversation_id: Optional[int] = None
+
 class ExamAnswerCreate(BaseModel):
     text: str = Field(..., example="3.14")
     is_correct: bool = Field(..., example=True)
@@ -205,15 +210,13 @@ class ExamQuestionRead(BaseModel):
     class Config:
         orm_mode = True
 
-class ExamCreate(BaseModel):
-    name: str = Field(..., example="Egzamin z Matematyki")
-    description: Optional[str] = Field(None, example="Egzamin końcowy z matematyki.")
+class ExamCreate(ExamBase):
     questions: List[ExamQuestionCreate]
 
-    @field_validator('questions')
+    @field_validator('name')
     def validate_questions(cls, v):
         if len(v) == 0:
-            raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
+            raise ValueError("Exam cannot be empty.")
         return v
 
 class ExamRead(BaseModel):
@@ -222,6 +225,7 @@ class ExamRead(BaseModel):
     description: Optional[str]
     created_at: datetime
     questions: List[ExamQuestionRead]
+    conversation_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -230,12 +234,12 @@ class ExamUpdate(BaseModel):
     name: Optional[str] = Field(None, example="Nowa Nazwa Egzaminu")
     description: Optional[str] = Field(None, example="Nowy opis egzaminu.")
     questions: Optional[List[ExamQuestionCreate]] = None
+    conversation_id: Optional[int] = None  # Allow updating conversation_id if needed
 
     @field_validator('questions')
     def validate_questions(cls, v):
-        if v is not None:
-            if len(v) == 0:
-                raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
+        if v is not None and len(v) == 0:
+            raise ValueError("Exam must contain at least one question.")
         return v
 
 

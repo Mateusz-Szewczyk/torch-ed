@@ -1,5 +1,3 @@
-// src/components/StudyExam.tsx
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -13,8 +11,8 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import * as Slider from '@radix-ui/react-slider';
-import Chat from '@/components/Chat'; // <-- import czatu
-import { Loader2 } from 'lucide-react'; // Dodaj import Loader2
+import Chat from '@/components/Chat';
+import { Loader2 } from 'lucide-react';
 
 interface Answer {
   id: number;
@@ -29,10 +27,12 @@ interface Question {
 }
 
 interface Exam {
-  id: number; // Dodaj identyfikator egzaminu
+  id: number;
   name: string;
   description: string;
   questions: Question[];
+  // conversation_id is optional; if missing or 0, a new conversation should be created.
+  conversation_id?: number;
 }
 
 interface StudyExamProps {
@@ -78,12 +78,10 @@ interface UserAnswer {
 export function StudyExam({ exam, onExit }: StudyExamProps) {
   const { t } = useTranslation();
 
-  const [conversationId] = useState<number>(999);
-
-  // Czy panel czatu jest otwarty
+  // Chat panel state
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
-  // Stan egzaminu
+  // Exam study state
   const [numQuestions, setNumQuestions] = useState<number>(10);
   const [isSelectionStep, setIsSelectionStep] = useState<boolean>(true);
   const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
@@ -94,41 +92,34 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
-  // Filtruj tylko odpowiedzi, które zostały udzielone
+  // Filter answered questions
   const answeredQuestions = userAnswers.filter(
     (answer) => answer.selected_answer_id !== null
   );
 
-  // Funkcja losująca pytania
-  const selectRandomQuestions = (
-    allQuestions: Question[],
-    count: number
-  ): Question[] => {
+  // Function to select random questions from the exam
+  const selectRandomQuestions = (allQuestions: Question[], count: number): Question[] => {
     const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, count);
   };
 
-  // Obsługa slidera
+  // Handler for slider change
   const handleSliderChange = (values: number[]) => {
     setNumQuestions(values[0]);
   };
 
-  // Obsługa inputa tekstowego
+  // Handler for input change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value, 10);
     if (!isNaN(value)) {
-      const clampedValue = Math.min(
-        Math.max(value, 1),
-        exam.questions.length
-      );
+      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length);
       setNumQuestions(clampedValue);
     }
   };
 
-  // Start egzaminu
+  // Start the exam: select random questions and initialize answers.
   const startExam = () => {
     const questions = selectRandomQuestions(exam.questions, numQuestions);
     setSelectedQuestions(questions);
@@ -142,15 +133,11 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     setIsSelectionStep(false);
   };
 
-  // Odpowiedź na pytanie
+  // Handle answer selection for a question.
   const handleAnswerSelect = (answerId: number) => {
     const currentQuestion = selectedQuestions[currentQuestionIndex];
-    const selectedAnswer = currentQuestion.answers.find(
-      (a) => a.id === answerId
-    );
-
-    const answerTime = new Date().toISOString(); // Zapisz czas odpowiedzi
-
+    const selectedAnswer = currentQuestion.answers.find((a) => a.id === answerId);
+    const answerTime = new Date().toISOString();
     const updatedUserAnswers = [...userAnswers];
     updatedUserAnswers[currentQuestionIndex] = {
       question_id: currentQuestion.id,
@@ -158,13 +145,11 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
       answer_time: answerTime,
     };
     setUserAnswers(updatedUserAnswers);
-
     if (selectedAnswer && selectedAnswer.is_correct) {
-      setScore((prevScore) => prevScore + 1);
+      setScore((prev) => prev + 1);
     }
-
     if (currentQuestionIndex < selectedQuestions.length - 1) {
-      setCurrentQuestionIndex((prevIndex) => prevIndex + 1);
+      setCurrentQuestionIndex((prev) => prev + 1);
     } else {
       setIsExamCompleted(true);
     }
@@ -173,89 +158,71 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
   const handleRestart = () => {
     setCurrentQuestionIndex(0);
     setScore(0);
-    setUserAnswers(Array(selectedQuestions.length).fill(null));
+    setUserAnswers(selectedQuestions.map(q => ({
+      question_id: q.id,
+      selected_answer_id: null,
+      answer_time: null,
+    })));
     setIsExamCompleted(false);
     setIsSelectionStep(true);
   };
 
-  // Funkcja do przesyłania wyników egzaminu
+  // Function to submit the exam result to the backend.
   const submitExamResult = async () => {
     if (answeredQuestions.length === 0) {
       alert(t('no_answers_to_submit'));
       return;
     }
-
-    // Mapuj odpowiedzi do formatu wymaganego przez backend
     const examResult: ExamResultCreate = {
       exam_id: exam.id,
       answers: answeredQuestions.map((answer) => ({
         question_id: answer.question_id,
-        selected_answer_id: answer.selected_answer_id as number, // Bezpieczne rzutowanie, ponieważ filtrujemy null
+        selected_answer_id: answer.selected_answer_id as number,
         answer_time: answer.answer_time as string,
       })),
     };
-
     try {
       setIsSubmitting(true);
       setSubmitError(null);
-
       const response = await fetch(`${API_BASE_URL}/exams/submit/`, {
         method: 'POST',
-        credentials: 'include', // Upewnij się, że przesyłasz ciasteczka dla autoryzacji
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(examResult),
       });
-
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.detail || 'Błąd podczas przesyłania wyników egzaminu.'
-        );
+        throw new Error(errorData.detail || 'Error submitting exam result.');
       }
-
       const result: ExamResultRead = await response.json();
-      console.log('Wynik egzaminu został zapisany:', result);
-
+      console.log('Exam result saved:', result);
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error('Error submitting exam result:', error.message);
         setSubmitError(error.message);
       } else {
         console.error('Unknown error submitting exam result');
-        setSubmitError(
-          'Wystąpił nieznany błąd podczas przesyłania wyników egzaminu.'
-        );
+        setSubmitError('Unknown error submitting exam result.');
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Wywołanie submitExamResult po zakończeniu egzaminu
+  // Automatically submit exam result when exam is completed.
   useEffect(() => {
     if (isExamCompleted) {
       submitExamResult();
     }
-  }, [isExamCompleted]); // Usunięto submitExamResult z zależności, aby uniknąć nieskończonych pętli
+  }, [isExamCompleted]);
 
-  // ---------------
-  // RENDEROWANIE
-  // ---------------
-
-  // Krok 1: Wybór liczby pytań
+  // Render selection step (choose number of questions)
   if (isSelectionStep) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
         <div className="bg-card p-8 rounded-lg shadow-md w-full max-w-md">
-          {/* Przycisk Powrotu */}
           <div className="flex justify-end mb-4">
-            <Button
-              onClick={onExit}
-              variant="ghost"
-              className="flex items-center space-x-2"
-            >
+            <Button onClick={onExit} variant="ghost" className="flex items-center space-x-2">
               <ChevronLeft className="h-5 w-5" />
               <span>{t('back')}</span>
             </Button>
@@ -264,7 +231,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             {t('select_number_of_questions')}
           </h2>
           <div className="flex flex-col items-center">
-            {/* Suwak */}
             <div className="w-full mb-4">
               <Slider.Root
                 className="relative flex items-center select-none touch-none w-full h-6"
@@ -281,7 +247,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 <Slider.Thumb className="block w-4 h-4 bg-primary rounded-full shadow focus:outline-none focus:ring" />
               </Slider.Root>
             </div>
-            {/* Input */}
             <div className="flex items-center space-x-2 mb-6">
               <span className="text-sm text-muted-foreground">
                 {t('number_of_questions')}:
@@ -295,7 +260,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 className="w-16 p-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            {/* Start Exam Button */}
             <Button
               onClick={startExam}
               variant="default"
@@ -310,7 +274,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     );
   }
 
-  // Krok 2: Egzamin zakończony
   if (isExamCompleted) {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-screen bg-background">
@@ -321,14 +284,12 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
           <p className="text-xl mb-6 text-secondary">
             {t('you_scored')} {score} {t('out_of')} {selectedQuestions.length}
           </p>
-          {/* Wskaźnik ładowania podczas przesyłania */}
           {isSubmitting && (
             <div className="flex items-center justify-center space-x-2 mb-4">
               <Loader2 className="h-5 w-5 animate-spin text-primary" />
               <span>{t('submitting_results')}</span>
             </div>
           )}
-          {/* Komunikat o błędzie */}
           {submitError && (
             <p className="text-destructive mb-4">
               {t('error_submitting_results')}: {submitError}
@@ -357,38 +318,26 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     );
   }
 
-  // Krok 3: Rozwiązywanie egzaminu
+  // Step 3: Exam in progress.
   const currentQuestion = selectedQuestions[currentQuestionIndex];
 
   return (
     <div className="h-screen w-full bg-background flex items-center justify-center">
-      {/* Kontener główny */}
       <div className="relative flex w-full h-full items-center justify-center">
-        {/* Okno egzaminu */}
-        <div
-          className={`transition-all duration-300 ${
-            isChatOpen ? 'mr-96' : ''
-          } w-full max-w-2xl p-4`}
-        >
+        <div className={`transition-all duration-300 ${isChatOpen ? 'mr-96' : ''} w-full max-w-2xl p-4`}>
           <div className="bg-card p-6 rounded-lg shadow-md w-full h-auto">
-            {/* Nagłówek */}
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-primary">{exam.name}</h2>
-              {/* Przycisk toggle czatu */}
               <Button
                 variant="secondary"
                 onClick={() => setIsChatOpen(!isChatOpen)}
                 className="flex items-center space-x-2"
               >
                 <MessageCircle className="h-5 w-5" />
-                <span>
-                  {isChatOpen ? t('hide_chat') : t('show_chat')}
-                </span>
+                <span>{isChatOpen ? t('hide_chat') : t('show_chat')}</span>
               </Button>
             </div>
-
             <p className="mb-6">{exam.description}</p>
-            {/* Wyświetlanie pytania */}
             <div className="mb-4">
               <h3 className="text-xl font-semibold mb-2">
                 {t('question')}: {currentQuestion.text}
@@ -396,10 +345,8 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
               <div className="grid grid-cols-1 gap-4">
                 {currentQuestion.answers.map((answer) => {
                   const isSelected =
-                    userAnswers[currentQuestionIndex]?.selected_answer_id ===
-                    answer.id;
+                    userAnswers[currentQuestionIndex]?.selected_answer_id === answer.id;
                   const isCorrect = answer.is_correct;
-
                   return (
                     <Button
                       key={answer.id}
@@ -411,17 +358,11 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                           : 'outline'
                       }
                       onClick={() => {
-                        if (
-                          userAnswers[currentQuestionIndex]?.selected_answer_id ===
-                          null
-                        ) {
+                        if (userAnswers[currentQuestionIndex]?.selected_answer_id === null) {
                           handleAnswerSelect(answer.id);
                         }
                       }}
-                      disabled={
-                        userAnswers[currentQuestionIndex]?.selected_answer_id !==
-                        null
-                      }
+                      disabled={userAnswers[currentQuestionIndex]?.selected_answer_id !== null}
                       className="w-full flex items-center justify-center space-x-2"
                     >
                       {isSelected && isCorrect && (
@@ -436,12 +377,9 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 })}
               </div>
             </div>
-            {/* Nawigacja pytaniami i przycisk "Zapisz podejście" */}
             <div className="flex justify-between mt-6">
               <Button
-                onClick={() =>
-                  setCurrentQuestionIndex(Math.max(currentQuestionIndex - 1, 0))
-                }
+                onClick={() => setCurrentQuestionIndex(Math.max(currentQuestionIndex - 1, 0))}
                 disabled={currentQuestionIndex === 0}
                 variant="ghost"
                 className="flex items-center space-x-2"
@@ -462,10 +400,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 <Button
                   variant="default"
                   onClick={() => {
-                    if (
-                      userAnswers[currentQuestionIndex]?.selected_answer_id !==
-                      null
-                    ) {
+                    if (userAnswers[currentQuestionIndex]?.selected_answer_id !== null) {
                       if (currentQuestionIndex < selectedQuestions.length - 1) {
                         setCurrentQuestionIndex(currentQuestionIndex + 1);
                       } else {
@@ -473,21 +408,16 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                       }
                     }
                   }}
-                  disabled={
-                    userAnswers[currentQuestionIndex]?.selected_answer_id === null
-                  }
+                  disabled={userAnswers[currentQuestionIndex]?.selected_answer_id === null}
                   className="flex items-center space-x-2"
                 >
                   <span>
-                    {currentQuestionIndex < selectedQuestions.length - 1
-                      ? t('next')
-                      : t('finish')}
+                    {currentQuestionIndex < selectedQuestions.length - 1 ? t('next') : t('finish')}
                   </span>
                   <ChevronRight className="h-5 w-5" />
                 </Button>
               </div>
             </div>
-            {/* Wskaźnik ładowania i komunikat o błędzie */}
             {isSubmitting && (
               <div className="flex items-center justify-center space-x-2 mt-4">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -499,7 +429,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 {t('error_submitting_results')}: {submitError}
               </p>
             )}
-            {/* Wyjście z egzaminu */}
             <Button
               variant="destructive"
               onClick={onExit}
@@ -510,11 +439,9 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             </Button>
           </div>
         </div>
-
-        {/* Panel czatu po prawej stronie */}
         {isChatOpen && (
           <div className="w-[40%] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
-            <Chat conversationId={conversationId} />
+            <Chat conversationId={exam.conversation_id || 0} />
           </div>
         )}
       </div>

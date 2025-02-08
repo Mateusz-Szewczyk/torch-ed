@@ -173,6 +173,7 @@ class Exam(Base):
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
+    conversation_id = Column(Integer, nullable=True)  # New field to store conversation ID
 
     questions = relationship(
         "ExamQuestion",

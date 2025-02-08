@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from ..models import Conversation, Message, User, Deck
+from ..models import Conversation, Message, User, Deck, Exam
 from ..schemas import (
     ConversationRead,
     MessageCreate,
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @router.post("/", response_model=ConversationRead, status_code=201)
 async def create_conversation(
     deck_id: Optional[int] = Body(None),
+    exam_id: Optional[int] = Body(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -45,6 +46,13 @@ async def create_conversation(
             if deck:
                 deck.conversation_id = new_conversation.id
                 db.commit()
+
+        if exam_id is not None:
+            exam = db.query(Exam).filter_by(id=exam_id, user_id=current_user.id_).first()
+            if exam:
+                exam.conversation_id = new_conversation.id
+                db.commit()
+
         logger.info(f"Created new conversation with ID {new_conversation.id}")
         return new_conversation
     except Exception as e:
@@ -75,28 +83,41 @@ async def get_conversations(
             detail=f"Error fetching conversations: {str(e)}"
         )
 
+
 @router.delete("/{conversation_id}", status_code=204)
 async def delete_conversation(
-    conversation_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        conversation_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
-    Usuń konwersację oraz powiązane z nią wiadomości,
-    o ile należy do zalogowanego użytkownika.
+    Deletes a conversation and its associated messages if it belongs to the logged-in user.
+    Before deletion, sets the conversation_id field of any Deck (or Exam) referencing this conversation to NULL.
     """
     logger.info(f"Deleting conversation {conversation_id}")
     try:
+        # Retrieve the conversation to delete
         conversation = db.query(Conversation).filter_by(id=conversation_id).first()
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+        # Authorization check
         if conversation.user_id != current_user.id_:
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: You cannot delete a conversation that isn't yours."
             )
 
+        # Update all decks an exams that reference this conversation
+        decks_to_update = db.query(Deck).filter(Deck.conversation_id == conversation_id).all()
+        for deck in decks_to_update:
+            deck.conversation_id = None
+
+        exams_to_update = db.query(Exam).filter(Exam.conversation_id == conversation_id).all()
+        for exam in exams_to_update:
+            exam.conversation_id = None
+
+        # Now delete the conversation
         db.delete(conversation)
         db.commit()
         logger.info(f"Deleted conversation {conversation_id}")
@@ -108,6 +129,7 @@ async def delete_conversation(
             status_code=500,
             detail=f"Error deleting conversation: {str(e)}"
         )
+
 
 @router.post("/{conversation_id}/messages/", response_model=MessageRead, status_code=201)
 async def create_message(
