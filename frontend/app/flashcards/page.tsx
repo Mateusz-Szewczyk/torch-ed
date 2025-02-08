@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useCallback, MouseEvent } from 'react';
 import { EditDeckDialog } from '@/components/EditDeckDialog';
 import { ImportFlashcardsModal } from '@/components/ImportFlashcardsModal';
-import { Button } from "@/components/ui/button";
+import { Button } from '@/components/ui/button';
 import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { StudyDeck } from '@/components/StudyDeck';
 import { CustomTooltip } from '@/components/CustomTooltip';
@@ -33,9 +33,10 @@ export default function FlashcardsPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
   const API_BASE_URL = `${API_URL}/decks/`;
   const STUDY_SESSIONS_URL = `${API_URL}/study_sessions/`;
+  const CONVERSATIONS_URL = `${API_URL}/chats/`;
 
   /**
-   * Pobiera decki.
+   * Fetch decks from backend.
    */
   const fetchDecks = useCallback(async () => {
     setLoading(true);
@@ -69,7 +70,7 @@ export default function FlashcardsPage() {
   }, [fetchDecks]);
 
   /**
-   * Funkcja asynchroniczna zapisywania decka.
+   * Saves (creates/updates) a deck.
    */
   const handleSave = async (updatedDeck: Deck): Promise<void> => {
     try {
@@ -85,7 +86,7 @@ export default function FlashcardsPage() {
       };
 
       if (updatedDeck.id === 0) {
-        // Tworzenie nowego decka – domyślnie conversation_id = 0
+        // Create a new deck (with conversation_id defaulting to 0)
         const response = await fetch(API_BASE_URL, {
           method: 'POST',
           credentials: 'include',
@@ -99,7 +100,7 @@ export default function FlashcardsPage() {
         const newDeck: Deck = await response.json();
         setDecks(prevDecks => [...prevDecks, newDeck]);
       } else {
-        // Aktualizacja istniejącego decka
+        // Update existing deck
         const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
           method: 'PUT',
           credentials: 'include',
@@ -117,7 +118,7 @@ export default function FlashcardsPage() {
           )
         );
       }
-      // Zamknięcie Collapsible po zapisaniu
+      // Close collapsible panel after save
       setOpenCollapsibles(prev => ({ ...prev, [updatedDeck.id]: false }));
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -129,7 +130,7 @@ export default function FlashcardsPage() {
     }
   };
 
-  // Wrapper do onSave – zwraca void.
+  // Wrapper to pass to EditDeckDialog
   const handleSaveWrapper = (updatedDeck: Deck): void => {
     void handleSave(updatedDeck);
   };
@@ -157,20 +158,20 @@ export default function FlashcardsPage() {
   };
 
   /**
-   * Rozpoczyna naukę danej talii.
-   * Jeśli talia nie ma ustawionego conversation_id (lub ma 0), tworzymy nową konwersację,
-   * aktualizujemy decka w bazie oraz stan lokalny, aby zapisać nowy conversation_id.
+   * Starts a study session for a deck.
+   * If the deck does not have a conversation_id (or it is 0),
+   * create a new conversation, update the deck in the database (and locally),
+   * then start the study session using the updated conversation_id.
    */
   const handleStudy = async (deck: Deck) => {
     try {
       let convId = deck.conversation_id;
       if (!convId || convId === 0) {
-        // Tworzymy nową konwersację dla tego decka
-        const convResponse = await fetch(`${API_URL}/chats/`, {
+        // Create a new conversation for the deck
+        const convResponse = await fetch(CONVERSATIONS_URL, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deck_id: deck.id, title: deck.name })
         });
         if (!convResponse.ok) {
           const convError = await convResponse.json();
@@ -178,8 +179,7 @@ export default function FlashcardsPage() {
         }
         const newConv = await convResponse.json();
         convId = newConv.id;
-        console.log(convId)
-        // Aktualizujemy decka w bazie, zapisując nowe conversation_id
+        // Update the deck in the database with the new conversation_id
         const updateResponse = await fetch(`${API_BASE_URL}${deck.id}/`, {
           method: 'PUT',
           credentials: 'include',
@@ -201,24 +201,24 @@ export default function FlashcardsPage() {
           throw new Error(updateError.detail || 'Nie udało się zaktualizować decka.');
         }
         const updatedDeck = await updateResponse.json();
-        setDecks(prev => prev.map(d => d.id === deck.id ? updatedDeck : d));
-        deck = updatedDeck;
+        setDecks(prev => prev.map(d => (d.id === deck.id ? updatedDeck : d)));
+        deck = updatedDeck; // update local deck object
       }
 
-      // Rozpoczynamy sesję nauki wykorzystując conversation_id zapisane w decku
+      // Start the study session using the conversation_id from the deck
       const response = await fetch(`${STUDY_SESSIONS_URL}start`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deck_id: deck.id, conversation_id: convId })
+        body: JSON.stringify({ deck_id: deck.id, conversation_id: convId }),
       });
       if (!response.ok) {
         const errorData: ErrorResponse = await response.json();
         let errorMessage = 'Nie udało się rozpocząć sesji nauki.';
         if (Array.isArray(errorData.detail)) {
-          errorMessage = errorData.detail.map((err) =>
-            (typeof err === 'object' && 'msg' in err ? err.msg : String(err))
-          ).join(', ');
+          errorMessage = errorData.detail
+            .map((err) => (typeof err === 'object' && 'msg' in err ? err.msg : String(err)))
+            .join(', ');
         } else if (typeof errorData.detail === 'string') {
           errorMessage = errorData.detail;
         }
@@ -253,7 +253,7 @@ export default function FlashcardsPage() {
   const toggleCollapsibles = (deckId: number) => {
     setOpenCollapsibles(prev => ({
       ...prev,
-      [deckId]: !prev[deckId]
+      [deckId]: !prev[deckId],
     }));
   };
 
