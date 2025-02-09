@@ -116,14 +116,14 @@ class UploadResponse(BaseModel):
 class QueryRequest(BaseModel):
     query: str
     conversation_id: int
+    selected_tools: Optional[List[str]] = None
 
 class QueryResponse(BaseModel):
-    user_id: int  # Zmieniono z str na int
+    user_id: int
     query: str
     answer: str
 
 class DeleteKnowledgeRequest(BaseModel):
-    user_id: int  # Zmieniono z str na int
     file_name: str
 
 class DeleteKnowledgeResponse(BaseModel):
@@ -131,18 +131,18 @@ class DeleteKnowledgeResponse(BaseModel):
     deleted_from_vector_store: bool
 
 class ListFilesRequest(BaseModel):
-    user_id: int  # Zmieniono z str na int
+    user_id: int
 
 class ConversationBase(BaseModel):
     user_id: int
-    title: Optional[str] = None  # Dodane pole title
+    title: Optional[str] = None
 
 class ConversationCreate(ConversationBase):
     pass
 
 class ConversationRead(BaseModel):
     id: int
-    user_id: int  # Zmieniono z int na int (bez zmian)
+    user_id: int
     title: Optional[str] = None
     created_at: datetime
 

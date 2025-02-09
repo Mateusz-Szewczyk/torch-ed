@@ -275,6 +275,7 @@ class RAGTool(BaseTool):
 
         # External Knowledge
         try:
+            self.user_id = str(self.user_id)
             results = search_and_rerank(hyde_answer, user_id=self.user_id, n_results=5)
             external_passages = [doc.get('content', '') for doc in results]
             logger.info(f"Retrieved {len(external_passages)} external passages.")
@@ -289,13 +290,13 @@ class RAGTool(BaseTool):
         Generates a factual and concise answer using the Hyde model.
         """
         system_prompt = (
-            "You are an AI tasked with producing concise and factual one to two paragraph long answers. "
-            "You will try to generate short but informative answers."
+            "You are an AI tasked with producing one to two paragraph long answers. "
+            "You will try to generate short but informative answers. Your answers can be hypothetical or speculative. Please include the most key phrases in the answer."
              )
         user_prompt = f"""
             Question: {query}
 
-            Please generate a factual and concise answer using the provided query.
+            Please generate an answer using the provided query.
         """
         prompt_template = ChatPromptTemplate.from_messages([
             SystemMessage(content=system_prompt),

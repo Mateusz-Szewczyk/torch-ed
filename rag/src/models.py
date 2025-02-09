@@ -8,7 +8,7 @@ from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,
     func, Float, UniqueConstraint
 )
-from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session
+from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session, backref
 from .database import Base
 
 
@@ -173,14 +173,13 @@ class Exam(Base):
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
-    conversation_id = Column(Integer, nullable=True)  # New field to store conversation ID
+    conversation_id = Column(Integer, nullable=True)  # Pole na conversation_id
 
     questions = relationship(
         "ExamQuestion",
         back_populates="exam",
         cascade="all, delete-orphan"
     )
-
 
 class ExamQuestion(Base):
     __tablename__ = 'exam_questions'
@@ -189,16 +188,12 @@ class ExamQuestion(Base):
     text = Column(String, nullable=False)
     exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
 
-    exam = relationship(
-        "Exam",
-        back_populates="questions"
-    )
+    exam = relationship("Exam", back_populates="questions")
     answers = relationship(
         "ExamAnswer",
         back_populates="question",
         cascade="all, delete-orphan"
     )
-
 
 class ExamAnswer(Base):
     __tablename__ = 'exam_answers'
@@ -208,54 +203,39 @@ class ExamAnswer(Base):
     is_correct = Column(Boolean, nullable=False, default=False)
     question_id = Column(Integer, ForeignKey('exam_questions.id'), nullable=False)
 
-    question = relationship(
-        "ExamQuestion",
-        back_populates="answers"
-    )
-
+    question = relationship("ExamQuestion", back_populates="answers")
 
 class ExamResult(Base):
     __tablename__ = 'exam_results'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
+    exam_id = Column(Integer, ForeignKey('exams.id', ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
     score = Column(Float, nullable=True)
 
-    exam = relationship(
-        "Exam",
-        backref="results"
-    )
+    # Ustawienie cascade na backref powoduje, że przy usuwaniu egzaminu wyniki również zostaną usunięte.
+    exam = relationship("Exam", backref=backref("results", cascade="all, delete-orphan"))
     answers = relationship(
         "ExamResultAnswer",
         back_populates="exam_result",
         cascade="all, delete-orphan"
     )
 
-    model_config = ConfigDict(from_attributes=True)
-
-
-
 class ExamResultAnswer(Base):
     __tablename__ = 'exam_result_answers'
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    exam_result_id = Column(Integer, ForeignKey('exam_results.id'), nullable=False)
+    exam_result_id = Column(Integer, ForeignKey('exam_results.id', ondelete="CASCADE"), nullable=False)
     question_id = Column(Integer, ForeignKey('exam_questions.id'), nullable=False)
     selected_answer_id = Column(Integer, ForeignKey('exam_answers.id'), nullable=False)
     is_correct = Column(Boolean, nullable=False)
     answer_time = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    exam_result = relationship(
-        "ExamResult",
-        back_populates="answers"
-    )
+    exam_result = relationship("ExamResult", back_populates="answers")
     question = relationship("ExamQuestion")
     selected_answer = relationship("ExamAnswer")
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class User(Base):

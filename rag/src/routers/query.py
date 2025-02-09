@@ -46,7 +46,7 @@ async def query_knowledge(
     query = request.query
     conversation_id = request.conversation_id
     # Przyjmujemy, że QueryRequest ma opcjonalne pole selected_tools: List[str]
-    selected_tools = request.selected_tools if hasattr(request, 'selected_tools') else None
+    selected_tools = request.selected_tools
 
     logger.info(f"Received query from user_id: {user_id} - '{query}', selected_tools: {selected_tools}")
 
@@ -60,7 +60,7 @@ async def query_knowledge(
             anthropic_api_key=ANTHROPIC_API_KEY,
             tavily_api_key=TAVILY_API_KEY,
             openai_api_key=OPENAI_API_KEY,
-            selected_tools=selected_tools  # Nowa opcja
+            selected_tools=selected_tools
         )
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
 
