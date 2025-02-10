@@ -49,7 +49,6 @@ An intelligent learning platform that revolutionizes your study experience.
 
 ## 🚀 Features
 
-- **🍅 Pomodoro Timer**: Boost your focus and track study time
 - **📝 Auto Test Generator**: Create quizzes from your uploaded materials
 - **🗃️ Auto Flashcards Generator**: Generate and review flashcards with progress tracking
 - **📚 Knowledge Base**: Store and retrieve your learning materials easily
