@@ -120,7 +120,7 @@ export default function HomePage() {
     <Dashboard />
   ) : (
     <div
-      className="relative flex flex-col min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]"
+      className="relative flex flex-col max-w-[98%] mx-auto min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]"
     >
       {/* Bąbelki w tle */}
       <div className="absolute bubbleOne"/>

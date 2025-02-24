@@ -186,11 +186,11 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
       <div className="flex-1 overflow-auto mx-auto p-4 pb-32 w-full md:w-3/5">
         {messages.map((message) => {
           const alignmentClass =
-            message.sender === "user" ? "ml-auto mr-0" : "mr-auto ml-0"
+            message.sender === "user" ? "ml-auto mr-0 max-w-[80%]" : "mr-auto ml-0 max-w-full"
           return (
             <div key={message.id} className="flex">
               <div
-                className={`inline-block p-3 rounded-lg ${alignmentClass} max-w-full sm:max-w-4/5 break-words ${
+                className={`inline-block p-3 rounded-lg ${alignmentClass} sm:max-w-4/5 break-words ${
                   message.sender === "user"
                     ? "bg-secondary text-secondary-foreground"
                     : "bg-background text-foreground"
