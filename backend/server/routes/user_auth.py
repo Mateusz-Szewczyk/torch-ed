@@ -66,9 +66,9 @@ def login() -> Response | tuple:
                     COOKIE_AUTH,
                     max_age=0,
                     httponly=True,
-                    secure=True,
+                    secure=Config.IS_SECURE,
                     path='/',
-                    domain='.up.railway.app'
+                    domain=Config.DOMAIN
                 )
                 return 
         else:
