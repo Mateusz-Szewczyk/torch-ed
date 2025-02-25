@@ -31,6 +31,7 @@ def data_check(request: Request, method: str) -> tuple | dict:
 
     user_name: str | None = data.get('user_name')
     user: User | None = User.get_user(session, user_name) if user_name else None
+
     password: str | None
     password2: str | None
     if method == 'login':
@@ -40,6 +41,8 @@ def data_check(request: Request, method: str) -> tuple | dict:
         if not check_password_hash(user.password, password):
             return jsonify({ 'error': 'Invalid credentials' }), 400
         
+        if not user.confirmed:
+            return jsonify({ 'error': 'User not confirmed'}), 423
         return {'user': user, 'path': path}
     
     elif method == 'register':
@@ -93,6 +96,7 @@ def signature_check(func: Callable) -> Callable | tuple:
     
     return wraper
 
+<<<<<<< Updated upstream
 def send_email(to: str, message: str) -> None:
     if not isinstance(EMAIL, str) or not isinstance(EMAIL_PASSWORD, str):
         raise Misconfiguration('No email or password')
@@ -104,3 +108,40 @@ def send_email(to: str, message: str) -> None:
             to_addrs=to,
             msg=message
         )
+=======
+
+def send_email(to: str, subject: str, message: str) -> None:
+    """
+    Wysyła e-mail za pomocą Gmaila.
+
+    :param to: Adres e-mail odbiorcy
+    :param subject: Temat wiadomości
+    :param message: Treść wiadomości
+    """
+    try:
+        # Sprawdzenie konfiguracji e-maila
+        if not EMAIL or not EMAIL_PASSWORD:
+            raise ValueError("Email or password not provided.")
+
+        # Utworzenie wiadomości MIME
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL
+        msg['To'] = to
+        msg['Subject'] = subject
+        msg.attach(MIMEText(message, 'plain'))
+
+        # Połączenie z serwerem SMTP
+        with smtplib.SMTP('smtp.gmail.com', 587) as connection:
+            connection.starttls()  # Rozpoczęcie szyfrowanego połączenia
+            connection.login(EMAIL, EMAIL_PASSWORD)  # Logowanie do konta
+            connection.send_message(msg)  # Wysłanie wiadomości
+
+        print(f"Email sent successfully to {to}")
+
+    except smtplib.SMTPAuthenticationError:
+        print("Error: Authentication failed. Check your email and password.")
+    except smtplib.SMTPConnectError:
+        print("Error: Unable to connect to the SMTP server.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+>>>>>>> Stashed changes
