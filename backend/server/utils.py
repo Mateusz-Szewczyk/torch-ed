@@ -34,6 +34,7 @@ def data_check(request: Request, method: str) -> tuple | dict:
 
     user_name: str | None = data.get('user_name')
     user: User | None = User.get_user(session, user_name) if user_name else None
+
     password: str | None
     password2: str | None
     if method == 'login':
@@ -43,6 +44,8 @@ def data_check(request: Request, method: str) -> tuple | dict:
         if not check_password_hash(user.password, password):
             return jsonify({ 'error': 'Invalid credentials' }), 400
         
+        if not user.confirmed:
+            return jsonify({ 'error': 'User not confirmed'}), 423
         return {'user': user, 'path': path}
     
     elif method == 'register':

@@ -1,8 +1,6 @@
 # src/models.py
-
+from datetime import datetime, timezone
 from typing import Optional
-from datetime import datetime
-
 from pydantic import ConfigDict
 from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,
@@ -18,7 +16,7 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
     title = Column(String, nullable=True)
 
     messages = relationship(
@@ -50,7 +48,7 @@ class ORMFile(Base):
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
 
 
 class Deck(Base):
@@ -95,7 +93,7 @@ class UserFlashcard(Base):
     ef = Column(Float, default=2.5)
     interval = Column(Integer, default=0)
     repetitions = Column(Integer, default=0)
-    next_review = Column(DateTime, default=datetime.utcnow)
+    next_review = Column(DateTime, default=datetime.now(timezone.utc))
 
     user = relationship(
         "User",
@@ -125,7 +123,7 @@ class StudySession(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True)
     deck_id = Column(Integer, ForeignKey('decks.id'))
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     user = relationship(
@@ -153,7 +151,7 @@ class StudyRecord(Base):
     session_id = Column(Integer, ForeignKey('study_sessions.id'))
     user_flashcard_id = Column(Integer, ForeignKey('user_flashcards.id'))
     rating = Column(Integer, nullable=True)  # Ocena użytkownika (0-5)
-    reviewed_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     session = relationship(
         "StudySession",
@@ -172,7 +170,7 @@ class Exam(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
     conversation_id = Column(Integer, nullable=True)  # Pole na conversation_id
 
@@ -212,7 +210,7 @@ class ExamResult(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     exam_id = Column(Integer, ForeignKey('exams.id', ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
-    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
     completed_at = Column(DateTime, nullable=True)
     score = Column(Float, nullable=True)
 
@@ -232,7 +230,7 @@ class ExamResultAnswer(Base):
     question_id = Column(Integer, ForeignKey('exam_questions.id'), nullable=False)
     selected_answer_id = Column(Integer, ForeignKey('exam_answers.id'), nullable=False)
     is_correct = Column(Boolean, nullable=False)
-    answer_time = Column(DateTime, default=datetime.utcnow, nullable=False)
+    answer_time = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
 
     exam_result = relationship("ExamResult", back_populates="answers")
     question = relationship("ExamQuestion")
@@ -249,6 +247,8 @@ class User(Base):
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     role: Mapped[str] = mapped_column(String, nullable=False, default='user')
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now(timezone.utc))
 
     user_flashcards = relationship(
         "UserFlashcard",

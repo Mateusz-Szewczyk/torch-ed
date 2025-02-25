@@ -11,9 +11,9 @@ class Config:
     SECRET_KEY: str | None = os.getenv('SECRET_KEY')
     PRP_PATH: str = "prp_key.pem"
     PUP_PATH: str = "pup_key.pem"
-    SALT = os.getenv('SALT')
-    DOMAIN = os.getenv('DOMAIN', '.torched.pl')
-    IS_SECURE = os.getenv('IS_SECURE', True)
+    SALT: str = os.getenv('SALT', '')
+    DOMAIN: str = os.getenv('DOMAIN', '.torched.pl')
+    IS_SECURE: bool = os.getenv('IS_SECURE', True) in ('true', '1', 'yes', True, 1)
 
 
 
