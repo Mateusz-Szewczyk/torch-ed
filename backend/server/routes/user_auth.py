@@ -5,7 +5,7 @@ from werkzeug import Response
 from ..utils import FRONTEND, COOKIE_AUTH, data_check, send_email, signature_check
 from ..jwt import generate_token, decode_token
 from ..models import User
-from .. import session, blacklist
+from .. import session
 from ..jwt import generate_confirmation_token, confirm_token
 from ..config import Config
 
@@ -13,28 +13,28 @@ load_dotenv()
 user_auth: Blueprint = Blueprint('auth', __name__)
 
 
-@user_auth.route('/me', methods=['GET'])
-def me():
-    """
-    Check if user is logged in.
-    :return: JSON with logged_in status
-    """
-    token = request.cookies.get(COOKIE_AUTH)
-    if not token:
-        return jsonify({"logged_in": False}), 401
+# @user_auth.route('/me', methods=['GET'])
+# def me():
+#     """
+#     Check if user is logged in.
+#     :return: JSON with logged_in status
+#     """
+#     token = request.cookies.get(COOKIE_AUTH)
+#     if not token:
+#         return jsonify({"logged_in": False}), 401
 
-    token_data = decode_token(token.encode('utf-8'), path=Config.PRP_PATH)
-    if not token_data:
-        return jsonify({"logged_in": False}), 401
+#     token_data = decode_token(token.encode('utf-8'), path=Config.PRP_PATH)
+#     if not token_data:
+#         return jsonify({"logged_in": False}), 401
 
-    # If decode is successful
-    return jsonify({
-        "logged_in": True,
-        "user_id": token_data["aud"],
-    })
+#     # If decode is successful
+#     return jsonify({
+#         "logged_in": True,
+#         "user_id": token_data["aud"],
+#     })
 
 
-@user_auth.route('/login', methods=['POST'])
+@user_auth.route('/login', methods=['POST', 'GET'])
 def login() -> Response | tuple:
     '''
     Creates token and puts it in cookie.
@@ -49,7 +49,31 @@ def login() -> Response | tuple:
     Returns:
         - Response with redirection and cookie
     '''
-    if request.cookies.get(COOKIE_AUTH, None):
+    token: str
+    token_bytes: bytes
+    user: User
+    path: str
+    response: Response
+    is_logged: bool = request.cookies.get(COOKIE_AUTH, None)
+    if request.method == 'GET':
+        if is_logged:
+            token = decode_token(is_logged.encode('utf-8'), path=Config.PUP_PATH)
+            if token and token.get('aud'):
+                return jsonify({'logged_in': True, 'token': token}), 200
+            else:
+                response = jsonify({'error': 'Invalid token, please use put to log in', 'logged_in': False}), 400
+                response.set_cookie(
+                    COOKIE_AUTH,
+                    max_age=0,
+                    httponly=True,
+                    secure=True,
+                    path='/',
+                    domain='.up.railway.app'
+                )
+                return 
+        else:
+            return jsonify({'logged_in': False}), 200
+    if is_logged:
         return jsonify({'error': 'To log in you must first logout'}), 423
     data = data_check(request, 'login')
     if isinstance(data, tuple):
@@ -91,6 +115,15 @@ def register() -> Response | str | tuple:
     Tuple with information about what happened and html status code
 
     '''
+    data: dict
+    user: User
+    key_words: list[str]
+    password: str
+    email: str
+    token: str
+    link: str
+    message: str
+    
     data = data_check(request, 'register')
     if isinstance(data, tuple):
         return data
@@ -139,6 +172,13 @@ def logout() -> Response | tuple:
     Returns:
         Response with success message and deleted cookie
     '''
+    token: str
+    token_data: dict
+    user_id: int
+    iss: str
+    path: str
+    response: Response
+    
     token = request.cookies.get(COOKIE_AUTH, None)
     if not token:
         return jsonify({'error': 'User not logged in'}), 400
@@ -192,7 +232,7 @@ def confirm_email(token: str) -> tuple | Response:
     '''
     try:
         # Remove the extra '.if' from the token
-        email = confirm_token(token[:-3])
+        email: tuple[bool, str] = confirm_token(token[:-3])
         if not email:
             return jsonify({'error': 'Invalid token'}), 400
     except ValueError:

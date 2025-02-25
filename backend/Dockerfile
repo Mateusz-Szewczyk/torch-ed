@@ -10,6 +10,7 @@ COPY requirements.txt .
 # Instalacja zależności systemowych i Pythonowych
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    # Zależności dla psycopg2
     libpq-dev \
     sqlite3 \
     libsqlite3-dev \

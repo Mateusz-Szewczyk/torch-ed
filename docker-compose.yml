@@ -1,16 +1,20 @@
-version: '3.8'
+volumes:
+  db_data:
+  backend_data:
 
 services:
   frontend:
     build: ./frontend
     ports:
       - '3000:3000'
+    volumes:
+      - ./frontend:/app
     depends_on:
       - backend
       - rag
     environment:
-      - REACT_APP_DJANGO_API_URL=http://backend:8000
-      - REACT_APP_RAG_API_URL=http://rag:8042
+      - REACT_APP_DJANGO_API_URL: http://backend:8000
+      - REACT_APP_RAG_API_URL: http://rag:8042
     networks:
       - app-network
 
@@ -21,13 +25,21 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - db
+      - backend_db
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
-      - DJANGO_DEBUG=${DJANGO_DEBUG}
+      - USER_DB: ${USER_DB}
+      - PASSWORD_DB: ${PASSWORD_DB}
+      - POSTGRES_DB: ${POSTGRES_DB}
+      - SECRET_KEY: ${SECRET_KEY}
+      - SERVER: ${SERVER}
+      - PORT: ${PORT}
+      - SALT: ${SALT}
+      - PUP_PATH: ${PUP_PATH}
+      - PRP_PATH: ${PRP_PATH}
+      - MESSAGE: ${MESSAGE}
+      - SIGNATURE: ${SIGNATURE}
+      - EMAIL: ${EMAIL}
+      - EMAIL_PASSWORD: ${EMAIL_PASSWORD}
     env_file:
       - .env
     networks:
@@ -39,53 +51,43 @@ services:
       - '8042:8042'       # FastAPI Port
     volumes:
       - ./rag:/app
-      - ./vector_store_data:/app/vector_store_data  # Mount PERSIST_DIRECTORY
-      - ./uploads:/app/uploads                      # Mount uploads directory
     environment:
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USERNAME=neo4j
-      - NEO4J_PASSWORD=password
-      - PERSIST_DIRECTORY=/app/vector_store_data
-      - EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - TAVILY_API_KEY=${TAVILY_API_KEY}
-    depends_on:
-      - neo4j
-    networks:
-      - app-network
-
-  neo4j:
-    image: neo4j:latest
-    ports:
-      - "7474:7474"  # Neo4j Browser
-      - "7687:7687"  # Bolt protocol
-    environment:
-      - NEO4J_AUTH=neo4j/password
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
+      - NEO4J_URI: bolt://neo4j:7687
+      - NEO4J_USERNAME: neo4j
+      - NEO4J_PASSWORD: password
+      - PERSIST_DIRECTORY: /app/vector_store_data
+      - EMBEDDING_MODEL_NAME: all-MiniLM-L6-v2
+      - ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      - TAVILY_API_KEY: ${TAVILY_API_KEY}
     networks:
       - app-network
 
   db:
     image: postgres:15
+    restart: always
     volumes:
       - db_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER: ${POSTGRES_USER}
+      - POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      - POSTGRES_DB: ${POSTGRES_DB}
     env_file:
       - .env
     networks:
       - app-network
 
-volumes:
-  db_data:
-  neo4j_data:
-  neo4j_logs:
-  uploads:
-  logs:
+  backend_db:
+    image: postgres:17.2
+    container_name: backend_db
+    restart: always
+    environment:
+      - POSTGRES_USER: ${USER_DB}
+      - POSTGRES_PASSWORD: ${PASSWORD_DB}
+      - POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - backend_data:/var/lib/postgresql/data
+    networks:
+      - app-network
 
 networks:
   app-network:
