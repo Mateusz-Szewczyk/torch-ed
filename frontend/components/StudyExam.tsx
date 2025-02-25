@@ -226,7 +226,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
     if (isExamCompleted) {
       submitExamResult();
     }
-  }, [isExamCompleted]);
+  }, [isExamCompleted, submitExamResult]);
 
   // Responsive layout: shift exam card when chat is open on desktop.
   const examCardMarginRight = !isMobileScreen && isChatOpen ? "mr-[40%]" : "";

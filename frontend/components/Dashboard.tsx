@@ -89,15 +89,6 @@ interface DashboardData {
 const sortByDateAscending = <T extends { date: string }>(data: T[]): T[] =>
   [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-// Używamy zmiennych CSS z globalnych ustawień
-const chartColors = {
-  primary: "hsl(var(--primary))",
-  secondary: "hsl(var(--secondary))",
-  accent: "hsl(var(--accent))",
-  border: "hsl(var(--border))",
-  foreground: "hsl(var(--foreground))",
-  chart: "hsl(var(--chart))",
-}
 
 interface CustomTooltipPayload {
   name?: string
