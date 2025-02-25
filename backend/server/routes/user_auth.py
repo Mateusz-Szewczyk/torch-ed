@@ -5,7 +5,7 @@ from werkzeug import Response
 from ..utils import FRONTEND, COOKIE_AUTH, data_check, send_email, signature_check
 from ..jwt import generate_token, decode_token
 from ..models import User
-from .. import session
+from .. import session, blacklist
 from ..jwt import generate_confirmation_token, confirm_token
 from ..config import Config
 
