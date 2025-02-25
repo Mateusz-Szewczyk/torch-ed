@@ -10,9 +10,12 @@ if __name__ == '__main__':
         print(f"Error loading private keys: {e}")
         exit(1)
 
-    if '-t' in sys.argv:
-        app = create_app(testing=True)
-    else:
-        app = create_app()
+    # Check for flags
+    is_testing = '-t' in sys.argv
+
+    app = create_app(testing=is_testing)
+
+
     port: int = int(os.getenv('PORT', 14440))
+
     app.run(debug=True, host='0.0.0.0', port=port)

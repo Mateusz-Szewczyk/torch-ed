@@ -229,6 +229,60 @@
             }
         ]
     },
-    "show_chat": "Show chat",
-    "hide_chat": "Hide chat"
+    "loading_exams": "Loading exams...",
+
+     "seen_this_card_x_times": "You have seen this card {{count}} times.",
+      "progress": "Progress",
+      "no_hard_cards_found": "No hard cards found.",
+      "retake_error_occurred": "An error occurred while retaking hard cards.",
+      "flashcard_counter": "{{current}} / {{total}}",
+      "completed_flashcards_today": "You have completed all your flashcards for today!",
+      "next_session_scheduled": "Your next review session is scheduled for {{date}}.",
+      "no_future_session_date_found": "No future session date was found.",
+      "retake_hard_cards": "Retake Hard Cards",
+      "save_and_exit": "Save & Exit",
+      "hide_chat": "Hide Chat",
+      "show_chat": "Show Chat",
+      "saving_results": "Saving results...",
+      "hard": "Hard",
+      "good": "Good",
+      "easy": "Easy",
+        "loadingData": "Loading data...",
+    "pleaseLogin": "Please log in to view the dashboard.",
+    "fetchError": "Failed to fetch data: {{statusText}}",
+    "fetchErrorGeneric": "Failed to fetch data.",
+    "noData": "No data to display.",
+    "filter": {
+        "dateFrom": "Date from:",
+        "dateTo": "Date to:",
+        "selectExam": "Select exam:",
+        "selectDeck": "Select flashcard deck:",
+        "all": "All"
+    },
+    "noExams": {
+        "title": "You have no exams to analyze yet.",
+        "description": "You can add them manually by clicking the button below.",
+        "addExam": "Add Exam"
+    },
+    "noFlashcards": {
+        "title": "You have no flashcards to analyze yet.",
+        "description": "You can add them manually by clicking the button below.",
+        "addFlashcards": "Add Flashcards"
+    },
+    "no_files_uploaded": "No files uploaded yet.",
+    "upload": "Upload",
+    "my_profile": "My Profile",
+    "toolbox": {
+        "select_order_title": "Select and Order Tools",
+        "tooltip_description": "In this toolbox, you can drag tools to set their order. Tools execute from top to bottom.",
+        "available_tools": "Available Tools",
+        "cancel": "Cancel",
+        "save": "Save",
+        "wiedza_z_plików": "Knowledge from Files",
+        "generowanie_fiszek": "Flashcard Generation",
+        "generowanie_egzaminu": "Exam Generation",
+        "wyszukaj_w_internecie": "Search the Internet"
+    },
+    "selected": "selected",
+    "tools": "Tools"
 }

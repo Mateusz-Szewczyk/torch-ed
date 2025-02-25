@@ -2,12 +2,12 @@ import os
 import redis
 from flask import Flask
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from flask_cors import CORS
 
 from .config import Config, TestConfig
-from .models.base import Base
+from .models import *
 
 
 load_dotenv()
@@ -42,7 +42,6 @@ def create_app(testing: bool = False) -> Flask:
     with engine.begin() as conn:
         Base.metadata.create_all(bind=conn)
 
-
     from .routes.token_auth import api_auth as api_auth
     from .routes.user_auth import user_auth
     app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
@@ -58,7 +57,8 @@ def create_app(testing: bool = False) -> Flask:
                 "origins": ["http://localhost:3000",
                             "http://127.0.0.1:3000",
                             "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                            "https://torch-ed.vercel.app"
+                            "https://torch-ed.vercel.app",
+                            "https://torched.pl"
                             ],
 
                 "supports_credentials": True,

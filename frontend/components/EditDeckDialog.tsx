@@ -11,19 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/components/ui/scroll-area'; // Importowanie zaktualizowanego ScrollArea
-
-interface Flashcard {
-  id: number;
-  question: string;
-  answer: string;
-}
-
-interface Deck {
-  id: number;
-  name: string;
-  description?: string;
-  flashcards: Flashcard[];
-}
+import { Deck, Flashcard } from '@/types';
 
 interface EditDeckDialogProps {
   deck: Deck;

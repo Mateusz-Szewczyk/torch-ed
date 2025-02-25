@@ -162,7 +162,7 @@ def retrieve(query: str):
     logging.basicConfig(level=logging.INFO)
     embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
-    user_id = "2"
+    user_id = "1"
     results = search_and_rerank(query, user_id, n_results=3)
     print("Wyniki:")
     for r in results:
@@ -200,8 +200,25 @@ def upload():
         logger.error(f"Error adding chunks to vector store: {e}", exc_info=True)
 
 if __name__ == "__main__":
-    # upload()
-    retrieve("Overconsumption refers to the excessive use of resources or goods beyond what is sustainable or necessary. "
-             "It often leads to environmental degradation, depletion of natural resouces, and negative social impacts. "
-             "This term is commonly discussed in the context of consumer behavior, where individuals or societies consume more than they need, "
-             "contributing to issues such as waste, pollution, and climate change.")
+    logging.basicConfig(level=logging.INFO)
+
+    # Prosty interfejs tekstowy
+    print("Wybierz opcję:")
+    print("1) Upload (dodaj/chunkuj plik i zapisz wektory).")
+    print("2) Wyszukaj (zadaj zapytanie i zobacz wyniki).")
+
+    choice = input("Twój wybór (1/2): ").strip()
+
+    if choice == "1":
+        # Wywołuje funkcję upload()
+        print("Uruchamiam upload()...")
+        upload()
+
+    elif choice == "2":
+        # Pytamy użytkownika o query
+        query_text = input("Podaj zapytanie: ")
+        print(f"Uruchamiam retrieve() z zapytaniem: '{query_text}'\n")
+        retrieve(query_text)
+
+    else:
+        print("Nieznana opcja. Zakończono.")

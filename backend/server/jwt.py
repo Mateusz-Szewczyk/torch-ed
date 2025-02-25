@@ -10,7 +10,7 @@ def generate_token(user_id: int, role: str, iss: str, path: str) -> bytes:
     payload = {
         'iss': iss,
         'iat': int(datetime.now(timezone.utc).timestamp()),
-        'exp': int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp()),
+        'exp': int((datetime.now(timezone.utc) + timedelta(hours=24*5)).timestamp()),
         'aud': user_id,
         'pre': role,
     }
@@ -25,7 +25,6 @@ def generate_token(user_id: int, role: str, iss: str, path: str) -> bytes:
     return token
 
 def decode_token(token: bytes, path: str) -> JWTClaims | None:
-    data = None
     with open(path, 'r') as key_file:
         public_key = key_file.read()
     try:

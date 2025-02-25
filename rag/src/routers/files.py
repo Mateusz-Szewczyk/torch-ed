@@ -10,15 +10,13 @@ from ..schemas import (
     UploadedFileRead,
     DeleteKnowledgeRequest,
     DeleteKnowledgeResponse,
-    ListFilesRequest
 )
 from ..dependencies import get_db
-from ..auth import get_current_user  # <-- AUTORYZACJA
+from ..auth import get_current_user
 from ..vector_store import delete_file_from_vector_store, create_vector_store
 from ..graph_store import delete_knowledge_from_graph
 from ..file_processor.pdf_processor import PDFProcessor
 from ..file_processor.documents_processor import DocumentProcessor
-from ..metadata_extraction import MetadataExtractor
 from ..chunking import create_chunks
 
 import os
@@ -233,8 +231,6 @@ async def delete_knowledge(
     # Delete from ChromaDB
     deleted_from_vector_store = delete_file_from_vector_store(user_id, file_name)
 
-    # Delete from Neo4j
-    deleted_from_graph = delete_knowledge_from_graph(user_id, file_name)
 
     # Delete file record from the database
     try:
@@ -249,11 +245,8 @@ async def delete_knowledge(
         logger.error(f"Error deleting file record from database: {e}")
         raise HTTPException(status_code=500, detail="Error deleting file record from database.")
 
-    if not deleted_from_vector_store and not deleted_from_graph:
-        raise HTTPException(status_code=404, detail="No knowledge found to delete.")
 
     return DeleteKnowledgeResponse(
         message="Deletion process completed.",
-        deleted_from_vector_store=deleted_from_vector_store,
-        deleted_from_graph=deleted_from_graph
+        deleted_from_vector_store=deleted_from_vector_store
     )

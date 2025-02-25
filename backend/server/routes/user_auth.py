@@ -89,10 +89,10 @@ def login() -> Response | tuple:
     response.set_cookie(COOKIE_AUTH,
                         token,
                         samesite='None',
-                        max_age=60 * 60 * 24,
-                        httponly=True, secure=True,
+                        max_age=60 * 60 * 24 * 5,
+                        httponly=True, secure=Config.IS_SECURE,
                         path='/',
-                        domain='.up.railway.app')
+                        domain=Config.DOMAIN)
 
     return response
 
@@ -156,7 +156,7 @@ def register() -> Response | str | tuple:
               f"If you didn't register for our website please ignore this email." \
               f"\nBest regards,\nTorchED team"
 
-    send_email(email, message)
+    send_email(email, "Potwierdź rejestrację, TorchED" ,message)
 
     return jsonify({'Success': 'User has been successfully created!'}), 201
 
@@ -208,14 +208,13 @@ def logout() -> Response | tuple:
     print(blacklist.ttl(token))
 
     response = jsonify({'success': True, 'message': 'Successfully logged out'})
-    response.set_cookie(
+    response.delete_cookie(
         COOKIE_AUTH,
-        '',  # Ustawienie pustej wartości
         samesite='None',
-        max_age=0,  # Natychmiastowe wygaśnięcie
         httponly=True,
-        secure=True,
-        path='/'  # Musi być zgodne z ustawieniem podczas logowania
+        secure=Config.IS_SECURE,
+        path='/',
+        domain=Config.DOMAIN,
     )
 
     return response

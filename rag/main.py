@@ -7,10 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import base64
 
-# Importuj modele i bazę danych
-from src.models import Base
-from src.routers import files, decks, flashcards, query, chats, exams
-from src.database import engine
+from src.routers import (
+    files, decks, flashcards, query, chats, exams,
+    study_sessions, user_flashcards, dashboard
+)
 from src.config import Config
 
 def load_private_keys():
@@ -22,7 +22,6 @@ def load_private_keys():
             f.write(prp_key)
     else:
         raise ValueError("PUP_KEY environment variable is missing!")
-
 
 load_private_keys()
 
@@ -36,10 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Inicjalizacja bazy danych
-Base.metadata.create_all(bind=engine)
-logger.info("Database tables created.")
-
 # Inicjalizacja FastAPI aplikacji
 app = FastAPI(
     title="RAG Knowledge Base API",
@@ -47,14 +42,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Dodanie CORS middleware
+# Dodaj middleware CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000",
-                    "http://127.0.0.1:3000",
-                    "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                    "https://torch-ed.vercel.app"
-                    ],  # Zaktualizuj URL frontend jeśli potrzebne
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
+        "https://torch-ed.vercel.app",
+        "https://torched.pl",
+        "localhost:3000"
+    ],  # Upewnij się, że wszystkie wymagane domeny są tutaj uwzględnione
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,6 +85,9 @@ app.include_router(flashcards.router, prefix="/api/flashcards", tags=["Flashcard
 app.include_router(query.router, prefix="/api/query", tags=["Query"])
 app.include_router(chats.router, prefix="/api/chats", tags=["Chats"])
 app.include_router(exams.router, prefix="/api/exams", tags=["Exams"])
+app.include_router(study_sessions.router, prefix="/api/study_sessions", tags=["Study Sessions"])
+app.include_router(user_flashcards.router, prefix="/api/user_flashcards", tags=["User Flashcards"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 
 # Uruchomienie aplikacji
 if __name__ == "__main__":

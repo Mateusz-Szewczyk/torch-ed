@@ -2,25 +2,28 @@
 
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import React, { useContext, useEffect, useState } from 'react';
 import Chat from '@/components/Chat';
-import { useEffect } from 'react';
+import { ConversationContext } from '@/contexts/ConversationContext';
 
 export default function ChatPage() {
-  const params = useParams();
-  const router = useRouter();
-  const { conversation_id } = params;
+  const { currentConversationId } = useContext(ConversationContext);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!conversation_id) {
-      // Jeśli nie ma conversation ID, przekieruj lub obsłuż błąd
-      router.push('/'); // Przekierowanie do strony głównej lub innej strony
+    console.log(`ChatPage: currentConversationId changed to: ${currentConversationId}`);
+    if (currentConversationId !== null) {
+      setIsLoading(false);
     }
-  }, [conversation_id, router]);
+  }, [currentConversationId]);
 
-  if (!conversation_id) {
-    return <div>Loading...</div>;
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-full">Ładowanie konwersacji...</div>;
   }
 
-  return <Chat conversationId={Number(conversation_id)} />;
+  if (currentConversationId === null) {
+    return <div className="flex items-center justify-center h-full">Wybierz konwersację z panelu bocznego.</div>;
+  }
+
+  return <Chat conversationId={currentConversationId} />;
 }

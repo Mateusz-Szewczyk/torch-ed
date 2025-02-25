@@ -1,134 +1,251 @@
-'use client'
+'use client';
 
-import React, { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { useTranslation } from 'react-i18next'
-import { ChevronRight, ChevronLeft, CheckCircle, XCircle, MessageCircle } from 'lucide-react'
-import * as Slider from '@radix-ui/react-slider'
-import Chat from '@/components/Chat' // <-- import czatu
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
+import {
+  ChevronRight,
+  ChevronLeft,
+  CheckCircle,
+  XCircle,
+  MessageCircle,
+} from "lucide-react";
+import * as Slider from "@radix-ui/react-slider";
+import Chat from "@/components/Chat";
+import { Loader2 } from "lucide-react";
 
 interface Answer {
-  id: number
-  text: string
-  is_correct: boolean
+  id: number;
+  text: string;
+  is_correct: boolean;
 }
 
 interface Question {
-  id: number
-  text: string
-  answers: Answer[]
+  id: number;
+  text: string;
+  answers: Answer[];
 }
 
 interface Exam {
-  name: string
-  description: string
-  questions: Question[]
+  id: number;
+  name: string;
+  description: string;
+  questions: Question[];
+  // If conversation_id is missing or 0, a new conversation should be created.
+  conversation_id?: number;
 }
 
 interface StudyExamProps {
-  exam: Exam
-  onExit: () => void
+  exam: Exam;
+  onExit: () => void;
+}
+
+interface ExamResultAnswerCreate {
+  question_id: number;
+  selected_answer_id: number;
+  answer_time: string; // ISO string
+}
+
+interface ExamResultCreate {
+  exam_id: number;
+  answers: ExamResultAnswerCreate[];
+}
+
+interface ExamResultRead {
+  id: number;
+  exam_id: number;
+  user_id: string;
+  started_at: string;
+  completed_at: string | null;
+  score: number | null;
+  answers: ExamResultAnswerRead[];
+}
+
+interface ExamResultAnswerRead {
+  id: number;
+  question_id: number;
+  selected_answer_id: number;
+  is_correct: boolean;
+  answer_time: string;
+}
+
+interface UserAnswer {
+  question_id: number;
+  selected_answer_id: number | null;
+  answer_time: string | null;
 }
 
 export function StudyExam({ exam, onExit }: StudyExamProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
+  // Chat panel state and responsive detection.
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(false);
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-  const [conversationId] = useState<number>(999)
+  // Exam study states.
+  const [numQuestions, setNumQuestions] = useState<number>(10);
+  const [isSelectionStep, setIsSelectionStep] = useState<boolean>(true);
+  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  const [score, setScore] = useState<number>(0);
+  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
+  const [isExamCompleted, setIsExamCompleted] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Czy panel czatu jest otwarty
-  const [isChatOpen, setIsChatOpen] = useState<boolean>(false)
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api";
 
-  // Stan egzaminu
-  const [numQuestions, setNumQuestions] = useState<number>(10)
-  const [isSelectionStep, setIsSelectionStep] = useState<boolean>(true)
-  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([])
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
-  const [score, setScore] = useState<number>(0)
-  const [userAnswers, setUserAnswers] = useState<(number | null)[]>([])
-  const [isExamCompleted, setIsExamCompleted] = useState<boolean>(false)
+  // Filter answered questions.
+  const answeredQuestions = userAnswers.filter(
+    (answer) => answer.selected_answer_id !== null
+  );
 
-  // Funkcja losująca pytania
+  // Function to select random questions from the exam.
   const selectRandomQuestions = (allQuestions: Question[], count: number): Question[] => {
-    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random())
-    return shuffled.slice(0, count)
-  }
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  };
 
-  // Obsługa slidera
+  // Handlers for slider and input.
   const handleSliderChange = (values: number[]) => {
-    setNumQuestions(values[0])
-  }
+    setNumQuestions(values[0]);
+  };
 
-  // Obsługa inputa tekstowego
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value, 10)
+    const value = parseInt(e.target.value, 10);
     if (!isNaN(value)) {
-      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length)
-      setNumQuestions(clampedValue)
+      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length);
+      setNumQuestions(clampedValue);
     }
-  }
+  };
 
-  // Start egzaminu
+  // Start exam: select random questions and initialize answers.
   const startExam = () => {
-    const questions = selectRandomQuestions(exam.questions, numQuestions)
-    setSelectedQuestions(questions)
-    setUserAnswers(Array(questions.length).fill(null))
-    setIsSelectionStep(false)
-  }
+    const questions = selectRandomQuestions(exam.questions, numQuestions);
+    setSelectedQuestions(questions);
+    setUserAnswers(
+      questions.map((q) => ({
+        question_id: q.id,
+        selected_answer_id: null,
+        answer_time: null,
+      }))
+    );
+    setIsSelectionStep(false);
+  };
 
-  // Odpowiedź na pytanie
+  // Handle answer selection.
   const handleAnswerSelect = (answerId: number) => {
-    const currentQuestion = selectedQuestions[currentQuestionIndex]
-    const selectedAnswer = currentQuestion.answers.find(a => a.id === answerId)
-
-    const updatedUserAnswers = [...userAnswers]
-    updatedUserAnswers[currentQuestionIndex] = answerId
-    setUserAnswers(updatedUserAnswers)
-
+    const currentQuestion = selectedQuestions[currentQuestionIndex];
+    const selectedAnswer = currentQuestion.answers.find((a) => a.id === answerId);
+    const answerTime = new Date().toISOString();
+    const updatedUserAnswers = [...userAnswers];
+    updatedUserAnswers[currentQuestionIndex] = {
+      question_id: currentQuestion.id,
+      selected_answer_id: answerId,
+      answer_time: answerTime,
+    };
+    setUserAnswers(updatedUserAnswers);
     if (selectedAnswer && selectedAnswer.is_correct) {
-      setScore(score + 1)
+      setScore((prev) => prev + 1);
     }
-
     if (currentQuestionIndex < selectedQuestions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1)
+      setCurrentQuestionIndex((prev) => prev + 1);
     } else {
-      setIsExamCompleted(true)
+      setIsExamCompleted(true);
     }
-  }
+  };
 
+  // Restart exam.
   const handleRestart = () => {
-    setCurrentQuestionIndex(0)
-    setScore(0)
-    setUserAnswers(Array(selectedQuestions.length).fill(null))
-    setIsExamCompleted(false)
-    setIsSelectionStep(true)
-  }
+    setCurrentQuestionIndex(0);
+    setScore(0);
+    setUserAnswers(
+      selectedQuestions.map((q) => ({
+        question_id: q.id,
+        selected_answer_id: null,
+        answer_time: null,
+      }))
+    );
+    setIsExamCompleted(false);
+    setIsSelectionStep(true);
+  };
 
-  // ---------------
-  // RENDEROWANIE
-  // ---------------
+  // Submit exam result.
+  const submitExamResult = async () => {
+    if (answeredQuestions.length === 0) {
+      alert(t("no_answers_to_submit"));
+      return;
+    }
+    const examResult: ExamResultCreate = {
+      exam_id: exam.id,
+      answers: answeredQuestions.map((answer) => ({
+        question_id: answer.question_id,
+        selected_answer_id: answer.selected_answer_id as number,
+        answer_time: answer.answer_time as string,
+      })),
+    };
+    try {
+      setIsSubmitting(true);
+      setSubmitError(null);
+      const response = await fetch(`${API_BASE_URL}/exams/submit/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(examResult),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Error submitting exam result.");
+      }
+      const result: ExamResultRead = await response.json();
+      console.log("Exam result saved:", result);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error submitting exam result:", error.message);
+        setSubmitError(error.message);
+      } else {
+        console.error("Unknown error submitting exam result");
+        setSubmitError("Unknown error submitting exam result.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-  // Krok 1: Wybór liczby pytań
+  // Automatically submit exam result when exam is completed.
+  useEffect(() => {
+    if (isExamCompleted) {
+      submitExamResult();
+    }
+  }, [isExamCompleted]);
+
+  // Responsive layout: shift exam card when chat is open on desktop.
+  const examCardMarginRight = !isMobileScreen && isChatOpen ? "mr-[40%]" : "";
+
+  // Render selection step: choose number of questions.
   if (isSelectionStep) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
         <div className="bg-card p-8 rounded-lg shadow-md w-full max-w-md">
-          {/* Przycisk Powrotu */}
           <div className="flex justify-end mb-4">
-            <Button
-              onClick={onExit}
-              variant="ghost"
-              className="flex items-center space-x-2"
-            >
+            <Button onClick={onExit} variant="ghost" className="flex items-center space-x-2">
               <ChevronLeft className="h-5 w-5" />
-              <span>{t('back')}</span>
+              <span>{t("back")}</span>
             </Button>
           </div>
           <h2 className="text-2xl font-bold mb-4 text-primary text-center">
-            {t('select_number_of_questions')}
+            {t("select_number_of_questions")}
           </h2>
           <div className="flex flex-col items-center">
-            {/* Suwak */}
             <div className="w-full mb-4">
               <Slider.Root
                 className="relative flex items-center select-none touch-none w-full h-6"
@@ -145,11 +262,8 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 <Slider.Thumb className="block w-4 h-4 bg-primary rounded-full shadow focus:outline-none focus:ring" />
               </Slider.Root>
             </div>
-            {/* Input */}
             <div className="flex items-center space-x-2 mb-6">
-              <span className="text-sm text-muted-foreground">
-                {t('number_of_questions')}:
-              </span>
+              <span className="text-sm text-muted-foreground">{t("number_of_questions")}:</span>
               <input
                 type="number"
                 min={1}
@@ -159,40 +273,170 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 className="w-16 p-2 border border-input rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            {/* Start Exam Button */}
-            <Button
-              onClick={startExam}
-              variant="default"
-              className="w-full flex items-center justify-center space-x-2"
-            >
-              <span>{t('start_exam')}</span>
+            <Button onClick={startExam} variant="default" className="w-full flex items-center justify-center space-x-2">
+              <span>{t("start_exam")}</span>
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
         </div>
       </div>
-    )
+    );
   }
 
-  // Krok 2: Egzamin zakończony
+  // Render exam summary when exam is completed.
   if (isExamCompleted) {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-screen bg-background">
         <div className="bg-card p-8 rounded-lg shadow-md w-full max-w-2xl text-center">
-          <h2 className="text-3xl font-bold mb-4 text-primary">
-            {t('exam_summary')}
-          </h2>
+          <h2 className="text-3xl font-bold mb-4 text-primary">{t("exam_summary")}</h2>
           <p className="text-xl mb-6 text-secondary">
-            {t('you_scored')} {score} {t('out_of')} {selectedQuestions.length}
+            {t("you_scored")} {score} {t("out_of")} {selectedQuestions.length}
           </p>
+          {isSubmitting && (
+            <div className="flex items-center justify-center space-x-2 mb-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span>{t("submitting_results")}</span>
+            </div>
+          )}
+          {submitError && (
+            <p className="text-destructive mb-4">
+              {t("error_submitting_results")}: {submitError}
+            </p>
+          )}
           <div className="flex justify-center space-x-4">
+            <Button onClick={handleRestart} variant="default" className="flex items-center space-x-2">
+              <ChevronLeft className="h-5 w-5" />
+              <span>{t("restart_exam")}</span>
+            </Button>
+            <Button variant="destructive" onClick={onExit} className="flex items-center space-x-2">
+              <XCircle className="h-5 w-5" />
+              <span>{t("exit")}</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render exam in progress.
+  const currentQuestion = selectedQuestions[currentQuestionIndex];
+
+  return (
+    <div className="h-screen w-full bg-background flex items-center justify-center">
+      <div className={`transition-all duration-300 ${examCardMarginRight} w-full max-w-2xl p-4`}>
+        <div className="bg-card p-6 rounded-lg shadow-md w-full">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-primary">{exam.name}</h2>
+            <Button
+              variant="secondary"
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className="flex items-center space-x-2"
+            >
+              <MessageCircle className="h-5 w-5" />
+              <span>{isChatOpen ? t("hide_chat") : t("show_chat")}</span>
+            </Button>
+          </div>
+          <p className="mb-6">{exam.description}</p>
+          <div className="mb-4">
+            <h3 className="text-xl font-semibold mb-2">
+              {t("question")}: {currentQuestion.text}
+            </h3>
+            <div className="grid grid-cols-1 gap-4">
+              {currentQuestion.answers.map((answer) => {
+                const isSelected = userAnswers[currentQuestionIndex]?.selected_answer_id === answer.id;
+                const isCorrect = answer.is_correct;
+                return (
+                  <Button
+                    key={answer.id}
+                    variant={
+                      isSelected
+                        ? isCorrect
+                          ? "default"
+                          : "destructive"
+                        : "outline"
+                    }
+                    onClick={() => {
+                      if (userAnswers[currentQuestionIndex]?.selected_answer_id === null) {
+                        handleAnswerSelect(answer.id);
+                      }
+                    }}
+                    disabled={userAnswers[currentQuestionIndex]?.selected_answer_id !== null}
+                    className="w-full flex items-center justify-center space-x-2"
+                  >
+                    {isSelected && isCorrect && (
+                      <CheckCircle className="h-5 w-5 text-success" />
+                    )}
+                    {isSelected && !isCorrect && (
+                      <XCircle className="h-5 w-5 text-destructive" />
+                    )}
+                    <span>{answer.text}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex justify-between mt-6">
+            <Button
+              onClick={() => setCurrentQuestionIndex(Math.max(currentQuestionIndex - 1, 0))}
+              disabled={currentQuestionIndex === 0}
+              variant="ghost"
+              className="flex items-center space-x-2"
+            >
+              <ChevronLeft className="h-5 w-5" />
+              <span>{t("previous")}</span>
+            </Button>
+            <div className="flex space-x-2">
+              <Button
+                variant="secondary"
+                onClick={submitExamResult}
+                disabled={isSubmitting || answeredQuestions.length === 0}
+                className="flex items-center space-x-2"
+              >
+                <MessageCircle className="h-5 w-5" />
+                <span>{t("save_attempt")}</span>
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => {
+                  if (userAnswers[currentQuestionIndex]?.selected_answer_id !== null) {
+                    if (currentQuestionIndex < selectedQuestions.length - 1) {
+                      setCurrentQuestionIndex(currentQuestionIndex + 1);
+                    } else {
+                      setIsExamCompleted(true);
+                    }
+                  }
+                }}
+                disabled={userAnswers[currentQuestionIndex]?.selected_answer_id === null}
+                className="flex items-center space-x-2"
+              >
+                <span>
+                  {currentQuestionIndex < selectedQuestions.length - 1
+                    ? t("next")
+                    : t("finish")}
+                </span>
+                <ChevronRight className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+          {isSubmitting && (
+            <div className="flex items-center justify-center space-x-2 mt-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span>{t("submitting_results")}</span>
+            </div>
+          )}
+          {submitError && (
+            <p className="text-destructive mt-4">
+              {t("error_submitting_results")}: {submitError}
+            </p>
+          )}
+          <div className="flex justify-center space-x-4 mt-6">
             <Button
               onClick={handleRestart}
               variant="default"
               className="flex items-center space-x-2"
             >
               <ChevronLeft className="h-5 w-5" />
-              <span>{t('restart_exam')}</span>
+              <span>{t("restart_exam")}</span>
             </Button>
             <Button
               variant="destructive"
@@ -200,140 +444,16 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
               className="flex items-center space-x-2"
             >
               <XCircle className="h-5 w-5" />
-              <span>{t('exit')}</span>
+              <span>{t("exit_study")}</span>
             </Button>
           </div>
         </div>
       </div>
-    )
-  }
-
-  // Krok 3: Rozwiązywanie egzaminu
-  const currentQuestion = selectedQuestions[currentQuestionIndex]
-
-  return (
-    <div className="h-screen w-full bg-background flex items-center justify-center">
-      {/* Kontener główny */}
-      <div className="relative flex w-full h-full items-center justify-center">
-        {/* Okno egzaminu */}
-        <div
-          className={`transition-all duration-300 ${
-            isChatOpen ? 'mr-96' : ''
-          } w-full max-w-2xl p-4`}
-        >
-          <div className="bg-card p-6 rounded-lg shadow-md w-full h-auto">
-            {/* Nagłówek */}
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-primary">{exam.name}</h2>
-              {/* Przycisk toggle czatu */}
-              <Button
-                variant="secondary"
-                onClick={() => setIsChatOpen(!isChatOpen)}
-                className="flex items-center space-x-2"
-              >
-                <MessageCircle className="h-5 w-5" />
-                <span>
-                  {isChatOpen ? t('hide_chat') : t('show_chat')}
-                </span>
-              </Button>
-            </div>
-
-            <p className="mb-6">{exam.description}</p>
-            {/* Wyświetlanie pytania */}
-            <div className="mb-4">
-              <h3 className="text-xl font-semibold mb-2">
-                {t('question')}: {currentQuestion.text}
-              </h3>
-              <div className="grid grid-cols-1 gap-4">
-                {currentQuestion.answers.map((answer) => {
-                  const isSelected =
-                    userAnswers[currentQuestionIndex] === answer.id
-                  const isCorrect = answer.is_correct
-
-                  return (
-                    <Button
-                      key={answer.id}
-                      variant={
-                        isSelected
-                          ? isCorrect
-                            ? 'default'
-                            : 'destructive'
-                          : 'outline'
-                      }
-                      onClick={() => {
-                        if (userAnswers[currentQuestionIndex] === null) {
-                          handleAnswerSelect(answer.id)
-                        }
-                      }}
-                      disabled={userAnswers[currentQuestionIndex] !== null}
-                      className="w-full flex items-center justify-center space-x-2"
-                    >
-                      {isSelected && isCorrect && (
-                        <CheckCircle className="h-5 w-5 text-success" />
-                      )}
-                      {isSelected && !isCorrect && (
-                        <XCircle className="h-5 w-5 text-destructive" />
-                      )}
-                      <span>{answer.text}</span>
-                    </Button>
-                  )
-                })}
-              </div>
-            </div>
-            {/* Nawigacja pytaniami */}
-            <div className="flex justify-between mt-6">
-              <Button
-                onClick={() =>
-                  setCurrentQuestionIndex(Math.max(currentQuestionIndex - 1, 0))
-                }
-                disabled={currentQuestionIndex === 0}
-                variant="ghost"
-                className="flex items-center space-x-2"
-              >
-                <ChevronLeft className="h-5 w-5" />
-                <span>{t('previous')}</span>
-              </Button>
-              <Button
-                variant="default"
-                onClick={() => {
-                  if (userAnswers[currentQuestionIndex] !== null) {
-                    if (currentQuestionIndex < selectedQuestions.length - 1) {
-                      setCurrentQuestionIndex(currentQuestionIndex + 1)
-                    } else {
-                      setIsExamCompleted(true)
-                    }
-                  }
-                }}
-                disabled={userAnswers[currentQuestionIndex] === null}
-                className="flex items-center space-x-2"
-              >
-                <span>
-                  {currentQuestionIndex < selectedQuestions.length - 1
-                    ? t('next')
-                    : t('finish')}
-                </span>
-                <ChevronRight className="h-5 w-5" />
-              </Button>
-            </div>
-            {/* Wyjście z egzaminu */}
-            <Button
-              variant="destructive"
-              onClick={onExit}
-              className="mt-6 w-full flex items-center justify-center space-x-2"
-            >
-              <XCircle className="h-5 w-5" />
-              <span>{t('exit_study')}</span>
-            </Button>
-          </div>
+      {!isMobileScreen && isChatOpen && (
+        <div className="w-[40%] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
+          <Chat conversationId={exam.conversation_id || 0} />
         </div>
-
-        {/* Panel czatu po prawej stronie */}
-        {isChatOpen && (
-          <div className="w-[40rem] h-full fixed right-0 top-0 bg-background border-l border-border z-50">
-            <Chat conversationId={conversationId} />
-          </div>
-        )}
-      </div>
+      )}
     </div>
-  )
+  );
 }

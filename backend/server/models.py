@@ -1,7 +1,6 @@
 # src/models.py
 from datetime import datetime, timezone
 from typing import Optional
-
 from pydantic import ConfigDict
 from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,

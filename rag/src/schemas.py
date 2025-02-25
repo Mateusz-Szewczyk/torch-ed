@@ -28,23 +28,69 @@ class FlashcardRead(FlashcardBase):
     class Config:
         orm_mode = True
 
+class UserFlashcardRead(BaseModel):
+    id: int
+    flashcard: FlashcardRead
+    ef: float
+    interval: int
+    repetitions: int
+    next_review: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class StudySessionCreate(BaseModel):
+    deck_id: int
+
+class StudySessionRead(BaseModel):
+    id: int
+    user_id: int  # Zmieniono z str na int
+    deck_id: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+class StudyRecordCreate(BaseModel):
+    user_flashcard_id: int
+    rating: int  # 0 to 5
+
+class StudyRecordRead(BaseModel):
+    id: int
+    session_id: int
+    user_flashcard_id: int
+    rating: Optional[int] = None
+    reviewed_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class StudySessionUpdate(BaseModel):
+    completed_at: Optional[datetime] = None
+
+
 class DeckBase(BaseModel):
     name: str
     description: Optional[str] = None
+    conversation_id: Optional[int] = None
 
 class DeckCreate(DeckBase):
     flashcards: List[FlashcardCreate]
 
-    @field_validator('name')
-    def name_not_empty(cls, v):
+    @classmethod
+    def validate_name(cls, v: str) -> str:
         if not v.strip():
             raise ValueError('Deck name cannot be empty')
         return v
 
-class DeckRead(DeckBase):
+class DeckRead(BaseModel):
     id: int
-    # user_id is read-only, so we can show it in DeckRead
-    user_id: str
+    user_id: int
+    name: str
+    description: Optional[str] = None
+    conversation_id: Optional[int] = None
     flashcards: List[FlashcardRead]
 
     class Config:
@@ -62,7 +108,7 @@ class UploadedFileRead(BaseModel):
 class UploadResponse(BaseModel):
     message: str
     uploaded_files: List[UploadedFileRead]  # Poprawnie zdefiniowany UploadedFileRead
-    user_id: str
+    user_id: int  # Zmieniono z str na int
     file_name: str
     file_description: Optional[str]
     category: Optional[str]
@@ -70,14 +116,14 @@ class UploadResponse(BaseModel):
 class QueryRequest(BaseModel):
     query: str
     conversation_id: int
+    selected_tools: Optional[List[str]] = None
 
 class QueryResponse(BaseModel):
-    user_id: str
+    user_id: int
     query: str
     answer: str
 
 class DeleteKnowledgeRequest(BaseModel):
-    user_id: str
     file_name: str
 
 class DeleteKnowledgeResponse(BaseModel):
@@ -85,17 +131,19 @@ class DeleteKnowledgeResponse(BaseModel):
     deleted_from_vector_store: bool
 
 class ListFilesRequest(BaseModel):
-    user_id: str
+    user_id: int
 
 class ConversationBase(BaseModel):
     user_id: int
-    title: Optional[str] = None  # Dodane pole title
+    title: Optional[str] = None
 
 class ConversationCreate(ConversationBase):
     pass
 
-class ConversationRead(ConversationBase):
+class ConversationRead(BaseModel):
     id: int
+    user_id: int
+    title: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -124,12 +172,19 @@ class ConversationUpdate(BaseModel):
             raise ValueError('Title cannot be empty')
         return v
 
+class ExamBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    conversation_id: Optional[int] = None
+
 class ExamAnswerCreate(BaseModel):
     text: str = Field(..., example="3.14")
     is_correct: bool = Field(..., example=True)
 
-class ExamAnswerRead(ExamAnswerCreate):
+class ExamAnswerRead(BaseModel):
     id: int
+    text: str
+    is_correct: bool
 
     class Config:
         orm_mode = True
@@ -155,15 +210,13 @@ class ExamQuestionRead(BaseModel):
     class Config:
         orm_mode = True
 
-class ExamCreate(BaseModel):
-    name: str = Field(..., example="Egzamin z Matematyki")
-    description: Optional[str] = Field(None, example="Egzamin końcowy z matematyki.")
+class ExamCreate(ExamBase):
     questions: List[ExamQuestionCreate]
 
-    @field_validator('questions')
+    @field_validator('name')
     def validate_questions(cls, v):
         if len(v) == 0:
-            raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
+            raise ValueError("Exam cannot be empty.")
         return v
 
 class ExamRead(BaseModel):
@@ -172,6 +225,7 @@ class ExamRead(BaseModel):
     description: Optional[str]
     created_at: datetime
     questions: List[ExamQuestionRead]
+    conversation_id: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -180,10 +234,109 @@ class ExamUpdate(BaseModel):
     name: Optional[str] = Field(None, example="Nowa Nazwa Egzaminu")
     description: Optional[str] = Field(None, example="Nowy opis egzaminu.")
     questions: Optional[List[ExamQuestionCreate]] = None
+    conversation_id: Optional[int] = None  # Allow updating conversation_id if needed
 
     @field_validator('questions')
     def validate_questions(cls, v):
-        if v is not None:
-            if len(v) == 0:
-                raise ValueError("Egzamin musi zawierać przynajmniej jedno pytanie.")
+        if v is not None and len(v) == 0:
+            raise ValueError("Exam must contain at least one question.")
         return v
+
+
+class ExamResultAnswerCreate(BaseModel):
+    question_id: int
+    selected_answer_id: int
+    answer_time: datetime
+
+class ExamResultCreate(BaseModel):
+    exam_id: int
+    answers: List[ExamResultAnswerCreate]
+
+class ExamResultAnswerRead(BaseModel):
+    id: int
+    question_id: int
+    selected_answer_id: int
+    is_correct: bool
+    answer_time: datetime
+
+    class Config:
+        orm_mode = True
+
+class ExamResultRead(BaseModel):
+    id: int
+    exam_id: int
+    user_id: int  # Zmieniono z str na int
+    started_at: datetime
+    completed_at: Optional[datetime]
+    score: Optional[float]
+    answers: List[ExamResultAnswerRead]
+
+    class Config:
+        orm_mode = True
+
+class StudyRecord(BaseModel):
+    id: int
+    session_id: Optional[int]
+    user_flashcard_id: Optional[int]
+    rating: Optional[int]
+    reviewed_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla user_flashcards
+class UserFlashcard(BaseModel):
+    id: int
+    user_id: int
+    flashcard_id: int
+    ef: float
+    interval: int
+    repetitions: int
+    next_review: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla study_sessions
+class StudySession(BaseModel):
+    id: int
+    user_id: int
+    deck_id: int
+    started_at: datetime
+    completed_at: Optional[datetime]
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla exam_result_answers
+class ExamResultAnswer(BaseModel):
+    id: int
+    exam_result_id: int
+    question_id: int
+    selected_answer_id: int
+    is_correct: bool
+    answer_time: datetime
+
+    class Config:
+        orm_mode = True
+
+# Schematy dla exam_results
+class ExamResult(BaseModel):
+    id: int
+    exam_id: int
+    user_id: int
+    started_at: datetime
+    completed_at: Optional[datetime]
+    score: float
+
+    class Config:
+        orm_mode = True
+
+# Schemat dla Dashboard Data
+class DashboardData(BaseModel):
+    study_records: List[StudyRecord]
+    user_flashcards: List[UserFlashcard]
+    study_sessions: List[StudySession]
+    exam_result_answers: List[ExamResultAnswer]
+    exam_results: List[ExamResult]
+

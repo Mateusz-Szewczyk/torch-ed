@@ -1,3 +1,5 @@
+// src/app/page.tsx
+
 'use client';
 
 import { useTranslation, Trans } from 'react-i18next';
@@ -9,6 +11,8 @@ import {
   CardContent
 } from "@/components/ui/card";
 
+import { MdErrorOutline } from 'react-icons/md';
+
 import {
   Sparkles,
   Cpu,
@@ -19,7 +23,13 @@ import {
 // Import ikon z react-icons
 import { FaGithub, FaLinkedin, FaRegLightbulb } from 'react-icons/fa'; // Dodana ikona FaRegLightbulb
 
-// Definicja typu dla planów
+// Import komponentu Dashboard
+import Dashboard from '@/components/Dashboard';
+
+// Import AuthContext
+import { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '@/contexts/AuthContext';
+
 interface FuturePlan {
   title: string;
   description: string;
@@ -27,6 +37,48 @@ interface FuturePlan {
 
 export default function HomePage() {
   const { t } = useTranslation();
+  const { isAuthenticated, accessDenied, setAccessDenied, setTokenExpired, tokenExpired} = useContext(AuthContext);
+
+  // Hooki wywoływane zawsze, niezależnie od isAuthenticated:
+  const [fadeOut, setFadeOut] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (accessDenied) {
+      // Po 4,5 sekundach rozpocznij animację zanikania
+      timer = setTimeout(() => {
+        setFadeOut(true);
+      }, 4500);
+      // Po 5 sekundach zresetuj flagę i efekt
+      const resetTimer = setTimeout(() => {
+        setAccessDenied(false);
+        setFadeOut(false);
+      }, 8000);
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(resetTimer);
+      };
+    }
+  }, [accessDenied, setAccessDenied]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (tokenExpired) {
+      // Po 4,5 sekundach rozpocznij animację zanikania
+      timer = setTimeout(() => {
+        setFadeOut(true);
+      }, 4500);
+      // Po 5 sekundach zresetuj flagę i efekt
+      const resetTimer = setTimeout(() => {
+        setTokenExpired(false);
+        setFadeOut(false);
+      }, 8000);
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(resetTimer);
+      };
+    }
+  }, [tokenExpired, setTokenExpired]);
 
   // Przykładowe sekcje do kart
   const sections = [
@@ -54,52 +106,32 @@ export default function HomePage() {
   ];
 
   // Pobieranie planów jako tablicy obiektów
-  // Attempt to get an array from i18n
   const rawFuturePlans = t('future_plans.items', { returnObjects: true });
 
-  // Safely cast or convert it to an array
   let futurePlans: FuturePlan[] = [];
   if (Array.isArray(rawFuturePlans)) {
     futurePlans = rawFuturePlans as FuturePlan[];
   } else {
     console.warn('future_plans.items is not an array:', rawFuturePlans);
-    // Or provide a fallback if needed
-    // futurePlans = [];
   }
 
-  console.log('Future Plans:', futurePlans);
-  // Debugging: Sprawdzenie zawartości futurePlans
-  console.log('Future Plans:', futurePlans);
-
-  return (
+  // Warunkowe renderowanie treści – zawsze zwracamy JSX, ale zawartość zależy od isAuthenticated
+  const content = isAuthenticated ? (
+    <Dashboard />
+  ) : (
     <div
-      className="relative flex flex-col min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]">
+      className="relative flex flex-col max-w-[98%] mx-auto min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]"
+    >
+      {/* Bąbelki w tle */}
+      <div className="absolute bubbleOne"/>
+      <div className="absolute bubbleTwo"/>
+      <div className="absolute bubbleThree"/>
+      <div className="absolute bubbleFour"/>
 
-      {/* Bąbelki w tle - pozycjonowanie, żeby były widoczne */}
-      <div className="absolute inset-0 -z-1 overflow-hidden">
-        {/* Każdy bąbelek ma top/left określone inline, + klasa animująca */}
-        <div
-          className="absolute w-72 h-72 bg-pink-300/50 rounded-full animate-randomBallOne"
-          style={{ top: '20%', left: '10%' }}
-        />
-        <div
-          className="absolute w-80 h-80 bg-blue-300/50 rounded-full animate-randomBallTwo"
-          style={{ top: '50%', left: '60%' }}
-        />
-        <div
-          className="absolute w-96 h-96 bg-green-300/40 rounded-full animate-randomBallThree"
-          style={{ top: '10%', left: '70%' }}
-        />
-        <div
-          className="absolute w-64 h-64 bg-purple-300/40 rounded-full animate-randomBallFour"
-          style={{ top: '70%', left: '20%' }}
-        />
-      </div>
 
       {/* Hero / Intro */}
       <section className="py-20 px-4 flex flex-col items-center text-center z-10">
         <div className="max-w-3xl mx-auto space-y-6">
-          {/* Użycie komponentu Trans do wstawienia animowanego słowa */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold drop-shadow-md">
             <Trans i18nKey="modern_homepage_title">
               Tutaj zaczyna i kończy się Twoja nauka
@@ -120,9 +152,7 @@ export default function HomePage() {
           {sections.map((sec, idx) => (
             <Card
               key={idx}
-              className="bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]
-                 transform hover:-translate-y-2 hover:shadow-2xl
-                 transition-all duration-500 animate-fadeInUp"
+              className="bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] transform hover:-translate-y-2 hover:shadow-2xl transition-all duration-500 animate-fadeInUp"
             >
               <CardHeader className="flex items-center space-x-3 animate-textGradient">
                 <sec.icon className="h-8 w-8 text-[hsl(var(--primary))]" />
@@ -141,7 +171,9 @@ export default function HomePage() {
       {/* Sekcja Highlights */}
       <section className="px-4 py-16 bg-[hsl(var(--background))]/80 z-5 shadow-custom">
         <div className="container mx-auto text-center space-y-8">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">{t('modern_homepage_highlights_title')}</h2>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
+            {t('modern_homepage_highlights_title')}
+          </h2>
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
             {t('modern_homepage_highlights_subtitle')}
           </p>
@@ -159,23 +191,20 @@ export default function HomePage() {
       {/* Sekcja Plany na Przyszłość */}
       <section className="py-16 px-4 text-[hsl(var(--card-foreground))]">
         <div className="container mx-auto text-center space-y-8">
-          {/* Nagłówek z ikoną */}
           <div className="flex justify-center items-center space-x-4">
             <FaRegLightbulb className="h-8 w-8 text-[hsl(var(--primary))]" />
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">{t('future_plans.title')}</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
+              {t('future_plans.title')}
+            </h2>
           </div>
-          {/* Opis sekcji z dodatkowym paddingiem */}
           <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto px-4">
             {t('future_plans.description')}
           </p>
-          {/* Karty z planami */}
           <div className="mt-10 grid sm:grid-cols-1 md:grid-cols-2 gap-8">
             {futurePlans.map((plan, index) => (
               <Card
                 key={index}
-                className="bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]
-                   p-8 rounded-lg shadow-md transform hover:scale-105
-                   transition-transform duration-300 text-base sm:text-lg md:text-base"
+                className="bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] p-8 rounded-lg shadow-md transform hover:scale-105 transition-transform duration-300 text-base sm:text-lg md:text-base"
               >
                 <CardTitle className="text-lg sm:text-xl font-semibold mb-2">
                   {plan.title}
@@ -196,7 +225,6 @@ export default function HomePage() {
             &copy; {new Date().getFullYear()} Mateusz Szewczyk &amp; Adam Sarga. {t('all_rights_reserved')}
           </p>
           <div className="flex space-x-4 mt-4 md:mt-0">
-            {/* GitHub - Mateusz */}
             <a
               href="https://github.com/Mateusz-Szewczyk"
               target="_blank"
@@ -206,8 +234,6 @@ export default function HomePage() {
             >
               <FaGithub className="h-6 w-6" />
             </a>
-
-            {/* LinkedIn - Mateusz */}
             <a
               href="https://www.linkedin.com/in/mateusz-szewczyk-09073220b/"
               target="_blank"
@@ -217,8 +243,6 @@ export default function HomePage() {
             >
               <FaLinkedin className="h-6 w-6" />
             </a>
-
-            {/* GitHub - Adam */}
             <a
               href="https://github.com/Vronst"
               target="_blank"
@@ -228,8 +252,6 @@ export default function HomePage() {
             >
               <FaGithub className="h-6 w-6" />
             </a>
-
-            {/* LinkedIn - Adam */}
             <a
               href="https://www.linkedin.com/in/adam-sarga-613863272/"
               target="_blank"
@@ -243,5 +265,36 @@ export default function HomePage() {
         </div>
       </footer>
     </div>
+  );
+
+  return (
+    <>
+      {content}
+      {/* Komunikat o braku dostępu z efektem fade-out */}
+      {accessDenied && (
+        <div
+          className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center bg-red-600 bg-opacity-90 backdrop-blur-md text-white py-3 px-6 rounded-xl shadow-lg z-50 transition-all duration-500 ${
+            fadeOut ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+          }`}
+        >
+          <MdErrorOutline className="mr-2 text-xl" />
+          <p className="text-sm font-medium">
+            Niestety nie masz dostępu do tego zasobu, spróbuj zalogować/zarejestrować się i spróbuj ponownie.
+          </p>
+        </div>
+      )}
+      {tokenExpired && (
+        <div
+          className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center bg-red-600 bg-opacity-90 backdrop-blur-md text-white py-3 px-6 rounded-xl shadow-lg z-50 transition-all duration-500 ${
+            fadeOut ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+          }`}
+        >
+          <MdErrorOutline className="mr-2 text-xl" />
+          <p className="text-sm font-medium">
+            Z powodu nieaktywności zostałeś wylogowany. Zaloguj się ponownie aby kontynuować
+          </p>
+        </div>
+      )}
+    </>
   );
 }

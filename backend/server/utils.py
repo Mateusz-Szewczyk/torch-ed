@@ -1,6 +1,9 @@
 import os
 import hmac
 import hashlib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from flask import Request, jsonify, request
 import smtplib
 from werkzeug.security import check_password_hash
@@ -96,19 +99,6 @@ def signature_check(func: Callable) -> Callable | tuple:
     
     return wraper
 
-<<<<<<< Updated upstream
-def send_email(to: str, message: str) -> None:
-    if not isinstance(EMAIL, str) or not isinstance(EMAIL_PASSWORD, str):
-        raise Misconfiguration('No email or password')
-    with smtplib.SMTP('smtp.gmail.com') as connection:
-        connection.starttls()
-        connection.login(EMAIL, EMAIL_PASSWORD)
-        connection.sendmail(
-            from_addr=EMAIL,
-            to_addrs=to,
-            msg=message
-        )
-=======
 
 def send_email(to: str, subject: str, message: str) -> None:
     """
@@ -144,4 +134,3 @@ def send_email(to: str, subject: str, message: str) -> None:
         print("Error: Unable to connect to the SMTP server.")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
->>>>>>> Stashed changes
