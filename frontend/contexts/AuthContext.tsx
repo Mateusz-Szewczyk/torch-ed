@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           process.env.NEXT_PUBLIC_API_FLASK_URL ||
           'http://localhost:14440/api/v1';
 
-        const authUrl = `${API_BASE_URL}/auth/me`;
+        const authUrl = `${API_BASE_URL}/auth/login`;
         console.log('Auth Request URL:', authUrl);
         console.log('Available cookies:', document.cookie);
 
