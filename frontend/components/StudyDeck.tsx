@@ -89,11 +89,11 @@ export function StudyDeck({
   // 7. Initialize seen count.
   useEffect(() => {
     const initialSeenCount: CardSeenCount = {};
-    shuffledCards.forEach(card => {
+    available_cards.forEach((card) => {
       initialSeenCount[card.id] = 0;
     });
     setCardSeenCount(initialSeenCount);
-  }, [shuffledCards]);
+  }, [available_cards]);
 
   // 8. Update seen count whenever currentIndex changes.
   useEffect(() => {

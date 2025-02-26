@@ -301,13 +301,7 @@ export default function ExamsPage() {
             {exams.map((exam) => (
               <div key={exam.id} className="relative group">
                 <Card
-                  className="flex flex-col w-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group-hover:z-10"
-                  style={{
-                    minHeight: "400px",
-                    height: "auto",
-                    maxHeight: "400px",
-                    transition: "all 0.3s ease-in-out",
-                  }}
+                  className="flex flex-col w-full transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1 group-hover:z-10 min-h-[300px] sm:min-h-[400px] max-h-[400px]"
                 >
                   <CardHeader className="flex-shrink-0">
                     <div className="flex justify-between items-center">
@@ -321,7 +315,7 @@ export default function ExamsPage() {
                             <MoreVertical className="h-5 w-5" />
                           </Button>
                         </CollapsibleTrigger>
-                        <CollapsibleContent className="absolute right-4 top-12 bg-card border border-border rounded-md shadow-lg z-50 p-2">
+                        <CollapsibleContent className="absolute right-2 sm:right-4 top-10 sm:top-12 bg-card border border-border rounded-md shadow-lg z-50 p-2">
                           <div className="flex flex-col">
                             <EditExamDialog
                               exam={exam}
@@ -354,7 +348,7 @@ export default function ExamsPage() {
                     <p className="text-sm text-muted-foreground">{exam.description || t("no_description")}</p>
                   </CardContent>
                   <CardFooter className="mt-auto">
-                    <Button variant="default" onClick={() => handleStudy(exam)} className="w-full">
+                    <Button variant="default" onClick={() => handleStudy(exam)} className="w-full flex items-center justify-between">
                       {t("study")}
                       <ChevronRight className="h-5 w-5 ml-2" />
                     </Button>
@@ -368,4 +362,3 @@ export default function ExamsPage() {
     </div>
   )
 }
-
