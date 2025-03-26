@@ -13,7 +13,7 @@ class Config:
     PUP_PATH: str = "pup_key.pem"
     SALT: str = os.getenv('SALT', '')
     DOMAIN: str = os.getenv('DOMAIN', '.torched.pl')
-    IS_SECURE: bool = os.getenv('IS_SECURE', True) in ('true', '1', 'yes', True, 1)
+    IS_SECURE: bool = True
 
 
 

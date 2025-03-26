@@ -52,7 +52,7 @@ app.add_middleware(
         "https://torch-ed.vercel.app",
         "https://torched.pl",
         "localhost:3000"
-    ],  # Upewnij się, że wszystkie wymagane domeny są tutaj uwzględnione
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
