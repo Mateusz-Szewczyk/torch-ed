@@ -688,7 +688,7 @@ const Dashboard: React.FC = () => {
             {isExamAnalysisOpen ? <ChevronUp /> : <ChevronDown />}
           </CardHeader>
         </button>
-        <CardContent>
+        <CardContent className={"p-0"}>
           {isExamAnalysisOpen && (
             <div className="space-y-8 p-6">
               {filteredData.exam_results.length === 0 ? (
@@ -787,7 +787,7 @@ const Dashboard: React.FC = () => {
             {isFlashcardAnalysisOpen ? <ChevronUp /> : <ChevronDown />}
           </CardHeader>
         </button>
-        <CardContent>
+        <CardContent className={"p-0"}>
           {isFlashcardAnalysisOpen && (
             <div className="space-y-8 p-6">
               {filteredData.user_flashcards.length === 0 ? (

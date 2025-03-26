@@ -435,7 +435,6 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 size="sm"
                 className="flex items-center space-x-1"
               >
-                <MessageCircle className="h-4 w-4" />
                 <span className="text-xs">{t("save_attempt")}</span>
               </Button>
             <Button variant="destructive" onClick={onExit} size="sm" className="flex items-center space-x-1">
