@@ -25,7 +25,7 @@ def login() -> Response | tuple:
     is_logged = request.cookies.get(COOKIE_AUTH, None)
 
     if is_logged:
-        return jsonify({'error': 'To log in you must first logout'}), 423
+        return jsonify({'success': True, 'message': 'Logged in'})
 
     data = data_check(request, 'login')
     if isinstance(data, tuple):

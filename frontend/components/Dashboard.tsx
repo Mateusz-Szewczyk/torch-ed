@@ -89,7 +89,6 @@ interface DashboardData {
 const sortByDateAscending = <T extends { date: string }>(data: T[]): T[] =>
   [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-
 interface CustomTooltipPayload {
   name?: string
   value?: number | string
@@ -259,7 +258,7 @@ const CookbookSection = () => {
         <CardTitle>{t("cookbookTitle")}</CardTitle>
         <CardDescription>{t("cookbookIntro")}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 p-6">
         <div>
           <h3 className="text-lg font-semibold mb-2">{t("cookbook.flashcardsLimit")}</h3>
           <p>{t("cookbook.flashcardsLimitInfo")}</p>
@@ -674,19 +673,24 @@ const Dashboard: React.FC = () => {
         deckOptions={deckOptions}
       />
 
+      {/* Exam Analysis Section as a clickable header */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-2xl font-bold flex items-center">
-            <TestTube className="mr-2 h-6 w-6" />
-            {t("examAnalysis")}
-          </CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsExamAnalysisOpen(!isExamAnalysisOpen)}>
+        <button
+          type="button"
+          onClick={() => setIsExamAnalysisOpen(!isExamAnalysisOpen)}
+          className="w-full p-2 text-left"
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 hover:bg-muted p-2 rounded transition-colors duration-200">
+            <CardTitle className="text-2xl font-bold flex items-center">
+              <TestTube className="mr-2 h-6 w-6" />
+              {t("examAnalysis")}
+            </CardTitle>
             {isExamAnalysisOpen ? <ChevronUp /> : <ChevronDown />}
-          </Button>
-        </CardHeader>
+          </CardHeader>
+        </button>
         <CardContent>
           {isExamAnalysisOpen && (
-            <div className="space-y-8">
+            <div className="space-y-8 p-6">
               {filteredData.exam_results.length === 0 ? (
                 <Card>
                   <CardHeader>
@@ -734,7 +738,6 @@ const Dashboard: React.FC = () => {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  {/* Histogram wyników egzaminów */}
                   <div>
                     <h4 className="text-lg font-semibold mb-2">{t("examScoreDistribution")}</h4>
                     <ResponsiveContainer width="100%" height={300}>
@@ -748,7 +751,6 @@ const Dashboard: React.FC = () => {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  {/* Sesje i egzaminy na dzień */}
                   <div>
                     <h4 className="text-lg font-semibold mb-2">{t("sessionsAndExamsPerDay")}</h4>
                     <ResponsiveContainer width="100%" height={300}>
@@ -770,19 +772,24 @@ const Dashboard: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Flashcard Analysis Section as a clickable header */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-2xl font-bold flex items-center">
-            <BookOpen className="mr-2 h-6 w-6" />
-            {t("flashcardAnalysis")}
-          </CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setIsFlashcardAnalysisOpen(!isFlashcardAnalysisOpen)}>
+        <button
+          type="button"
+          onClick={() => setIsFlashcardAnalysisOpen(!isFlashcardAnalysisOpen)}
+          className="w-full text-left p-2"
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 hover:bg-muted p-2 rounded transition-colors duration-200">
+            <CardTitle className="text-2xl font-bold flex items-center">
+              <BookOpen className="mr-2 h-6 w-6" />
+              {t("flashcardAnalysis")}
+            </CardTitle>
             {isFlashcardAnalysisOpen ? <ChevronUp /> : <ChevronDown />}
-          </Button>
-        </CardHeader>
+          </CardHeader>
+        </button>
         <CardContent>
           {isFlashcardAnalysisOpen && (
-            <div className="space-y-8">
+            <div className="space-y-8 p-6">
               {filteredData.user_flashcards.length === 0 ? (
                 <Card>
                   <CardHeader>
@@ -904,4 +911,3 @@ const Dashboard: React.FC = () => {
 }
 
 export default Dashboard
-
