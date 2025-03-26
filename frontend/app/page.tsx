@@ -20,13 +20,10 @@ import {
   LayoutDashboard
 } from 'lucide-react';
 
-// Import ikon z react-icons
-import { FaGithub, FaLinkedin, FaRegLightbulb } from 'react-icons/fa'; // Dodana ikona FaRegLightbulb
+import { FaGithub, FaLinkedin, FaRegLightbulb } from 'react-icons/fa';
 
-// Import komponentu Dashboard
 import Dashboard from '@/components/Dashboard';
 
-// Import AuthContext
 import { useContext, useEffect, useState } from 'react';
 import { AuthContext } from '@/contexts/AuthContext';
 
@@ -37,19 +34,16 @@ interface FuturePlan {
 
 export default function HomePage() {
   const { t } = useTranslation();
-  const { isAuthenticated, accessDenied, setAccessDenied, setTokenExpired, tokenExpired} = useContext(AuthContext);
+  const { isAuthenticated, accessDenied, setAccessDenied, setTokenExpired, tokenExpired } = useContext(AuthContext);
 
-  // Hooki wywoływane zawsze, niezależnie od isAuthenticated:
   const [fadeOut, setFadeOut] = useState(false);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (accessDenied) {
-      // Po 4,5 sekundach rozpocznij animację zanikania
       timer = setTimeout(() => {
         setFadeOut(true);
       }, 4500);
-      // Po 5 sekundach zresetuj flagę i efekt
       const resetTimer = setTimeout(() => {
         setAccessDenied(false);
         setFadeOut(false);
@@ -64,11 +58,9 @@ export default function HomePage() {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (tokenExpired) {
-      // Po 4,5 sekundach rozpocznij animację zanikania
       timer = setTimeout(() => {
         setFadeOut(true);
       }, 4500);
-      // Po 5 sekundach zresetuj flagę i efekt
       const resetTimer = setTimeout(() => {
         setTokenExpired(false);
         setFadeOut(false);
@@ -80,7 +72,6 @@ export default function HomePage() {
     }
   }, [tokenExpired, setTokenExpired]);
 
-  // Przykładowe sekcje do kart
   const sections = [
     {
       icon: Sparkles,
@@ -105,7 +96,6 @@ export default function HomePage() {
     t('homepage_modern_highlight3'),
   ];
 
-  // Pobieranie planów jako tablicy obiektów
   const rawFuturePlans = t('future_plans.items', { returnObjects: true });
 
   let futurePlans: FuturePlan[] = [];
@@ -115,19 +105,17 @@ export default function HomePage() {
     console.warn('future_plans.items is not an array:', rawFuturePlans);
   }
 
-  // Warunkowe renderowanie treści – zawsze zwracamy JSX, ale zawartość zależy od isAuthenticated
   const content = isAuthenticated ? (
     <Dashboard />
   ) : (
     <div
-      className="relative flex flex-col max-w-[98%] mx-auto min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))]"
+      className="relative flex flex-col max-w-[100%] mx-auto min-h-screen bg-gradient-to-br from-[hsl(var(--background))] to-[hsl(var(--border))] text-[hsl(var(--foreground))] overflow-x-hidden"
     >
       {/* Bąbelki w tle */}
-      <div className="absolute bubbleOne"/>
-      <div className="absolute bubbleTwo"/>
-      <div className="absolute bubbleThree"/>
-      <div className="absolute bubbleFour"/>
-
+      <div className="absolute bubbleOne" />
+      <div className="absolute bubbleTwo" />
+      <div className="absolute bubbleThree" />
+      <div className="absolute bubbleFour" />
 
       {/* Hero / Intro */}
       <section className="py-20 px-4 flex flex-col items-center text-center z-10">
@@ -270,7 +258,6 @@ export default function HomePage() {
   return (
     <>
       {content}
-      {/* Komunikat o braku dostępu z efektem fade-out */}
       {accessDenied && (
         <div
           className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center bg-red-600 bg-opacity-90 backdrop-blur-md text-white py-3 px-6 rounded-xl shadow-lg z-50 transition-all duration-500 ${
