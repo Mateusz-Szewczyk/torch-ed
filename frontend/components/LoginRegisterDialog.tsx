@@ -1,139 +1,160 @@
-'use client';
+"use client"
 
-import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { useTranslation } from 'react-i18next';
-import { useRouter } from 'next/navigation';
+import type React from "react"
+import { useState, useEffect } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { useTranslation } from "react-i18next"
+import { useRouter } from "next/navigation"
 
 interface LoginRegisterDialogProps {
-  children: React.ReactNode;
-  setIsAuthenticated: (val: boolean) => void; // Callback to set logged-in state
+  children: React.ReactNode
+  setIsAuthenticated: (val: boolean) => void // Callback to set logged-in state
+}
+
+// Simple toast notification types
+type ToastType = "success" | "error" | "info"
+
+interface Toast {
+  message: string
+  type: ToastType
 }
 
 export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegisterDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const { t } = useTranslation();
-  const router = useRouter();
+  const [isOpen, setIsOpen] = useState(false)
+  const { t } = useTranslation()
+  const router = useRouter()
 
   // Fields for login
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  const [loginEmail, setLoginEmail] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
 
   // Fields for registration
-  const [registerEmail, setRegisterEmail] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
-  const [registerPassword2, setRegisterPassword2] = useState('');
+  const [registerEmail, setRegisterEmail] = useState("")
+  const [registerPassword, setRegisterPassword] = useState("")
+  const [registerPassword2, setRegisterPassword2] = useState("")
 
-  // State to track if registration confirmation is needed
-  const [registrationConfirmationMessage, setRegistrationConfirmationMessage] = useState('');
+  // State for notifications
+  const [toast, setToast] = useState<Toast | null>(null)
 
-  // Local state for success message after login
-  const [loginSuccessMessage, setLoginSuccessMessage] = useState('');
+  // Clear toast after 20 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 20000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   // Pobierz bazowy URL API z zmiennej środowiskowej
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || 'http://localhost:14440/api/v1';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || "http://localhost:14440/api/v1"
+
+  // Show toast notification
+  const showToast = (message: string, type: ToastType = "info") => {
+    setToast({ message, type })
+  }
 
   // Handler: login
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_name: loginEmail,
           password: loginPassword,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to login');
+        const errData = await response.json()
+        throw new Error(errData.error || "Failed to login")
       }
 
-      // Instead of alert, set a success message
-      setLoginSuccessMessage('Zalogowano pomyślnie');
+      // Show success toast (outside modal)
+      showToast("Zalogowano pomyślnie", "success")
+
       // Hide the dialog
-      setIsOpen(false);
+      setIsOpen(false)
 
       // Mark user as authenticated
-      setIsAuthenticated(true);
+      setIsAuthenticated(true)
 
       // Redirect to home
-      router.push('/');
-
-      // Clear the success message after 3 seconds
-      setTimeout(() => {
-        setLoginSuccessMessage('');
-      }, 3000);
-
+      router.push("/")
     } catch (err) {
-      console.error('Error logging in:', err);
-      alert('Nie udało się zalogować: ' + String(err));
+      console.error("Error logging in:", err)
+      // Handle "User not confirmed" error
+      if (String(err).includes("User not confirmed")) {
+        showToast("Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail, aby potwierdzić rejestrację.", "error")
+      } else {
+        showToast("Nie udało się zalogować, sprawdź podane informacje!", "error")
+      }
     }
-  };
+  }
 
   // Handler: register
   const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     try {
       if (registerPassword !== registerPassword2) {
-        alert('Hasła nie są takie same!');
-        return;
+        showToast("Hasła nie są takie same!", "error")
+        return
       }
+
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_name: registerEmail,
           password: registerPassword,
           password2: registerPassword2,
           email: registerEmail,
           age: 0,
-          role: 'user',
+          role: "user",
         }),
-      });
+      })
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to register');
+        const errData = await response.json()
+        throw new Error(errData.error || "Failed to register")
       }
 
-      // Show confirmation message after successful registration
-      setRegistrationConfirmationMessage('Rejestracja zakończona! Sprawdź swoją pocztę, aby potwierdzić konto. Wystarczy kliknąć w link rejestracyjny.');
+      // Show success toast (outside modal)
+      showToast("Rejestracja zakończona! Sprawdź swoją pocztę, aby potwierdzić konto.", "success")
 
       // Hide the dialog
-      setIsOpen(false);
-
+      setIsOpen(false)
     } catch (err) {
-      console.error('Error registering:', err);
-      alert('Nie udało się zarejestrować: ' + String(err));
+      console.error("Error registering:", err)
+      showToast("Nie udało się zarejestrować: " + String(err), "error")
     }
-  };
+  }
 
   return (
     <>
-      {/* This is the dialog itself */}
+      {/* Modal */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogTrigger>{children}</DialogTrigger>
         <DialogContent className="sm:max-w-[425px] bg-background text-foreground">
           <DialogHeader>
-            <DialogTitle>{t('login_register_dialog.title')}</DialogTitle>
+            <DialogTitle>{t("login_register_dialog.title")}</DialogTitle>
           </DialogHeader>
+          {/* Error toast inside modal */}
+          {isOpen && toast && toast.type === "error" && (
+            <div className="mb-4 px-4 py-3 rounded-md shadow-lg bg-destructive text-destructive-foreground animate-fadeIn">
+              <p>{toast.message}</p>
+            </div>
+          )}
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">
-                {t('login_register_dialog.login')}
-              </TabsTrigger>
-              <TabsTrigger value="register">
-                {t('login_register_dialog.register')}
-              </TabsTrigger>
+              <TabsTrigger value="login">{t("login_register_dialog.login")}</TabsTrigger>
+              <TabsTrigger value="register">{t("login_register_dialog.register")}</TabsTrigger>
             </TabsList>
 
             {/* LOGIN TAB */}
@@ -141,9 +162,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
               <form onSubmit={handleLogin}>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="email">
-                      {t('login_register_dialog.email')}
-                    </Label>
+                    <Label htmlFor="email">{t("login_register_dialog.email")}</Label>
                     <Input
                       id="email"
                       type="email"
@@ -154,9 +173,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="password">
-                      {t('login_register_dialog.password')}
-                    </Label>
+                    <Label htmlFor="password">{t("login_register_dialog.password")}</Label>
                     <Input
                       id="password"
                       type="password"
@@ -167,7 +184,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
                   </div>
                 </div>
                 <Button type="submit" className="w-full">
-                  {t('login_register_dialog.login')}
+                  {t("login_register_dialog.login")}
                 </Button>
               </form>
             </TabsContent>
@@ -177,9 +194,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
               <form onSubmit={handleRegister}>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="register-email">
-                      {t('login_register_dialog.email')}
-                    </Label>
+                    <Label htmlFor="register-email">{t("login_register_dialog.email")}</Label>
                     <Input
                       id="register-email"
                       type="email"
@@ -190,9 +205,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="register-password">
-                      {t('login_register_dialog.password')}
-                    </Label>
+                    <Label htmlFor="register-password">{t("login_register_dialog.password")}</Label>
                     <Input
                       id="register-password"
                       type="password"
@@ -202,9 +215,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="confirm-password">
-                      {t('login_register_dialog.confirm_password')}
-                    </Label>
+                    <Label htmlFor="confirm-password">{t("login_register_dialog.confirm_password")}</Label>
                     <Input
                       id="confirm-password"
                       type="password"
@@ -215,7 +226,7 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
                   </div>
                 </div>
                 <Button type="submit" className="w-full">
-                  {t('login_register_dialog.register')}
+                  {t("login_register_dialog.register")}
                 </Button>
               </form>
             </TabsContent>
@@ -223,23 +234,13 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
         </DialogContent>
       </Dialog>
 
-      {/* Conditional message for registration confirmation */}
-      {registrationConfirmationMessage && (
-        <div className="fixed bottom-4 left-0 w-full flex justify-center z-50">
-          <div className="bg-yellow-500 text-white px-4 py-2 rounded shadow-lg animate-fadeIn">
-            {registrationConfirmationMessage}
-          </div>
-        </div>
-      )}
 
-      {/* This conditionally rendered "toast" for successful login */}
-      {loginSuccessMessage && (
-        <div className="fixed bottom-4 left-0 w-full flex justify-center z-50">
-          <div className="bg-green-500 text-white px-4 py-2 rounded shadow-lg animate-fadeIn">
-            {loginSuccessMessage}
-          </div>
-        </div>
-      )}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </>
-  );
+  )
 }
