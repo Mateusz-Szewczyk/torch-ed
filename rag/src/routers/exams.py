@@ -155,6 +155,15 @@ async def update_exam(
         if exam_update.questions is not None:
             existing_questions = {q.id: q for q in existing_exam.questions if q.id is not None}
             updated_question_ids = set()
+            for q in existing_exam.questions:
+                print(q)
+                print(q.id)
+                print("-"*30)
+
+            for q in exam_update.questions:
+                print(q)
+                print(q.id)
+                print("-" * 30)
 
             for q in exam_update.questions:
                 if q.id and q.id in existing_questions:

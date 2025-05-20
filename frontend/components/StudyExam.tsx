@@ -1,191 +1,165 @@
-'use client';
+"use client"
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { useTranslation } from "react-i18next";
-import {
-  ChevronRight,
-  ChevronLeft,
-  CheckCircle,
-  XCircle,
-  MessageCircle,
-  ArrowLeft,
-} from "lucide-react";
-import * as Slider from "@radix-ui/react-slider";
-import Chat from "@/components/Chat";
-import { Loader2 } from "lucide-react";
-
-interface Answer {
-  id: number;
-  text: string;
-  is_correct: boolean;
-}
-
-interface Question {
-  id: number;
-  text: string;
-  answers: Answer[];
-}
-
-interface Exam {
-  id: number;
-  name: string;
-  description: string;
-  questions: Question[];
-  // Jeśli conversation_id jest pominięte lub równe 0, zostanie utworzona nowa konwersacja.
-  conversation_id?: number;
-}
+import type React from "react"
+import { useState, useEffect, useCallback } from "react"
+import { Button } from "@/components/ui/button"
+import { useTranslation } from "react-i18next"
+import { ChevronRight, ChevronLeft, CheckCircle, XCircle, MessageCircle, ArrowLeft, Loader2 } from "lucide-react"
+import * as Slider from "@radix-ui/react-slider"
+import Chat from "@/components/Chat"
+import type { Exam, ExamQuestion } from "@/types"
 
 interface StudyExamProps {
-  exam: Exam;
-  onExit: () => void;
+  exam: Exam
+  onExit: () => void
 }
 
 interface ExamResultAnswerCreate {
-  question_id: number;
-  selected_answer_id: number;
-  answer_time: string; // ISO string
+  question_id: number
+  selected_answer_id: number
+  answer_time: string // ISO string
 }
 
 interface ExamResultCreate {
-  exam_id: number;
-  answers: ExamResultAnswerCreate[];
+  exam_id: number
+  answers: ExamResultAnswerCreate[]
 }
 
 interface ExamResultRead {
-  id: number;
-  exam_id: number;
-  user_id: string;
-  started_at: string;
-  completed_at: string | null;
-  score: number | null;
-  answers: ExamResultAnswerRead[];
+  id: number
+  exam_id: number
+  user_id: string
+  started_at: string
+  completed_at: string | null
+  score: number | null
+  answers: ExamResultAnswerRead[]
 }
 
 interface ExamResultAnswerRead {
-  id: number;
-  question_id: number;
-  selected_answer_id: number;
-  is_correct: boolean;
-  answer_time: string;
+  id: number
+  question_id: number
+  selected_answer_id: number
+  is_correct: boolean
+  answer_time: string
 }
 
 interface UserAnswer {
-  question_id: number;
-  selected_answer_id: number | null;
-  answer_time: string | null;
+  question_id: number
+  selected_answer_id: number | null
+  answer_time: string | null
 }
 
 export function StudyExam({ exam, onExit }: StudyExamProps) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
 
   // Stan chatu oraz detekcja rozmiaru ekranu
-  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
-  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(false);
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false)
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(false)
   useEffect(() => {
     const handleResize = () => {
-      setIsMobileScreen(window.innerWidth < 768);
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+      setIsMobileScreen(window.innerWidth < 768)
+    }
+    handleResize()
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
 
   // Stany dotyczące egzaminu
-  const [numQuestions, setNumQuestions] = useState<number>(10);
-  const [isSelectionStep, setIsSelectionStep] = useState<boolean>(true);
-  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
-  const [score, setScore] = useState<number>(0);
-  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([]);
-  const [isExamCompleted, setIsExamCompleted] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [numQuestions, setNumQuestions] = useState<number>(10)
+  const [isSelectionStep, setIsSelectionStep] = useState<boolean>(true)
+  const [selectedQuestions, setSelectedQuestions] = useState<ExamQuestion[]>([])
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0)
+  const [score, setScore] = useState<number>(0)
+  const [userAnswers, setUserAnswers] = useState<UserAnswer[]>([])
+  const [isExamCompleted, setIsExamCompleted] = useState<boolean>(false)
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api";
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
 
   // Odfiltrowanie odpowiedzi, które nie są puste
-  const answeredQuestions = userAnswers.filter(
-    (answer) => answer.selected_answer_id !== null
-  );
+  const answeredQuestions = userAnswers.filter((answer) => answer.selected_answer_id !== null)
 
   // Funkcja losująca pytania z całej puli
-  const selectRandomQuestions = (allQuestions: Question[], count: number): Question[] => {
-    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-  };
+  const selectRandomQuestions = (allQuestions: ExamQuestion[], count: number): ExamQuestion[] => {
+    const shuffled = [...allQuestions].sort(() => 0.5 - Math.random())
+    return shuffled.slice(0, count)
+  }
 
   // Obsługa zmiany wartości suwaka
   const handleSliderChange = (values: number[]) => {
-    setNumQuestions(values[0]);
-  };
+    setNumQuestions(values[0])
+  }
 
   // Obsługa zmiany w inpucie
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseInt(e.target.value, 10);
+    const value = Number.parseInt(e.target.value, 10)
     if (!isNaN(value)) {
-      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length);
-      setNumQuestions(clampedValue);
+      const clampedValue = Math.min(Math.max(value, 1), exam.questions.length)
+      setNumQuestions(clampedValue)
     }
-  };
+  }
 
   // Rozpoczęcie egzaminu: wybór losowych pytań i inicjalizacja odpowiedzi
   const startExam = () => {
-    const questions = selectRandomQuestions(exam.questions, numQuestions);
-    setSelectedQuestions(questions);
-    setUserAnswers(
-      questions.map((q) => ({
-        question_id: q.id,
-        selected_answer_id: null,
-        answer_time: null,
-      }))
-    );
-    setIsSelectionStep(false);
-  };
+    const questions = selectRandomQuestions(exam.questions, numQuestions)
+    setSelectedQuestions(questions)
+
+    // Upewnij się, że question_id jest zawsze liczbą
+    const initialUserAnswers: UserAnswer[] = questions.map((q) => ({
+      question_id: q.id || 0, // Użyj 0 jako wartości domyślnej, jeśli id jest undefined
+      selected_answer_id: null,
+      answer_time: null,
+    }))
+
+    setUserAnswers(initialUserAnswers)
+    setIsSelectionStep(false)
+  }
 
   // Obsługa wyboru odpowiedzi
   const handleAnswerSelect = (answerId: number) => {
-    const currentQuestion = selectedQuestions[currentQuestionIndex];
-    const selectedAnswer = currentQuestion.answers.find((a) => a.id === answerId);
-    const answerTime = new Date().toISOString();
-    const updatedUserAnswers = [...userAnswers];
+    const currentQuestion = selectedQuestions[currentQuestionIndex]
+    const selectedAnswer = currentQuestion.answers.find((a) => a.id === answerId)
+    const answerTime = new Date().toISOString()
+    const updatedUserAnswers = [...userAnswers]
     updatedUserAnswers[currentQuestionIndex] = {
-      question_id: currentQuestion.id,
+      question_id: currentQuestion.id || 0, // Użyj 0 jako wartości domyślnej, jeśli id jest undefined
       selected_answer_id: answerId,
       answer_time: answerTime,
-    };
-    setUserAnswers(updatedUserAnswers);
+    }
+    setUserAnswers(updatedUserAnswers)
     if (selectedAnswer && selectedAnswer.is_correct) {
-      setScore((prev) => prev + 1);
+      setScore((prev) => prev + 1)
     }
     if (currentQuestionIndex < selectedQuestions.length - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
+      setCurrentQuestionIndex((prev) => prev + 1)
     } else {
-      setIsExamCompleted(true);
+      setIsExamCompleted(true)
     }
-  };
+  }
 
   // Restart egzaminu
   const handleRestart = () => {
-    setCurrentQuestionIndex(0);
-    setScore(0);
-    setUserAnswers(
-      selectedQuestions.map((q) => ({
-        question_id: q.id,
-        selected_answer_id: null,
-        answer_time: null,
-      }))
-    );
-    setIsExamCompleted(false);
-    setIsSelectionStep(true);
-  };
+    setCurrentQuestionIndex(0)
+    setScore(0)
+
+    // Upewnij się, że question_id jest zawsze liczbą
+    const initialUserAnswers: UserAnswer[] = selectedQuestions.map((q) => ({
+      question_id: q.id || 0, // Użyj 0 jako wartości domyślnej, jeśli id jest undefined
+      selected_answer_id: null,
+      answer_time: null,
+    }))
+
+    setUserAnswers(initialUserAnswers)
+    setIsExamCompleted(false)
+    setIsSelectionStep(true)
+  }
 
   // Wysyłanie wyniku egzaminu
   const submitExamResult = useCallback(async () => {
     if (answeredQuestions.length === 0) {
-      alert(t("no_answers_to_submit"));
-      return;
+      alert(t("no_answers_to_submit"))
+      return
     }
     const examResult: ExamResultCreate = {
       exam_id: exam.id,
@@ -194,44 +168,44 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
         selected_answer_id: answer.selected_answer_id as number,
         answer_time: answer.answer_time as string,
       })),
-    };
+    }
     try {
-      setIsSubmitting(true);
-      setSubmitError(null);
+      setIsSubmitting(true)
+      setSubmitError(null)
       const response = await fetch(`${API_BASE_URL}/exams/submit/`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(examResult),
-      });
+      })
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || "Error submitting exam result.");
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "Error submitting exam result.")
       }
-      const result: ExamResultRead = await response.json();
-      console.log("Exam result saved:", result);
+      const result: ExamResultRead = await response.json()
+      console.log("Exam result saved:", result)
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error("Error submitting exam result:", error.message);
-        setSubmitError(error.message);
+        console.error("Error submitting exam result:", error.message)
+        setSubmitError(error.message)
       } else {
-        console.error("Unknown error submitting exam result");
-        setSubmitError("Unknown error submitting exam result.");
+        console.error("Unknown error submitting exam result")
+        setSubmitError("Unknown error submitting exam result.")
       }
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
-  }, [answeredQuestions, API_BASE_URL, exam.id, t]);
+  }, [answeredQuestions, API_BASE_URL, exam.id, t])
 
   // Automatyczne wysłanie wyniku po ukończeniu egzaminu
   useEffect(() => {
     if (isExamCompleted) {
-      submitExamResult();
+      submitExamResult()
     }
-  }, [isExamCompleted, submitExamResult]);
+  }, [isExamCompleted, submitExamResult])
 
   // Dla widoku desktopowego – przesunięcie karty egzaminu, gdy chat jest otwarty
-  const examCardMarginRight = !isMobileScreen && isChatOpen ? "mr-[40%]" : "";
+  const examCardMarginRight = !isMobileScreen && isChatOpen ? "mr-[40%]" : ""
 
   // Renderowanie kroku wyboru liczby pytań
   if (isSelectionStep) {
@@ -275,14 +249,19 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 className="w-12 p-1 border border-input rounded-md bg-background text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            <Button onClick={startExam} variant="default" size="sm" className="w-full flex items-center justify-center space-x-1">
+            <Button
+              onClick={startExam}
+              variant="default"
+              size="sm"
+              className="w-full flex items-center justify-center space-x-1"
+            >
               <ChevronRight className="h-4 w-4" />
               <span className="text-xs">{t("start_exam")}</span>
             </Button>
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Renderowanie podsumowania egzaminu po jego ukończeniu
@@ -317,11 +296,11 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   // Renderowanie egzaminu w trakcie
-  const currentQuestion = selectedQuestions[currentQuestionIndex];
+  const currentQuestion = selectedQuestions[currentQuestionIndex]
 
   return (
     <div className="h-screen w-full bg-background flex flex-col md:flex-row items-center justify-center p-4">
@@ -346,33 +325,27 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             </h3>
             <div className="grid grid-cols-1 gap-2">
               {currentQuestion.answers.map((answer) => {
-                const isSelected =
-                  userAnswers[currentQuestionIndex]?.selected_answer_id === answer.id;
-                const isCorrect = answer.is_correct;
+                const isSelected = userAnswers[currentQuestionIndex]?.selected_answer_id === answer.id
+                const isCorrect = answer.is_correct
                 return (
                   <Button
-                    key={answer.id}
-                    variant={
-                      isSelected ? (isCorrect ? "default" : "destructive") : "outline"
-                    }
+                    key={answer.id || 0} // Użyj 0 jako wartości domyślnej dla klucza
+                    variant={isSelected ? (isCorrect ? "default" : "destructive") : "outline"}
                     onClick={() => {
                       if (userAnswers[currentQuestionIndex]?.selected_answer_id === null) {
-                        handleAnswerSelect(answer.id);
+                        // Upewnij się, że answer.id jest liczbą
+                        handleAnswerSelect(answer.id || 0) // Użyj 0 jako wartości domyślnej
                       }
                     }}
                     disabled={userAnswers[currentQuestionIndex]?.selected_answer_id !== null}
                     size="sm"
                     className="w-full flex items-center justify-center space-x-1"
                   >
-                    {isSelected && isCorrect && (
-                      <CheckCircle className="h-4 w-4 text-success" />
-                    )}
-                    {isSelected && !isCorrect && (
-                      <XCircle className="h-4 w-4 text-destructive" />
-                    )}
+                    {isSelected && isCorrect && <CheckCircle className="h-4 w-4 text-success" />}
+                    {isSelected && !isCorrect && <XCircle className="h-4 w-4 text-destructive" />}
                     <span className="text-xs">{answer.text}</span>
                   </Button>
-                );
+                )
               })}
             </div>
           </div>
@@ -393,9 +366,9 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 onClick={() => {
                   if (userAnswers[currentQuestionIndex]?.selected_answer_id !== null) {
                     if (currentQuestionIndex < selectedQuestions.length - 1) {
-                      setCurrentQuestionIndex(currentQuestionIndex + 1);
+                      setCurrentQuestionIndex(currentQuestionIndex + 1)
                     } else {
-                      setIsExamCompleted(true);
+                      setIsExamCompleted(true)
                     }
                   }
                 }}
@@ -404,9 +377,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                 className="flex items-center space-x-1"
               >
                 <span className="text-xs">
-                  {currentQuestionIndex < selectedQuestions.length - 1
-                    ? t("next")
-                    : t("finish")}
+                  {currentQuestionIndex < selectedQuestions.length - 1 ? t("next") : t("finish")}
                 </span>
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -429,14 +400,14 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
               <span className="text-xs">{t("restart_exam")}</span>
             </Button>
             <Button
-                variant="secondary"
-                onClick={submitExamResult}
-                disabled={isSubmitting || answeredQuestions.length === 0}
-                size="sm"
-                className="flex items-center space-x-1"
-              >
-                <span className="text-xs">{t("save_attempt")}</span>
-              </Button>
+              variant="secondary"
+              onClick={submitExamResult}
+              disabled={isSubmitting || answeredQuestions.length === 0}
+              size="sm"
+              className="flex items-center space-x-1"
+            >
+              <span className="text-xs">{t("save_attempt")}</span>
+            </Button>
             <Button variant="destructive" onClick={onExit} size="sm" className="flex items-center space-x-1">
               <XCircle className="h-4 w-4" />
               <span className="text-xs">{t("exit_study")}</span>
@@ -462,5 +433,5 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
         </div>
       )}
     </div>
-  );
+  )
 }
