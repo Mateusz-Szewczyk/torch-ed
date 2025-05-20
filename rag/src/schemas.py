@@ -178,6 +178,7 @@ class ExamBase(BaseModel):
     conversation_id: Optional[int] = None
 
 class ExamAnswerCreate(BaseModel):
+    id: Optional[int] = None
     text: str = Field(..., example="3.14")
     is_correct: bool = Field(..., example=True)
 
@@ -190,16 +191,17 @@ class ExamAnswerRead(BaseModel):
         orm_mode = True
 
 class ExamQuestionCreate(BaseModel):
+    id: Optional[int] = None
     text: str = Field(..., example="Jaka jest wartość liczby pi?")
     answers: List[ExamAnswerCreate]
 
     @field_validator('answers')
     def validate_answers(cls, v):
-        if len(v) != 4:
-            raise ValueError("Każde pytanie musi mieć dokładnie 4 odpowiedzi.")
+        if len(v) >= 4:
+            raise ValueError("Każde pytanie musi mieć minimalnie 2 odpowiedzi.")
         correct_answers = [answer for answer in v if answer.is_correct]
-        if len(correct_answers) != 1:
-            raise ValueError("Każde pytanie musi mieć dokładnie jedną poprawną odpowiedź.")
+        if len(correct_answers) >= 1:
+            raise ValueError("Każde pytanie musi mieć conajmniej jedną poprawną odpowiedź.")
         return v
 
 class ExamQuestionRead(BaseModel):
@@ -231,6 +233,7 @@ class ExamRead(BaseModel):
         orm_mode = True
 
 class ExamUpdate(BaseModel):
+    id: Optional[int] = None
     name: Optional[str] = Field(None, example="Nowa Nazwa Egzaminu")
     description: Optional[str] = Field(None, example="Nowy opis egzaminu.")
     questions: Optional[List[ExamQuestionCreate]] = None

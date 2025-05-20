@@ -206,13 +206,12 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({
     }
   };
 
-  // ------------------- RENDER -------------------
   return (
     <Dialog>
       <DialogTrigger>
         <Button
           variant="outline"
-          className={`w-full flex items-center justify-${
+          className={`flex items-center justify-center${
             isPanelVisible ? "start" : "center"
           } space-x-2`}
         >

@@ -22,16 +22,18 @@ export const Dialog = ({ children, open, onOpenChange }: DialogProps) => {
 
 interface DialogTriggerProps {
   children: ReactNode;
+  asChild?: boolean;
   className?: string;
 }
 
-export const DialogTrigger = ({ children}: DialogTriggerProps) => {
+export const DialogTrigger = ({ children, asChild = false }: DialogTriggerProps) => {
   return (
-    <RadixDialog.Trigger asChild>
+    <RadixDialog.Trigger asChild={asChild}>
       {children}
     </RadixDialog.Trigger>
   );
 };
+
 
 interface DialogContentProps {
   children: ReactNode;
@@ -140,12 +142,13 @@ export const DialogFooter = ({ children, className }: DialogFooterProps) => {
 
 interface DialogCloseProps {
   children: ReactNode;
+  asChild?: boolean;
   className?: string;
 }
 
-export const DialogClose = ({ children}: DialogCloseProps) => {
+export const DialogClose = ({ children, asChild = false }: DialogCloseProps) => {
   return (
-    <RadixDialog.Close asChild>
+    <RadixDialog.Close asChild={asChild}>
       {children}
     </RadixDialog.Close>
   );

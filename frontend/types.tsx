@@ -1,23 +1,24 @@
 // src/types.ts
 
 export interface ExamAnswer {
-  id: number
-  text: string
-  is_correct: boolean
+  id?: number;
+  text: string;
+  is_correct: boolean;
 }
 
 export interface ExamQuestion {
-  id: number
-  text: string
-  answers: ExamAnswer[]
+  id?: number;
+  text: string;
+  answers: ExamAnswer[];
 }
 
 export interface Exam {
-  id: number
-  name: string
-  description: string
-  created_at: string
-  questions: ExamQuestion[]
+  id: number;
+  name: string;
+  description: string;
+  created_at: string;
+  conversation_id?: number;
+  questions: ExamQuestion[];
 }
 
 export interface Flashcard {

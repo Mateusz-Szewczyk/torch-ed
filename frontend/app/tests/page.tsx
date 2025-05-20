@@ -9,27 +9,7 @@ import { CustomTooltip } from "@/components/CustomTooltip"
 import { StudyExam } from "@/components/StudyExam"
 import { useTranslation } from "react-i18next"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-
-interface ExamAnswer {
-  id: number
-  text: string
-  is_correct: boolean
-}
-
-interface ExamQuestion {
-  id: number
-  text: string
-  answers: ExamAnswer[]
-}
-
-interface Exam {
-  id: number
-  name: string
-  description: string
-  created_at: string
-  conversation_id?: number
-  questions: ExamQuestion[]
-}
+import type { Exam } from "@/types"
 
 export default function ExamsPage() {
   const [exams, setExams] = useState<Exam[]>([])
@@ -300,9 +280,7 @@ export default function ExamsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {exams.map((exam) => (
               <div key={exam.id} className="relative group">
-                <Card
-                  className="flex flex-col w-full transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1 group-hover:z-10 min-h-[300px] sm:min-h-[400px] max-h-[400px]"
-                >
+                <Card className="flex flex-col w-full transition-all duration-300 ease-in-out hover:shadow-xl hover:-translate-y-1 group-hover:z-10 min-h-[300px] sm:min-h-[400px] max-h-[400px]">
                   <CardHeader className="flex-shrink-0">
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-xl font-bold truncate">{exam.name}</CardTitle>
@@ -348,7 +326,11 @@ export default function ExamsPage() {
                     <p className="text-sm text-muted-foreground">{exam.description || t("no_description")}</p>
                   </CardContent>
                   <CardFooter className="mt-auto">
-                    <Button variant="default" onClick={() => handleStudy(exam)} className="w-full flex items-center justify-between">
+                    <Button
+                      variant="default"
+                      onClick={() => handleStudy(exam)}
+                      className="w-full flex items-center justify-between"
+                    >
                       {t("study")}
                       <ChevronRight className="h-5 w-5 ml-2" />
                     </Button>

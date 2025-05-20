@@ -297,7 +297,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
               </div>
 
               <div className="flex flex-col space-y-4 items-center">
-                {/* Other panel items would go here */}
                 {isAuthenticated && (
                   <>
                     <ManageFileDialog isPanelVisible={isPanelVisible} />
