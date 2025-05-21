@@ -24,7 +24,7 @@ interface StudyExamProps {
 interface ExamResultAnswerCreate {
   question_id: number | undefined
   selected_answer_id: number | undefined
-  answer_time: string |undefined
+  answer_time: string | undefined
 }
 
 interface ExamResultCreate {
@@ -44,8 +44,8 @@ interface ExamResultRead {
 
 interface UserAnswer {
   question_id: number | undefined
-  selected_answer_id: number | undefined
-  answer_time: string | undefined
+  selected_answer_id: number | undefined | null
+  answer_time: string | undefined | null
 }
 
 export function StudyExam({ exam, onExit }: StudyExamProps) {
@@ -91,7 +91,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
 
   // Filter answered questions
   const answeredQuestions = userAnswers.filter(
-    (ans) => ans.selected_answer_id !== null
+    (ans) => ans.selected_answer_id !== null && ans.selected_answer_id !== undefined
   )
 
   // Shuffle and pick random questions
@@ -299,7 +299,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
           <h2 className="text-xl md:text-3xl font-bold mb-4 text-primary">
             {t("exam_summary")}
           </h2>
-          <p className="text-sm md:text-xl mb-6 text-secondary-foreground">
+          <p className="text-sm md:text-xl mb-6 text-secondary">
             {t("you_scored")} {score} {t("out_of")} {selectedQuestions.length}
           </p>
           {isSubmitting && (
@@ -360,7 +360,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                     key={`answer-${answer.id}`}
                     variant={isSelected ? (isCorrect ? "default" : "destructive") : "outline"}
                     onClick={() => handleAnswerSelect(answer.id)}
-                    disabled={userAnswers[currentQuestionIndex]?.selected_answer_id !== null}
+                    disabled={userAnswers[currentQuestionIndex]?.selected_answer_id !== null && userAnswers[currentQuestionIndex]?.selected_answer_id !== undefined}
                     size="sm"
                   >
                     {isSelected && isCorrect && <CheckCircle className="h-4 w-4 text-success" />}
@@ -384,7 +384,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
             <Button
               variant="default"
               onClick={() => {
-                if (userAnswers[currentQuestionIndex]?.selected_answer_id !== null) {
+                if (userAnswers[currentQuestionIndex]?.selected_answer_id !== null && userAnswers[currentQuestionIndex]?.selected_answer_id !== undefined) {
                   if (currentQuestionIndex < selectedQuestions.length - 1) {
                     setCurrentQuestionIndex((i) => i + 1)
                   } else {
@@ -392,7 +392,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
                   }
                 }
               }}
-              disabled={userAnswers[currentQuestionIndex]?.selected_answer_id === null}
+              disabled={userAnswers[currentQuestionIndex]?.selected_answer_id === null || userAnswers[currentQuestionIndex]?.selected_answer_id === undefined}
               size="sm"
             >
               <span className="text-xs">
@@ -425,7 +425,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
               size="sm"
             >
               <span className="text-xs">
-                {resultSubmitted ? t("results_saved") : t("save_attempt")}
+                {resultSubmitted ? t("results_saved") || "Results Saved" : t("save_attempt")}
               </span>
             </Button>
             <Button variant="destructive" onClick={onExit} size="sm">
