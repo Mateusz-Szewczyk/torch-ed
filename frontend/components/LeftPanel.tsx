@@ -300,7 +300,6 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
                 {isAuthenticated && (
                   <>
                     <ManageFileDialog isPanelVisible={isPanelVisible} />
-
                     <Button
                       asChild
                       variant="outline"

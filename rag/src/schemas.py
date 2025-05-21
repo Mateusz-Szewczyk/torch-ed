@@ -197,10 +197,10 @@ class ExamQuestionCreate(BaseModel):
 
     @field_validator('answers')
     def validate_answers(cls, v):
-        if len(v) >= 4:
+        if len(v) <= 2:
             raise ValueError("Każde pytanie musi mieć minimalnie 2 odpowiedzi.")
         correct_answers = [answer for answer in v if answer.is_correct]
-        if len(correct_answers) >= 1:
+        if len(correct_answers) < 1:
             raise ValueError("Każde pytanie musi mieć conajmniej jedną poprawną odpowiedź.")
         return v
 
