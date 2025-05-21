@@ -38,42 +38,41 @@ class BulkRecordData(BaseModel):
 
 def _update_sm2(user_flashcard: UserFlashcard, rating: int):
     """
-    Simple SM2-like update:
-      - if rating <3: reset to interval=1, repetitions=0
-      - else repetitions++ and interval grows
-      - EF adjusted
-      - next_review = now + interval days
+    Implementacja algorytmu SM-2 (SuperMemo 2).
+    - Jeśli rating < 3: resetuje powtórkę.
+    - Jeśli rating >= 3: zwiększa EF i wylicza nowy interwał.
     """
-    logger.debug(f"Updating SM2 for UserFlashcard id={user_flashcard.id}, rating={rating}")
+    logger.debug(f"SM-2 update for Flashcard {user_flashcard.flashcard_id}, rating={rating}")
+
     if rating < 3:
-        # "Hard"
         user_flashcard.repetitions = 0
         user_flashcard.interval = 1
-        logger.debug("Rating < 3: Reset repetitions to 0 and interval to 1 day.")
+        logger.debug("Rating < 3: Reset repetitions and interval to 1 day.")
     else:
-        # "Good" or "Easy"
-        if user_flashcard.repetitions == 0:
-            user_flashcard.interval = 1
-            logger.debug("Repetitions == 0: Set interval to 1 day.")
-        elif user_flashcard.repetitions == 1:
-            user_flashcard.interval = 6
-            logger.debug("Repetitions == 1: Set interval to 6 days.")
-        else:
-            user_flashcard.interval = int(user_flashcard.interval * user_flashcard.ef)
-            logger.debug(f"Repetitions > 1: Updated interval to {user_flashcard.interval} days based on EF.")
         user_flashcard.repetitions += 1
-        logger.debug(f"Increased repetitions to {user_flashcard.repetitions}")
+        if user_flashcard.repetitions == 1:
+            user_flashcard.interval = 1
+            logger.debug("First repetition: interval set to 1 day.")
+        elif user_flashcard.repetitions == 2:
+            user_flashcard.interval = 6
+            logger.debug("Second repetition: interval set to 6 days.")
+        else:
+            new_interval = user_flashcard.interval * user_flashcard.ef
+            user_flashcard.interval = int(round(new_interval))
+            logger.debug(f"Repetition {user_flashcard.repetitions}: interval updated to {user_flashcard.interval} days.")
 
-    # EF adjust
-    user_flashcard.ef += (0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02))
-    if user_flashcard.ef < 1.3:
-        user_flashcard.ef = 1.3
-        logger.debug("EF below 1.3: Reset to 1.3.")
-    else:
-        logger.debug(f"Adjusted EF to {user_flashcard.ef}")
+    # Aktualizacja EF (Easiness Factor)
+    # SuperMemo wzór:
+    # EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+    ef_change = 0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)
+    user_flashcard.ef += ef_change
+    user_flashcard.ef = max(1.3, round(user_flashcard.ef, 2))  # nie mniej niż 1.3
+    logger.debug(f"Updated EF to {user_flashcard.ef}")
 
+    # Ustawienie następnego dnia przeglądu
     user_flashcard.next_review = datetime.utcnow() + timedelta(days=user_flashcard.interval)
-    logger.debug(f"Next review scheduled for {user_flashcard.next_review}")
+    logger.debug(f"Next review set to {user_flashcard.next_review}")
+
 
 @router.post("/bulk_record", response_model=dict, status_code=201)
 def bulk_record(
@@ -252,6 +251,7 @@ class FlashcardResponse(BaseModel):
     answer: str
     deck_id: int
     media_url: Optional[str] = None
+    repetitions: Optional[int] = None
 
     class Config:
         orm_mode = True
@@ -358,6 +358,7 @@ def start_study_session(
     # -- (6) Convert available UserFlashcards to Flashcards
     flashcard_ids = [uf.flashcard_id for uf in available_ufs]
     available_cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+    flashcard_to_repetitions = {uf.flashcard_id: uf.repetitions for uf in available_ufs}
 
     # -- (7) Build the response
     result = []
@@ -367,7 +368,8 @@ def start_study_session(
             "question": c.question,
             "answer": c.answer,
             "deck_id": c.deck_id,
-            "media_url": getattr(c, 'media_url', None)
+            "media_url": getattr(c, 'media_url', None),
+            "repetitions": flashcard_to_repetitions.get(c.id, 0)
         }
         result.append(card_dict)
     logger.debug(f"Available cards for study session {new_session.id}: {result}")
@@ -452,17 +454,22 @@ def retake_session(
     logger.debug(f"Chosen {len(chosen_user_flashcards)} UserFlashcards with EF in {distinct_efs}")
 
     # Gather flashcards
+    flashcard_to_repetitions = {uf.flashcard_id: uf.repetitions for uf in chosen_user_flashcards}
     flashcard_ids = [uf.flashcard_id for uf in chosen_user_flashcards]
     cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
     # Build JSON response
-    result = [{
-        "id": c.id,
-        "question": c.question,
-        "answer": c.answer,
-        "deck_id": c.deck_id,
-        "media_url": getattr(c, 'media_url', None)
-    } for c in cards]
+    result = []
+    for c in cards:
+        card_dict = {
+            "id": c.id,
+            "question": c.question,
+            "answer": c.answer,
+            "deck_id": c.deck_id,
+            "media_url": getattr(c, 'media_url', None),
+            "repetitions": flashcard_to_repetitions.get(c.id, 0)
+        }
+        result.append(card_dict)
 
     logger.debug(f"Retake cards for session {session.id}: {result}")
     return result
@@ -478,7 +485,7 @@ def retake_hard_cards(
     Retake hard flashcards from the given deck:
     - Prefer flashcards with EF <= 1.8.
     - If none, select all flashcards with the two lowest distinct EF values.
-    - Allows retake even if no hard flashcards are found.
+    - Always create a new StudySession for retake tracking.
     """
     logger.info(f"Fetching retake_hard_cards for deck_id={deck_id}, user_id={current_user.id_}")
 
@@ -491,10 +498,9 @@ def retake_hard_cards(
         logger.error(f"Deck id={deck_id} not found or does not belong to user_id={current_user.id_}")
         raise HTTPException(status_code=404, detail="Deck not found or doesn't belong to user.")
 
-    # Current time
     now = datetime.utcnow()
 
-    # Fetch UserFlashcards with EF <= 1.8 and next_review > now()
+    # Fetch hard UserFlashcards
     hard_user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
@@ -502,27 +508,10 @@ def retake_hard_cards(
         UserFlashcard.next_review > now
     ).order_by(UserFlashcard.ef.asc()).all()
 
-    logger.debug(f"Found {len(hard_user_flashcards)} hard UserFlashcards with EF <= 1.8.")
-
     if hard_user_flashcards:
-        # Gather flashcards
-        flashcard_ids = [uf.flashcard_id for uf in hard_user_flashcards]
-        cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
-
-        # Build JSON response
-        result = [{
-            "id": c.id,
-            "question": c.question,
-            "answer": c.answer,
-            "deck_id": c.deck_id,
-            "media_url": getattr(c, 'media_url', None)
-        } for c in cards]
-
-        logger.debug(f"Retake hard cards (EF <= 1.8): {result}")
-        return result
+        chosen_user_flashcards = hard_user_flashcards
+        logger.debug(f"Selected {len(chosen_user_flashcards)} hard flashcards (EF <= 1.8)")
     else:
-        # If no hard flashcards, select all flashcards with the two lowest distinct EF values
-        # Fetch all UserFlashcards with next_review > now()
         user_flashcards = db.query(UserFlashcard).filter(
             UserFlashcard.user_id == current_user.id_,
             UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
@@ -530,41 +519,47 @@ def retake_hard_cards(
         ).order_by(UserFlashcard.ef.asc()).all()
 
         if not user_flashcards:
-            # No flashcards available for retake
             logger.info("No flashcards available for retake.")
             return []
 
-        # Extract distinct EF values, sorted ascending
         distinct_efs = sorted({uf.ef for uf in user_flashcards})
-
         if not distinct_efs:
             logger.info("No distinct EF values found.")
             return []
 
-        # Take the two lowest distinct EF values
         lowest_two_efs = distinct_efs[:2] if len(distinct_efs) >= 2 else distinct_efs
+        chosen_user_flashcards = [uf for uf in user_flashcards if uf.ef in lowest_two_efs]
+        logger.debug(f"Selected {len(chosen_user_flashcards)} flashcards with EF in {lowest_two_efs}")
 
-        logger.debug(f"Lowest two distinct EF values: {lowest_two_efs}")
+    # Map flashcard_id to repetitions
+    flashcard_to_repetitions = {uf.flashcard_id: uf.repetitions for uf in chosen_user_flashcards}
+    flashcard_ids = list(flashcard_to_repetitions.keys())
 
-        # Select all UserFlashcards with EF in the lowest two EF values
-        chosen_user_flashcards = [
-            uf for uf in user_flashcards if uf.ef in lowest_two_efs
-        ]
+    cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
 
-        logger.debug(f"Chosen {len(chosen_user_flashcards)} UserFlashcards with EF in {lowest_two_efs}")
+    # Tworzenie nowej sesji nauki
+    new_session = StudySession(
+        user_id=current_user.id_,
+        deck_id=deck.id,
+        started_at=now,
+    )
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
 
-        # Gather flashcards
-        flashcard_ids = [uf.flashcard_id for uf in chosen_user_flashcards]
-        cards = db.query(Flashcard).filter(Flashcard.id.in_(flashcard_ids)).all()
+    logger.info(f"Created new StudySession (retake): id={new_session.id}, user_id={current_user.id_}, deck_id={deck.id}")
 
-        # Build JSON response
-        result = [{
+    result = []
+    for c in cards:
+        result.append({
             "id": c.id,
             "question": c.question,
             "answer": c.answer,
             "deck_id": c.deck_id,
-            "media_url": getattr(c, 'media_url', None)
-        } for c in cards]
+            "media_url": getattr(c, 'media_url', None),
+            "repetitions": flashcard_to_repetitions.get(c.id, 0),
+            "study_session_id": new_session.id
+        })
 
-        logger.debug(f"Retake hard cards (two lowest EF values): {result}")
-        return result
+    logger.debug(f"Retake cards returned: {result}")
+    return result
