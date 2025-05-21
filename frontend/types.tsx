@@ -26,6 +26,7 @@ export interface Flashcard {
   question: string;
   answer: string;
   media_url?: string;
+  repetitions?: number | undefined;
 }
 
 export interface Deck {
