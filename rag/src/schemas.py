@@ -10,7 +10,7 @@ class FlashcardBase(BaseModel):
 
 class FlashcardCreate(FlashcardBase):
     id: Optional[int] = None
-    media_url: Optional[str] = None  # Dodane pole media_url
+    media_url: Optional[str] = None
 
     @field_validator('question', 'answer')
     def not_empty(cls, v):
@@ -23,7 +23,7 @@ class FlashcardRead(FlashcardBase):
     question: str
     answer: str
     deck_id: int
-    media_url: Optional[str] = None  # Dodane pole media_url
+    media_url: Optional[str] = None
 
     class Config:
         orm_mode = True

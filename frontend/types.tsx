@@ -25,6 +25,7 @@ export interface Flashcard {
   id: number;
   question: string;
   answer: string;
+  media_url?: string;
 }
 
 export interface Deck {
