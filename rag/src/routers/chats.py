@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Response, Body
+from sqlalchemy import and_, exists
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -69,12 +70,27 @@ async def get_conversations(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Pobierz wszystkie konwersacje dla zalogowanego użytkownika.
+    Pobierz wszystkie konwersacje dla zalogowanego użytkownika,
+    wykluczając te które są już używane w egzaminach lub taliach kart.
     """
     user_id = current_user.id_
     logger.info(f"Fetching conversations for user_id: {user_id}")
     try:
-        conversations = db.query(Conversation).filter_by(user_id=user_id).all()
+        conversations = db.query(Conversation).filter(
+            Conversation.user_id == user_id,
+            ~exists().where(
+                and_(
+                    Exam.conversation_id == Conversation.id,
+                    Exam.conversation_id.isnot(None)
+                )
+            ),
+            ~exists().where(
+                and_(
+                    Deck.conversation_id == Conversation.id,
+                    Deck.conversation_id.isnot(None)
+                )
+            )
+        ).all()
         return conversations
     except Exception as e:
         logger.error(f"Error fetching conversations: {e}")
