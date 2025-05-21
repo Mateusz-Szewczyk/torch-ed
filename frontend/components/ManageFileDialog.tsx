@@ -208,15 +208,15 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({
 
   return (
     <Dialog>
-      <DialogTrigger>
+      <DialogTrigger asChild>
         <Button
           variant="outline"
-          className={`flex items-center justify-center${
-            isPanelVisible ? "start" : "center"
-          } space-x-2`}
+          className={`flex w-full ${
+            isPanelVisible ? "justify-start" : "justify-center"
+          }`}
         >
           <Upload className="h-4 w-4" />
-          {isPanelVisible && <span>{t("manage_files")}</span>}
+          {isPanelVisible && <span className={'ml-2'}>{t("manage_files")}</span>}
         </Button>
       </DialogTrigger>
 

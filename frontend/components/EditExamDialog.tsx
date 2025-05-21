@@ -297,7 +297,7 @@ export function EditExamDialog({ exam, onSave, trigger }: EditExamDialogProps) {
                                 </div>
                                 <input
                                   type="text"
-                                  className="flex-1 border p-2 rounded"
+                                  className="flex-1 border p-2 rounded w-full"
                                   value={answer.text}
                                   onChange={(e) => handleAnswerChange(qIndex, aIndex, "text", e.target.value)}
                                   placeholder="Treść odpowiedzi"

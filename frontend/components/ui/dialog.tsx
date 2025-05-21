@@ -4,7 +4,7 @@
 
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { ReactNode } from 'react';
-import { cn } from "@/lib/utils"; // Upewnij się, że masz tę funkcję
+import { cn } from "@/lib/utils";
 
 interface DialogProps {
   children: ReactNode;
@@ -45,7 +45,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
     <RadixDialog.Portal>
       <RadixDialog.Overlay
         className={cn(
-          "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50" // Dodano z-50
+          "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
         )}
       />
       <RadixDialog.Content
@@ -55,7 +55,7 @@ export const DialogContent = ({ children, className }: DialogContentProps) => {
           "dark:bg-background dark:text-foreground",
           "p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto",
           "shadow-lg",
-          "z-[50]", // Dodano z-50
+          "z-[50]",
           "overflow-visible",
           className
         )}

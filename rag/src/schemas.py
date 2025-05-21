@@ -10,7 +10,7 @@ class FlashcardBase(BaseModel):
 
 class FlashcardCreate(FlashcardBase):
     id: Optional[int] = None
-    media_url: Optional[str] = None  # Dodane pole media_url
+    media_url: Optional[str] = None
 
     @field_validator('question', 'answer')
     def not_empty(cls, v):
@@ -23,7 +23,7 @@ class FlashcardRead(FlashcardBase):
     question: str
     answer: str
     deck_id: int
-    media_url: Optional[str] = None  # Dodane pole media_url
+    media_url: Optional[str] = None
 
     class Config:
         orm_mode = True
@@ -197,10 +197,10 @@ class ExamQuestionCreate(BaseModel):
 
     @field_validator('answers')
     def validate_answers(cls, v):
-        if len(v) >= 4:
+        if len(v) <= 2:
             raise ValueError("Każde pytanie musi mieć minimalnie 2 odpowiedzi.")
         correct_answers = [answer for answer in v if answer.is_correct]
-        if len(correct_answers) >= 1:
+        if len(correct_answers) < 1:
             raise ValueError("Każde pytanie musi mieć conajmniej jedną poprawną odpowiedź.")
         return v
 
