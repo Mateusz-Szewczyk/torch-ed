@@ -28,6 +28,7 @@ def generate_token(user_id: int, role: str, iss: str, path: str) -> bytes:
         'aud': user_id,
         'pre': role,
     }
+    print(f"DEBUG: Generating token with user_id: {user_id}")
 
     with open(path, 'r') as key_file:
         private_key = key_file.read()

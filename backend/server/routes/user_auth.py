@@ -111,46 +111,226 @@ def register() -> Response | str | tuple:
     session.commit()
     link = url_for('auth.confirm_email', token=token, _external=True)
 
-    # HTML email content
+    # HTML email content - ulepszony szablon
     message = f"""
-    <html>
-      <head>
-        <style>
-          body {{ font-family: Arial, sans-serif; color: #333; line-height: 1.6; background-color: #f4f4f4; padding: 20px; }}
-          .container {{ max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-          .header {{ text-align: center; padding: 20px 0; }}
-          .header img {{ max-width: 150px; }}
-          .content {{ padding: 20px; }}
-          .button {{ display: inline-block; padding: 12px 24px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; }}
-          .button:hover {{ background-color: #0056b3; }}
-          .footer {{ text-align: center; font-size: 12px; color: #777; margin-top: 20px; }}
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>Witaj w TorchED!</h1>
-          </div>
-          <div class="content">
-            <p>Dziękujemy za rejestrację w TorchED! Jesteśmy podekscytowani, że dołączasz do naszej społeczności.</p>
-            <p>Aby aktywować swoje konto, kliknij w poniższy przycisk:</p>
-            <p style="text-align: center;">
-              <a href="{link}" class="button">Potwierdź swoje konto</a>
-            </p>
-            <p>Jeśli przycisk nie działa, skopiuj i wklej ten link do przeglądarki:</p>
-            <p><a href="{link}">{link}</a></p>
-            <p>Jeśli nie rejestrowałeś się w TorchED, możesz zignorować tę wiadomość.</p>
-            <p>Cieszymy się na współpracę z Tobą i mamy nadzieję, że pokochasz korzystanie z naszej aplikacji!</p>
-            <p>Zespół TorchED</p>
-          </div>
-          <div class="footer">
-            <p>Masz pytania? Skontaktuj się ze mną: <a href="mailto:mateusz.szewczyk000@gmail.com">mateusz.szewczyk000@gmail.com</a></p>
-            <p>&copy; 2025 TorchED. Wszystkie prawa zastrzeżone.</p>
-          </div>
-        </div>
-      </body>
-    </html>
-    """
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+              body {{ 
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+                color: #1a1a1a; 
+                line-height: 1.6; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 20px; 
+                min-height: 100vh;
+              }}
+              .email-wrapper {{ 
+                max-width: 600px; 
+                margin: 0 auto; 
+                background: #ffffff; 
+                border-radius: 16px; 
+                overflow: hidden;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+              }}
+              .header {{ 
+                background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+                color: white; 
+                text-align: center; 
+                padding: 40px 20px;
+                position: relative;
+              }}
+              .header::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="20" cy="80" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+              }}
+              .header h1 {{ 
+                font-size: 2.5rem; 
+                font-weight: 800; 
+                margin-bottom: 8px;
+                position: relative;
+                z-index: 1;
+              }}
+              .header .subtitle {{ 
+                font-size: 1.1rem; 
+                opacity: 0.9;
+                font-weight: 400;
+                position: relative;
+                z-index: 1;
+              }}
+              .content {{ 
+                padding: 40px 30px;
+                background: #ffffff;
+              }}
+              .welcome-text {{ 
+                font-size: 1.1rem; 
+                color: #374151; 
+                margin-bottom: 24px;
+                text-align: center;
+              }}
+              .highlight {{ 
+                background: linear-gradient(120deg, #a78bfa 0%, #ec4899 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                font-weight: 600;
+              }}
+              .button-container {{ 
+                text-align: center; 
+                margin: 32px 0;
+              }}
+              .button {{ 
+                display: inline-block; 
+                padding: 16px 32px; 
+                background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+                color: #ffffff !important; 
+                text-decoration: none; 
+                border-radius: 50px; 
+                font-weight: 600;
+                font-size: 1.1rem;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+              }}
+              .button:hover {{ 
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(79, 70, 229, 0.6);
+              }}
+              .link-fallback {{ 
+                background: #f8fafc; 
+                border: 2px dashed #cbd5e1; 
+                border-radius: 8px; 
+                padding: 16px; 
+                margin: 24px 0;
+                text-align: center;
+              }}
+              .link-fallback p {{ 
+                font-size: 0.9rem; 
+                color: #64748b; 
+                margin-bottom: 8px;
+              }}
+              .link-fallback a {{ 
+                color: #4f46e5; 
+                word-break: break-all; 
+                font-family: 'Courier New', monospace;
+                font-size: 0.85rem;
+              }}
+              .info-box {{ 
+                background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
+                border-left: 4px solid #f59e0b;
+                padding: 16px;
+                border-radius: 8px;
+                margin: 24px 0;
+              }}
+              .info-box p {{ 
+                color: #92400e; 
+                font-size: 0.95rem;
+                margin: 0;
+              }}
+              .footer {{ 
+                background: #f8fafc; 
+                text-align: center; 
+                padding: 30px 20px;
+                border-top: 1px solid #e2e8f0;
+              }}
+              .footer-content {{ 
+                max-width: 400px; 
+                margin: 0 auto;
+              }}
+              .contact-info {{ 
+                font-size: 0.9rem; 
+                color: #64748b; 
+                margin-bottom: 12px;
+              }}
+              .contact-info a {{ 
+                color: #4f46e5; 
+                text-decoration: none;
+                font-weight: 500;
+              }}
+              .copyright {{ 
+                font-size: 0.8rem; 
+                color: #9ca3af; 
+                font-weight: 400;
+              }}
+              .logo {{ 
+                display: none;
+              }}
+              @media (max-width: 600px) {{
+                .email-wrapper {{ margin: 10px; border-radius: 12px; }}
+                .header {{ padding: 30px 15px; }}
+                .header h1 {{ font-size: 2rem; }}
+                .content {{ padding: 30px 20px; }}
+                .button {{ padding: 14px 28px; font-size: 1rem; }}
+              }}
+            </style>
+          </head>
+          <body>
+            <div class="email-wrapper">
+              <div class="header">
+                <h1>TorchED</h1>
+                <div class="subtitle">Twoja podróż z nauką właśnie się zaczyna</div>
+              </div>
+
+              <div class="content">
+                <p class="welcome-text">
+                  Witaj w <span class="highlight">TorchED</span>! 🎉<br>
+                  Cieszymy się, że dołączasz do naszej społeczności pasjonatów nauki.
+                </p>
+
+                <p style="color: #374151; margin-bottom: 24px;">
+                  Aby w pełni cieszyć się wszystkimi funkcjami naszej platformy, musisz potwierdzić swój adres email. To zajmie tylko chwilę!
+                </p>
+
+                <div class="button-container">
+                  <a href="{link}" class="button">
+                    ✨ Potwierdź moje konto
+                  </a>
+                </div>
+
+                <div class="link-fallback">
+                  <p>Problemy z przyciskiem? Skopiuj i wklej ten link:</p>
+                  <a href="{link}">{link}</a>
+                </div>
+
+                <div class="info-box">
+                  <p>
+                    <strong>💡 Wskazówka:</strong> Jeśli nie rejestrowałeś się w TorchED, możesz spokojnie zignorować tę wiadomość.
+                  </p>
+                </div>
+
+                <p style="color: #374151; text-align: center; margin-top: 32px; font-style: italic;">
+                  Nie możemy się doczekać, aby zobaczyć, jak rozwijasz swoje umiejętności z nami! 🚀
+                </p>
+
+                <p style="color: #6b7280; text-align: center; margin-top: 16px;">
+                  Z pozdrowieniami,<br>
+                  <strong style="color: #4f46e5;">Zespół TorchED</strong>
+                </p>
+              </div>
+
+              <div class="footer">
+                <div class="footer-content">
+                  <div class="contact-info">
+                    Masz pytania? Napisz do nas: 
+                    <a href="mailto:mateusz.szewczyk000@gmail.com">mateusz.szewczyk000@gmail.com</a>
+                  </div>
+                  <div class="copyright">
+                    © 2025 TorchED. Wszystkie prawa zastrzeżone.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+        """
 
     send_email(email, "Potwierdź rejestrację w TorchED", message, html=True)
     return jsonify({'Success': 'User has been successfully created!'}), 201
