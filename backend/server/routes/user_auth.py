@@ -1,5 +1,7 @@
+from typing import Tuple
+
 from dotenv import load_dotenv
-from flask import request, redirect, Blueprint, jsonify, url_for
+from flask import request, redirect, Blueprint, jsonify, url_for, Response
 from werkzeug.security import generate_password_hash
 from werkzeug import Response
 from ..utils import FRONTEND, COOKIE_AUTH, data_check, send_email, signature_check
@@ -57,33 +59,41 @@ def login() -> Response | tuple:
 
 @user_auth.route('/register', methods=['POST'])
 def register() -> Response | str | tuple:
-    """
+    '''
     Add new user to database.
-    Request must include:
-      - user_name,
-      - password,
-      - password2,
-      - email,
-      - age (optional),
-      - role (optional, default 'user')
-    After verification, user is created and a confirmation email is sent.
-    """
+
+    To add new user, the request must have:
+         - user_name,
+         - password,
+         - password2,
+         - email,
+         - age (optional)
+         - role (optional, by default 'user')
+    After verification user is created and verifying email is sent.
+
+    Returns
+    Tuple with information about what happened and html status code
+
+    '''
+    data: dict
+    user: User
+    key_words: list[str]
+    password: str
+    email: str
+    token: str
+    link: str
+    message: str
+
     data = data_check(request, 'register')
     if isinstance(data, tuple):
         return data
-
     key_words = ['user_name', 'password', 'email', 'age', 'role']
     if not isinstance(data, dict) or not all(key in data for key in key_words):
         return jsonify({'error': 'Misconfiguration "user_auth | def register"'}), 400
-
-    password = data.get('password')
-    if not password or not isinstance(password, str):
+    if not (password := data.get('password')) or not isinstance(password, str):
         return jsonify({'error': 'Please provide password'}), 400
-
-    email = data.get('email')
-    if not isinstance(email, str):
+    if not isinstance(email := data.get('email'), str):
         return jsonify({'error': 'Invalid email'}), 400
-
     user = User(
         user_name=data.get('user_name'),
         password=generate_password_hash(password, salt_length=24),
@@ -94,7 +104,8 @@ def register() -> Response | str | tuple:
 
     token = generate_confirmation_token(email)
     if not token:
-        return jsonify({'error': 'Something went wrong while generating confirmation email, please try again later'}), 500
+        return jsonify(
+            {'error': 'Something went wrong while generating confirmation email, please try again later'}), 500
 
     session.add(user)
     session.commit()
@@ -186,34 +197,34 @@ def logout() -> Response | tuple:
     return resp
 
 
-@user_auth.route('/confirm_email/<token>')
-def confirm_email(token):
-    """
-    Confirm a user's email using the provided token.
-    """
+@user_auth.route('/confirm_email/<token>', methods=['GET'])
+def confirm_email(token: str) -> tuple[Response, int] | Response:
     try:
-        valid, email = confirm_token(token)  # No token[:-3]
-        if not valid or not email:
-            logger.warning("Invalid or expired token: %s", token)
-            return jsonify({'error': 'Invalid or expired confirmation token'}), 400
+        is_valid, email = confirm_token(token)
 
-        user = session.query(User).filter_by(email=email).first()
+        if not is_valid or not email:
+            return jsonify({'error': 'Invalid or expired token'}), 400
+
+        user: User | None = session.query(User).filter_by(email=email).first()
         if not user:
-            logger.warning("No user found for email: %s", email)
             return jsonify({'error': 'User not found'}), 404
 
         if user.confirmed:
-            logger.info("User already confirmed: %s", email)
-            return jsonify({'success': 'Email already confirmed'}), 200
+            return jsonify({'message': 'Email already confirmed.'}), 200
 
         user.confirmed = True
+        session.add(user)
         session.commit()
-        logger.info("Email confirmed successfully for: %s", email)
-        return jsonify({'success': 'Email confirmed successfully!'}), 200
+
+        return redirect(FRONTEND)
 
     except Exception as e:
-        logger.error("Error processing confirmation token: %s", e)
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        # Rollback w przypadku błędu
+        session.rollback()
+        return jsonify({'error': 'An error occurred during email confirmation'}), 500
+    finally:
+        # Zamknij sesję
+        session.close()
 
 
 @signature_check

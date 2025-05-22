@@ -6,6 +6,8 @@ from email.mime.text import MIMEText
 
 from flask import Request, jsonify, request
 import smtplib
+
+from flask.cli import load_dotenv
 from werkzeug.security import check_password_hash
 from functools import wraps
 from typing import Callable
@@ -13,7 +15,9 @@ from .models import User
 from . import session
 from .config import Config
 
-FRONTEND: str = 'https://torch-ed.vercel.app/'
+load_dotenv()
+
+FRONTEND: str = os.getenv('FRONTEND', 'https://torched.pl')
 COOKIE_AUTH: str = 'TorchED_AUTH'
 EMAIL: str | None = os.getenv('EMAIL')
 EMAIL_PASSWORD: str | None = os.getenv('EMAIL_PASSWORD')
