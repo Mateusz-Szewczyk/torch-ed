@@ -202,11 +202,11 @@ def confirm_email(token):
             logger.warning("No user found for email: %s", email)
             return jsonify({'error': 'User not found'}), 404
 
-        if user.is_confirmed:
+        if user.confirmed:
             logger.info("User already confirmed: %s", email)
             return jsonify({'success': 'Email already confirmed'}), 200
 
-        user.is_confirmed = True
+        user.confirmed = True
         session.commit()
         logger.info("Email confirmed successfully for: %s", email)
         return jsonify({'success': 'Email confirmed successfully!'}), 200
