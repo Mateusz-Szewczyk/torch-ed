@@ -56,46 +56,60 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
     setToast({ message, type })
   }
 
-  // Handler: login
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_name: loginEmail,
-          password: loginPassword,
-        }),
-      })
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_name: loginEmail,
+        password: loginPassword,
+      }),
+    });
 
-      if (!response.ok) {
-        const errData = await response.json()
-        throw new Error(errData.error || "Failed to login")
+    if (!response.ok) {
+      const errData = await response.json();
+      // Sprawdzenie, czy odpowiedź to HTTP 423
+      if (response.status === 423) {
+        showToast(
+          errData.message || "Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail, aby potwierdzić rejestrację.",
+          "error"
+        );
+        return; // Zatrzymaj dalsze przetwarzanie
       }
-
-      // Show success toast (outside modal)
-      showToast("Zalogowano pomyślnie", "success")
-
-      // Hide the dialog
-      setIsOpen(false)
-
-      // Mark user as authenticated
-      setIsAuthenticated(true)
-
-      // Redirect to home
-      router.push("/")
-    } catch (err) {
-      console.error("Error logging in:", err)
-      // Handle "User not confirmed" error
-      if (String(err).includes("User not confirmed")) {
-        showToast("Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail, aby potwierdzić rejestrację.", "error")
-      } else {
-        showToast("Nie udało się zalogować, sprawdź podane informacje!", "error")
-      }
+      throw new Error(errData.error || "Failed to login");
     }
+
+    const data = await response.json();
+    const { is_confirmed, message } = data;
+
+    // Show message based on confirmation status
+    if (!is_confirmed) {
+      showToast(
+        message || "Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail, aby potwierdzić rejestrację.",
+        "error"
+      );
+      // Optional: Prevent login for unconfirmed users
+      // return; // Uncomment to block unconfirmed users
+    } else {
+      showToast(message || "Zalogowano pomyślnie", "success");
+    }
+
+    // Hide the dialog
+    setIsOpen(false);
+
+    // Mark user as authenticated
+    setIsAuthenticated(true);
+
+    // Redirect to home
+    router.push("/");
+  } catch (err) {
+    console.error("Error logging in:", err);
+    showToast("Nie udało się zalogować, sprawdź podane informacje!", "error");
   }
+};
 
   // Handler: register
   const handleRegister = async (e: React.FormEvent) => {

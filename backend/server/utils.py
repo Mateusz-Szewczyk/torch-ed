@@ -100,13 +100,14 @@ def signature_check(func: Callable) -> Callable | tuple:
     return wraper
 
 
-def send_email(to: str, subject: str, message: str) -> None:
+def send_email(to: str, subject: str, message: str, html: bool = False) -> None:
     """
     Wysyła e-mail za pomocą Gmaila.
 
     :param to: Adres e-mail odbiorcy
     :param subject: Temat wiadomości
     :param message: Treść wiadomości
+    :param html: Czy wiadomość jest w formacie HTML (domyślnie False)
     """
     try:
         # Sprawdzenie konfiguracji e-maila
@@ -118,7 +119,9 @@ def send_email(to: str, subject: str, message: str) -> None:
         msg['From'] = EMAIL
         msg['To'] = to
         msg['Subject'] = subject
-        msg.attach(MIMEText(message, 'plain'))
+
+        # Dołączenie treści wiadomości w odpowiednim formacie
+        msg.attach(MIMEText(message, 'html' if html else 'plain'))
 
         # Połączenie z serwerem SMTP
         with smtplib.SMTP('smtp.gmail.com', 587) as connection:
@@ -132,5 +135,7 @@ def send_email(to: str, subject: str, message: str) -> None:
         print("Error: Authentication failed. Check your email and password.")
     except smtplib.SMTPConnectError:
         print("Error: Unable to connect to the SMTP server.")
+    except ValueError as ve:
+        print(f"Configuration error: {ve}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An unexpected error occurred while sending email to {to}: {e}")

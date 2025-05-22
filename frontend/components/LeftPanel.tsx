@@ -491,6 +491,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
                   setIsAuthenticated(false);
                   localStorage.removeItem("token");
                   router.push("/");
+
                 } catch (err: unknown) {
                   console.error("Error logging out:", err);
                   if (err instanceof Error) {
