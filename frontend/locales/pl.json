@@ -405,5 +405,6 @@
   "chat_history": "Historia czatu",
   "home": "Strona główna",
   "conversations": "Rozmowy",
-  "navigation": "Nawigacja"
+  "navigation": "Nawigacja",
+  "no_conversations": "Nie masz jeszcze żadnych rozmów."
 }

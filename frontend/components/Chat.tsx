@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { SendIcon, Settings, CheckCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -16,6 +15,7 @@ import { v4 as uuidv4 } from "uuid"
 import { useTheme } from "next-themes"
 import ToolSelectionDialog from "@/components/ToolSelectionDialog"
 import { cn } from "@/lib/utils"
+import {debounce} from "lodash";
 
 type Message = {
   id: string
@@ -32,8 +32,7 @@ interface ChatProps {
 
 const availableTools = ["Wiedza z plików", "Generowanie fiszek", "Generowanie egzaminu", "Wyszukaj w internecie"]
 
-// Typing indicator component
-const TypingIndicator = () => (
+const TypingIndicator = React.memo(() => (
   <motion.div
     initial={{ opacity: 0, y: 10 }}
     animate={{ opacity: 1, y: 0 }}
@@ -59,24 +58,24 @@ const TypingIndicator = () => (
     </div>
     <span className="text-sm text-muted-foreground ml-2">AI is typing...</span>
   </motion.div>
-)
+))
+TypingIndicator.displayName = 'TypingIndicator'
 
-// Enhanced message component
-const MessageBubble: React.FC<{
+const MessageBubble = React.memo<{
   message: Message
   isLast: boolean
-}> = ({ message }) => {
+}>(({ message }) => {
   const { theme } = useTheme()
   const [showTimestamp, setShowTimestamp] = useState(false)
   const isUser = message.sender === "user"
   const isError = message.isError
 
-  const formatTime = (dateString: string) => {
+  const formatTime = useCallback((dateString: string) => {
     return new Date(dateString).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     })
-  }
+  }, [])
 
   return (
     <motion.div
@@ -98,17 +97,13 @@ const MessageBubble: React.FC<{
               : "bg-card text-card-foreground border border-border",
         )}
       >
-        {/* Message content */}
         <div className="relative">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             className={cn(
               "prose max-w-none break-words",
-              isUser
-                ? "prose-invert text-primary-foreground"
-                : "text-card-foreground",
+              isUser ? "prose-invert text-primary-foreground" : "text-card-foreground",
               "prose-sm prose-p:my-1 prose-pre:my-2 prose-code:text-sm",
-              // Custom prose colors for better contrast
               isUser
                 ? "[&>*]:text-primary-foreground [&_strong]:text-primary-foreground [&_em]:text-primary-foreground/90"
                 : "[&>*]:text-card-foreground [&_strong]:text-foreground [&_em]:text-muted-foreground",
@@ -146,7 +141,6 @@ const MessageBubble: React.FC<{
                 )
               },
               pre: ({ children }) => <div className="overflow-x-auto">{children}</div>,
-              // Custom heading colors
               h1: ({ children }) => (
                 <h1 className={cn("text-lg font-bold", isUser ? "text-primary-foreground" : "text-foreground")}>
                   {children}
@@ -162,7 +156,6 @@ const MessageBubble: React.FC<{
                   {children}
                 </h3>
               ),
-              // Custom list colors
               ul: ({ children }) => (
                 <ul className={cn("list-disc list-inside", isUser ? "text-primary-foreground" : "text-card-foreground")}>
                   {children}
@@ -173,7 +166,6 @@ const MessageBubble: React.FC<{
                   {children}
                 </ol>
               ),
-              // Custom paragraph colors
               p: ({ children }) => (
                 <p className={cn("leading-relaxed", isUser ? "text-primary-foreground" : "text-card-foreground")}>
                   {children}
@@ -184,15 +176,11 @@ const MessageBubble: React.FC<{
             {message.text}
           </ReactMarkdown>
         </div>
-
-        {/* Message status indicator for user messages */}
         {isUser && (
           <div className="flex items-center justify-end mt-1 space-x-1">
             <CheckCheck className="w-3 h-3 text-primary-foreground/70" />
           </div>
         )}
-
-        {/* Timestamp tooltip */}
         <AnimatePresence>
           {showTimestamp && (
             <motion.div
@@ -211,7 +199,8 @@ const MessageBubble: React.FC<{
       </div>
     </motion.div>
   )
-}
+})
+MessageBubble.displayName = 'MessageBubble'
 
 const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const [messages, setMessages] = useState<Message[]>([])
@@ -224,55 +213,65 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
-
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
 
-  // Auto-scroll to latest message with smooth behavior
-  useEffect(() => {
-    endRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    })
-  }, [messages, isLoading])
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
-      const scrollHeight = textareaRef.current.scrollHeight
-      const newHeight = Math.min(scrollHeight, 120) // Max 120px
-      textareaRef.current.style.height = `${newHeight}px`
-      setInputHeight(`${newHeight}px`)
-    }
-  }, [input])
-
-  // Fetch messages from API
-  const fetchMessages = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        method: "GET",
-      })
-      if (res.ok) {
-        const data: Message[] = await res.json()
-        setMessages(data.map((msg) => ({ ...msg, isError: false })))
-      } else {
-        console.error("Failed to fetch messages:", res.statusText)
+  // Debounced fetch messages
+  const fetchMessages = useCallback(
+    debounce(async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          method: "GET",
+        });
+        if (res.ok) {
+          const data: Message[] = await res.json();
+          setMessages(data.map((msg) => ({ ...msg, isError: false })));
+        } else {
+          setError(`Failed to fetch messages: ${res.statusText}`);
+        }
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        setError(`Error fetching messages: ${errorMessage}`);
       }
-    } catch (err) {
-      console.error("Error fetching messages:", err)
-    }
-  }, [API_BASE_URL, conversationId])
+    }, 300),
+    [API_BASE_URL, conversationId]
+  );
 
   useEffect(() => {
     if (conversationId) {
       fetchMessages()
     }
-  }, [fetchMessages, conversationId])
+    return () => fetchMessages.cancel()
+  }, [conversationId, fetchMessages])
 
-  // Send message function
-  const handleSend = async () => {
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+      const scrollHeight = textareaRef.current.scrollHeight
+      const newHeight = Math.min(scrollHeight, 120)
+      textareaRef.current.style.height = `${newHeight}px`
+      setInputHeight(`${newHeight}px`)
+    }
+  }, [input])
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+  }, [messages, isLoading])
+
+  // Retry logic with exponential backoff
+  const retryWithBackoff = useCallback(async (fn: () => Promise<void>, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err: unknown) {
+        if (attempt === maxRetries) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 1000));
+      }
+    }
+  }, []);
+
+  const handleSend = useCallback(async () => {
     if (!input.trim() || isLoading) return
 
     const userInput = input.trim()
@@ -291,63 +290,59 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     try {
       setIsLoading(true)
 
-      // Save user message
-      const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "user", text: userInput }),
-      })
+      await retryWithBackoff(async () => {
+        const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sender: "user", text: userInput }),
+        })
+        if (!userMessageResponse.ok) {
+          const errData = await userMessageResponse.json()
+          throw new Error(errData.detail || "Error sending user message.")
+        }
 
-      if (!userMessageResponse.ok) {
-        const errData = await userMessageResponse.json()
-        throw new Error(errData.detail || "Error sending user message.")
-      }
+        const response = await fetch(`${API_BASE_URL}/query/`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            query: userInput,
+            selected_tools: selectedTools,
+          }),
+        })
 
-      // Call query endpoint with selected tools
-      const response = await fetch(`${API_BASE_URL}/query/`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        if (!response.ok) {
+          const errData = await response.json()
+          throw new Error(errData.detail || `Error: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        const botMsg: Message = {
+          id: uuidv4(),
           conversation_id: conversationId,
-          query: userInput,
-          selected_tools: selectedTools,
-        }),
+          text: data.answer,
+          sender: "bot",
+          created_at: new Date().toISOString(),
+        }
+
+        const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sender: "bot", text: data.answer }),
+        })
+
+        if (!botMessageResponse.ok) {
+          const errData = await botMessageResponse.json()
+          throw new Error(errData.detail || "Error sending bot message.")
+        }
+
+        setMessages((prev) => [...prev, botMsg])
+        setSelectedTools([])
       })
-
-      if (!response.ok) {
-        const errData = await response.json()
-        throw new Error(errData.detail || `Error: ${response.statusText}`)
-      }
-
-      const data = await response.json()
-
-      const botMsg: Message = {
-        id: uuidv4(),
-        conversation_id: conversationId,
-        text: data.answer,
-        sender: "bot",
-        created_at: new Date().toISOString(),
-      }
-
-      // Save bot message
-      const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "bot", text: data.answer }),
-      })
-
-      if (!botMessageResponse.ok) {
-        const errData = await botMessageResponse.json()
-        throw new Error(errData.detail || "Error sending bot message.")
-      }
-
-      setMessages((prev) => [...prev, botMsg])
-      setSelectedTools([])
     } catch (err) {
-      console.error("Error sending message:", err)
       const errorText = err instanceof Error ? err.message : String(err)
       const errorMessage: Message = {
         id: uuidv4(),
@@ -362,18 +357,17 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [input, isLoading, conversationId, selectedTools, API_BASE_URL, retryWithBackoff])
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
-  }
+  }, [handleSend])
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/20">
-      {/* Messages area */}
       <div className="flex-1 overflow-auto">
         <div className="max-w-4xl mx-auto px-4 py-6">
           <AnimatePresence>
@@ -381,22 +375,16 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
               <MessageBubble key={message.id} message={message} isLast={index === messages.length - 1} />
             ))}
           </AnimatePresence>
-
-          {/* Typing indicator */}
           <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
-
           <div ref={endRef} />
         </div>
       </div>
-
-      {/* Input area */}
       <div className="border-t border-border bg-background/80 backdrop-blur-md">
         <div className="max-w-4xl mx-auto p-4">
           <motion.div
             layout
             className="relative bg-card border border-border rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200"
           >
-            {/* Main input container */}
             <div className="flex items-end gap-3 p-4">
               <div className="flex-1 relative">
                 <Textarea
@@ -414,7 +402,6 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
                   disabled={isLoading}
                 />
               </div>
-
               <Button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim()}
@@ -433,8 +420,6 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
                 </motion.div>
               </Button>
             </div>
-
-            {/* Tools section */}
             <div className="px-4 pb-4">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -467,8 +452,6 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
                     )}
                   </AnimatePresence>
                 </Button>
-
-                {/* Error message */}
                 <AnimatePresence>
                   {error && (
                     <motion.p
@@ -486,8 +469,6 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
           </motion.div>
         </div>
       </div>
-
-      {/* Tool selection dialog */}
       <ToolSelectionDialog
         isOpen={isToolDialogOpen}
         onOpenChange={setIsToolDialogOpen}

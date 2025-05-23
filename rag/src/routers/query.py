@@ -1,6 +1,5 @@
 import os
 import logging
-import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
@@ -45,16 +44,14 @@ async def query_knowledge(
     user_id = current_user.id_  # Dekodowane z tokenu
     query = request.query
     conversation_id = request.conversation_id
-    # Przyjmujemy, że QueryRequest ma opcjonalne pole selected_tools: List[str]
     selected_tools = request.selected_tools
 
     logger.info(f"Received query from user_id: {user_id} - '{query}', selected_tools: {selected_tools}")
 
     try:
-        answer = await asyncio.to_thread(
-            agent_response,
-            user_id,
-            query,
+        answer = await agent_response(
+            user_id=str(user_id),
+            query=query,
             conversation_id=conversation_id,
             model_name="claude-3-haiku-20240307",
             anthropic_api_key=ANTHROPIC_API_KEY,
@@ -62,6 +59,9 @@ async def query_knowledge(
             openai_api_key=OPENAI_API_KEY,
             selected_tools=selected_tools
         )
+        if not isinstance(answer, str):
+            logger.error(f"agent_response returned non-string: {type(answer)}")
+            raise ValueError(f"Expected string from agent_response, got {type(answer)}")
         logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
 
         return QueryResponse(
