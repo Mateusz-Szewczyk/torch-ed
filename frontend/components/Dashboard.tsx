@@ -365,7 +365,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, trend
     <Card
       className={`group hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 hover:-translate-y-1 border-border/50 bg-gradient-to-br from-card via-card to-card/50 ${className}`}
     >
-      <CardContent className="p-6">
+      <CardContent className="p-4 items">
         <div className="flex items-center justify-between">
           <div className="space-y-2 flex-1">
             <p className="text-sm font-medium text-muted-foreground group-hover:text-muted-foreground/80 transition-colors">
@@ -381,9 +381,9 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, subtitle, icon, trend
             {trend && (
               <Badge
                 variant={trend.isPositive ? "default" : "destructive"}
-                className={`text-xs font-medium px-2 py-1 ${
+                className={`text-xs font-bold px-2 py-1 ${
                   trend.isPositive
-                    ? "bg-gradient-to-r from-green-500/10 to-green-600/10 text-green-400 dark:text-green-600 border-green-200 dark:border-green-800"
+                    ? "bg-gradient-to-r from-green-400/10 to-green-600/10 text-green-700 dark:text-green-600 border-green-200 dark:border-green-800"
                     : "bg-gradient-to-r from-red-500/10 to-red-600/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
                 }`}
               >
