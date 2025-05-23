@@ -3,7 +3,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import LeftPanel from '@/components/LeftPanel';
+import LeftPanel from '@/components/left-panel/index';
 import Chat from '@/components/Chat';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';

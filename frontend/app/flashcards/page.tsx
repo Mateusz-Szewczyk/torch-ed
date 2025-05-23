@@ -16,7 +16,6 @@ import {
   Edit,
   Trash2,
   Search,
-  Clock,
   X,
   ArrowLeft,
   SortAsc,
@@ -671,13 +670,6 @@ export default function FlashcardsPage() {
                             <BookOpen className="h-3 w-3" />
                             {deck.flashcards.length} {t("cards")}
                           </Badge>
-
-                          {deck.conversation_id > 0 && (
-                            <Badge variant="outline" className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {t("last_studied")}
-                            </Badge>
-                          )}
                         </div>
                       </CardContent>
 
