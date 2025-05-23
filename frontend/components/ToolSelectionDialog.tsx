@@ -1,185 +1,177 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import type React from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence, Reorder } from "framer-motion"
-import { ArrowUp, ArrowDown, Plus, X } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogClose
-} from "@/components/ui/dialog"
+import { Plus, X, GripVertical, FileText, Brain, TestTube, Globe, Sparkles } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Arrow } from "@/components/ui/arrow"
-import { CustomTooltip } from "@/components/CustomTooltip"
+import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "react-i18next"
 
-const ToolSelectionDialog: React.FC<{
+interface ToolSelectionDialogProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   selectedTools: string[]
   setSelectedTools: React.Dispatch<React.SetStateAction<string[]>>
   availableTools: string[]
-}> = ({ isOpen, onOpenChange, selectedTools, setSelectedTools, availableTools }) => {
+}
+
+// Tool icons mapping
+const getToolIcon = (tool: string) => {
+  const toolKey = tool.toLowerCase().replace(/\s/g, "_")
+  const iconMap: Record<string, React.ReactNode> = {
+    wiedza_z_plików: <FileText className="h-4 w-4" />,
+    generowanie_fiszek: <Brain className="h-4 w-4" />,
+    generowanie_egzaminu: <TestTube className="h-4 w-4" />,
+    wyszukaj_w_internecie: <Globe className="h-4 w-4" />,
+  }
+  return iconMap[toolKey] || <Sparkles className="h-4 w-4" />
+}
+
+const ToolSelectionDialog: React.FC<ToolSelectionDialogProps> = ({
+  isOpen,
+  onOpenChange,
+  selectedTools,
+  setSelectedTools,
+  availableTools,
+}) => {
   const { t } = useTranslation()
   const [tempSelectedTools, setTempSelectedTools] = useState<string[]>(selectedTools)
-  // Refy do elementów – inicjalnie pusta tablica
-  const toolRefs = useRef<(HTMLDivElement | null)[]>([])
-
-  // Resetujemy tablicę refów przy każdej zmianie listy narzędzi
-  useEffect(() => {
-    toolRefs.current = new Array(tempSelectedTools.length).fill(null)
-  }, [tempSelectedTools])
 
   useEffect(() => {
     setTempSelectedTools(selectedTools)
   }, [selectedTools])
-
-  const moveToolUp = (index: number) => {
-    if (index > 0) {
-      const newTools = [...tempSelectedTools]
-      ;[newTools[index - 1], newTools[index]] = [newTools[index], newTools[index - 1]]
-      setTempSelectedTools(newTools)
-    }
-  }
-
-  const moveToolDown = (index: number) => {
-    if (index < tempSelectedTools.length - 1) {
-      const newTools = [...tempSelectedTools]
-      ;[newTools[index], newTools[index + 1]] = [newTools[index + 1], newTools[index]]
-      setTempSelectedTools(newTools)
-    }
-  }
 
   const handleSave = () => {
     setSelectedTools(tempSelectedTools)
     onOpenChange(false)
   }
 
+  const handleCancel = () => {
+    setTempSelectedTools(selectedTools)
+    onOpenChange(false)
+  }
+
+  const addTool = (tool: string) => {
+    if (!tempSelectedTools.includes(tool)) {
+      setTempSelectedTools((prev) => [...prev, tool])
+    }
+  }
+
+  const removeTool = (tool: string) => {
+    setTempSelectedTools((prev) => prev.filter((t) => t !== tool))
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader className="flex items-center justify-between">
-          <DialogTitle className="text-2xl font-bold mb-4">
-            {t("toolbox.select_order_title")}
+      <DialogContent className="sm:max-w-[550px] p-6">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-semibold">
+            {t("toolbox.select_order_title") || "Configure Tools"}
           </DialogTitle>
-          <CustomTooltip content={t("toolbox.tooltip_description")}>
-            <span className="cursor-pointer text-muted-foreground font-bold">?</span>
-          </CustomTooltip>
         </DialogHeader>
-        <div className="space-y-6">
-          {/* Lista wybranych narzędzi z możliwością przeciągania */}
-          <Reorder.Group
-            axis="y"
-            values={tempSelectedTools}
-            onReorder={setTempSelectedTools}
-            className="space-y-4 relative"
-          >
-            {tempSelectedTools.map((tool, index) => (
-              <Reorder.Item
-                key={tool}
-                value={tool}
-                ref={(el) => {
-                  toolRefs.current[index] = el
-                }}
-                className="flex items-center space-x-2 bg-secondary p-3 rounded-lg relative cursor-grab"
-              >
-                <span className="font-medium">
-                  {t(`toolbox.${tool.toLowerCase().replace(/\s/g, "_")}`)}
-                </span>
-                <div className="flex-grow" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => moveToolUp(index)}
-                  disabled={index === 0}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => moveToolDown(index)}
-                  disabled={index === tempSelectedTools.length - 1}
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    setTempSelectedTools((prev) => prev.filter((t) => t !== tool))
-                  }
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
-          {/* Dynamiczne strzałki między elementami */}
-          {tempSelectedTools.length > 1 &&
-            tempSelectedTools.slice(0, -1).map((_, index) => {
-              const startEl = toolRefs.current[index]
-              const endEl = toolRefs.current[index + 1]
-              if (startEl && endEl) {
-                const startRect = startEl.getBoundingClientRect()
-                const endRect = endEl.getBoundingClientRect()
-                return (
-                  <Arrow
-                    key={`arrow-${index}`}
-                    start={{
-                      x: startRect.left + startRect.width / 2,
-                      y: startRect.bottom,
-                    }}
-                    end={{
-                      x: endRect.left + endRect.width / 2,
-                      y: endRect.top,
-                    }}
-                  />
-                )
-              }
-              return null
-            })}
-          {/* Dostępne narzędzia */}
+
+        <div className="py-4 space-y-6">
+          {/* Selected tools section */}
           <div>
-            <h4 className="text-lg font-semibold mb-3">
-              {t("toolbox.available_tools")}
-            </h4>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground">
+                {t("toolbox.selected_tools") || "Selected Tools"}
+              </h3>
+              <Badge variant="outline" className="text-xs">
+                {tempSelectedTools.length} / {availableTools.length}
+              </Badge>
+            </div>
+
+            {tempSelectedTools.length === 0 ? (
+              <div className="text-center py-4 border border-dashed border-border rounded-lg">
+                <p className="text-sm text-muted-foreground">{t("toolbox.no_tools_selected") || "No tools selected"}</p>
+              </div>
+            ) : (
+              <Reorder.Group axis="y" values={tempSelectedTools} onReorder={setTempSelectedTools} className="space-y-2">
+                {tempSelectedTools.map((tool) => (
+                  <Reorder.Item key={tool} value={tool} className="touch-manipulation">
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg group">
+                      <div className="flex items-center gap-3">
+                        <div className="touch-none cursor-grab active:cursor-grabbing">
+                          <GripVertical className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-background text-foreground">
+                            {getToolIcon(tool)}
+                          </span>
+                          <span className="text-sm font-medium">
+                            {t(`toolbox.${tool.toLowerCase().replace(/\s/g, "_")}`)}
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full opacity-70 hover:opacity-100"
+                        onClick={() => removeTool(tool)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        <span className="sr-only">Remove</span>
+                      </Button>
+                    </div>
+                  </Reorder.Item>
+                ))}
+              </Reorder.Group>
+            )}
+          </div>
+
+          {/* Available tools section */}
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-3">
+              {t("toolbox.available_tools") || "Available Tools"}
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <AnimatePresence>
                 {availableTools
                   .filter((tool) => !tempSelectedTools.includes(tool))
                   .map((tool) => (
                     <motion.div
                       key={tool}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ duration: 0.2 }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
                     >
                       <Button
                         variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setTempSelectedTools((prev) => [...prev, tool])
-                        }
+                        className="w-full justify-start text-sm h-auto py-2.5 px-3"
+                        onClick={() => addTool(tool)}
                       >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {t(`toolbox.${tool.toLowerCase().replace(/\s/g, "_")}`)}
+                        <span className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-muted mr-2">
+                          {getToolIcon(tool)}
+                        </span>
+                        <span className="truncate">{t(`toolbox.${tool.toLowerCase().replace(/\s/g, "_")}`)}</span>
+                        <Plus className="ml-auto h-3.5 w-3.5 flex-shrink-0 opacity-70" />
                       </Button>
                     </motion.div>
                   ))}
               </AnimatePresence>
             </div>
+            {availableTools.filter((tool) => !tempSelectedTools.includes(tool)).length === 0 && (
+              <div className="text-center py-4 border border-dashed border-border rounded-lg mt-2">
+                <p className="text-sm text-muted-foreground">
+                  {t("toolbox.all_tools_selected") || "All tools are selected"}
+                </p>
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex justify-end space-x-2 mt-6">
-          <DialogClose>
-            <Button variant="outline">{t("toolbox.cancel")}</Button>
-          </DialogClose>
-          <Button onClick={handleSave}>{t("toolbox.save")}</Button>
-        </div>
+
+        <DialogFooter className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={handleCancel}>
+            {t("toolbox.cancel") || "Cancel"}
+          </Button>
+          <Button size="sm" onClick={handleSave}>
+            {t("toolbox.save") || "Save"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
