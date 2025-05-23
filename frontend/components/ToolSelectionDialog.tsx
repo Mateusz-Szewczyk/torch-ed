@@ -3,11 +3,12 @@
 import type React from "react"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence, Reorder } from "framer-motion"
-import { Plus, X, GripVertical, FileText, Brain, TestTube, Globe, Sparkles } from "lucide-react"
+import {Plus, X, GripVertical, FileText, Brain, TestTube, Globe, Sparkles, Info} from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useTranslation } from "react-i18next"
+import { CustomTooltip } from "@/components/CustomTooltip";
 
 interface ToolSelectionDialogProps {
   isOpen: boolean
@@ -67,8 +68,11 @@ const ToolSelectionDialog: React.FC<ToolSelectionDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[550px] p-6">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold">
-            {t("toolbox.select_order_title") || "Configure Tools"}
+          <DialogTitle className="text-xl font-semibold flex flex-row items-center justify-center">
+            {t("toolbox.select_order_title")  || "Configure Tools"}
+              <CustomTooltip content={t("toolbox.select_order_tooltip") || "Drag to reorder tools"}>
+                <Info className="ml-5 h-5 w-5 text-muted-foreground cursor-pointer" />
+              </CustomTooltip>
           </DialogTitle>
         </DialogHeader>
 

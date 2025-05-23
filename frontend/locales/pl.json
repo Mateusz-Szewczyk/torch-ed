@@ -334,6 +334,7 @@
   "select_file": "Wybierz plik",
   "toolbox": {
     "select_order_title": "Wybierz i ustaw kolejność narzędzi",
+    "select_order_tooltip": "Przeciągnij i upuść, aby ustawić kolejność narzędzi. Narzędzia wykonują się w kolejności od góry do dołu.",
     "available_tools": "Dostępne narzędzia",
     "cancel": "Anuluj",
     "save": "Zapisz",

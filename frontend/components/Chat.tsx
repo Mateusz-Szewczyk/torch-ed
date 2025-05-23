@@ -89,8 +89,8 @@ const MessageBubble: React.FC<{
     >
       <div
         className={cn(
-          "relative max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-3 shadow-sm transition-all duration-200",
-          "hover:shadow-md hover:scale-[1.02]",
+          "relative max-w-[90%] md:max-w-[90%] rounded-2xl px-4 py-3 shadow-sm transition-all duration-200",
+          "hover:shadow-md hover:scale-[1.01]",
           isUser
             ? "bg-primary text-primary-foreground ml-auto"
             : isError
