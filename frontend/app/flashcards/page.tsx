@@ -1,22 +1,77 @@
 "use client"
 
-import { useState, useEffect, useCallback, type MouseEvent } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { EditDeckDialog } from "@/components/EditDeckDialog"
 import { ImportFlashcardsModal } from "@/components/ImportFlashcardsModal"
-import { Button } from "@/components/ui/button"
-import { PlusCircle, BookOpen, Loader2, Info, ChevronRight, MoreVertical, Edit2, Trash2 } from "lucide-react"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { StudyDeck } from "@/components/StudyDeck"
 import { CustomTooltip } from "@/components/CustomTooltip"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  PlusCircle,
+  BookOpen,
+  Info,
+  ChevronRight,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Search,
+  Clock,
+  X,
+  ArrowLeft,
+  SortAsc,
+  SortDesc,
+  Filter,
+  CheckCircle2,
+} from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
+import { StudyDeck } from "@/components/StudyDeck"
 import { useTranslation } from "react-i18next"
+import { cn } from "@/lib/utils"
 
 import type { Deck, Flashcard, ErrorResponse } from "@/types"
 
+// Animation variants for framer-motion
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 300, damping: 24 },
+  },
+}
+
+// Sort options for decks
+type SortOption = "name" | "cards" | "recent"
+type SortDirection = "asc" | "desc"
+
 export default function FlashcardsPage() {
   const [decks, setDecks] = useState<Deck[]>([])
+  const [filteredDecks, setFilteredDecks] = useState<Deck[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState<string>("")
+  const [sortBy, setSortBy] = useState<SortOption>("recent")
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
+  const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false)
 
   const [studyingDeck, setStudyingDeck] = useState<{
     deck: Deck
@@ -26,9 +81,8 @@ export default function FlashcardsPage() {
     conversation_id: number
   } | null>(null)
 
-  const [openCollapsibles, setOpenCollapsibles] = useState<{ [key: number]: boolean }>({})
-
   const { t } = useTranslation()
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const API_URL = process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
   const API_BASE_URL = `${API_URL}/decks/`
@@ -49,7 +103,7 @@ export default function FlashcardsPage() {
       })
       if (!response.ok) {
         const errorData: ErrorResponse = await response.json()
-        throw new Error((errorData.detail as string) || "Nie udało się pobrać decków.")
+        throw new Error((errorData.detail as string) || t("error_fetch_decks"))
       }
       const data: Deck[] = await response.json()
       setDecks(data)
@@ -68,6 +122,38 @@ export default function FlashcardsPage() {
   useEffect(() => {
     fetchDecks()
   }, [fetchDecks])
+
+  // Filter and sort decks based on search query and sort options
+  useEffect(() => {
+    let result = [...decks]
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(
+        (deck) =>
+          deck.name.toLowerCase().includes(query) ||
+          (deck.description && deck.description.toLowerCase().includes(query)),
+      )
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      if (sortBy === "name") {
+        return sortDirection === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+      } else if (sortBy === "cards") {
+        return sortDirection === "asc"
+          ? a.flashcards.length - b.flashcards.length
+          : b.flashcards.length - a.flashcards.length
+      } else {
+        // recent
+        // Using ID as a proxy for recency since we don't have created_at
+        return sortDirection === "asc" ? a.id - b.id : b.id - a.id
+      }
+    })
+
+    setFilteredDecks(result)
+  }, [decks, searchQuery, sortBy, sortDirection])
 
   /**
    * Saves (creates/updates) a deck.
@@ -95,10 +181,11 @@ export default function FlashcardsPage() {
         })
         if (!response.ok) {
           const errorData: ErrorResponse = await response.json()
-          throw new Error((errorData.detail as string) || "Nie udało się stworzyć decka.")
+          throw new Error((errorData.detail as string) || t("error_creating_deck"))
         }
         const newDeck: Deck = await response.json()
         setDecks((prevDecks) => [...prevDecks, newDeck])
+        // Usuń powiadomienie toast
       } else {
         // Update existing deck
         const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
@@ -109,22 +196,22 @@ export default function FlashcardsPage() {
         })
         if (!response.ok) {
           const errorData: ErrorResponse = await response.json()
-          throw new Error((errorData.detail as string) || "Nie udało się zaktualizować decka.")
+          throw new Error((errorData.detail as string) || t("error_updating_deck"))
         }
         const updatedDeckFromServer: Deck = await response.json()
         setDecks((prevDecks) =>
           prevDecks.map((deck) => (deck.id === updatedDeckFromServer.id ? updatedDeckFromServer : deck)),
         )
+        // Usuń powiadomienie toast
       }
-      // Close collapsible panel after save
-      setOpenCollapsibles((prev) => ({ ...prev, [updatedDeck.id]: false }))
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(`${t("error_saving_deck")}: ${err.message}`)
+        console.error("Error saving deck:", err.message)
+        setError(err.message)
       } else {
+        console.error("Unexpected error saving deck:", err)
         setError(t("error_unexpected_saving_deck"))
       }
-      console.error("Error saving deck:", err)
     }
   }
 
@@ -141,25 +228,23 @@ export default function FlashcardsPage() {
       })
       if (!response.ok) {
         const errorData: ErrorResponse = await response.json()
-        throw new Error((errorData.detail as string) || "Nie udało się usunąć decka.")
+        throw new Error((errorData.detail as string) || t("error_deleting_deck"))
       }
       setDecks((prev) => prev.filter((deck) => deck.id !== deckId))
-      setOpenCollapsibles((prev) => ({ ...prev, [deckId]: false }))
+      // Usuń powiadomienie toast
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(`${t("error_deleting_deck")}: ${err.message}`)
+        console.error("Error deleting deck:", err.message)
+        setError(err.message)
       } else {
+        console.error("Unexpected error deleting deck:", err)
         setError(t("error_unexpected_deleting_deck"))
       }
-      console.error("Error deleting deck:", err)
     }
   }
 
   /**
    * Starts a study session for a deck.
-   * If the deck does not have a conversation_id (or it is 0),
-   * create a new conversation, update the deck in the database (and locally),
-   * then start the study session using the updated conversation_id.
    */
   const handleStudy = async (deck: Deck) => {
     try {
@@ -173,7 +258,7 @@ export default function FlashcardsPage() {
         })
         if (!convResponse.ok) {
           const convError = await convResponse.json()
-          throw new Error(convError.detail || "Nie udało się utworzyć konwersacji.")
+          throw new Error(convError.detail || t("error_creating_conversation"))
         }
         const newConv = await convResponse.json()
         convId = newConv.id
@@ -196,7 +281,7 @@ export default function FlashcardsPage() {
         })
         if (!updateResponse.ok) {
           const updateError = await updateResponse.json()
-          throw new Error(updateError.detail || "Nie udało się zaktualizować decka.")
+          throw new Error(updateError.detail || t("error_updating_deck"))
         }
         const updatedDeck = await updateResponse.json()
         setDecks((prev) => prev.map((d) => (d.id === deck.id ? updatedDeck : d)))
@@ -212,7 +297,7 @@ export default function FlashcardsPage() {
       })
       if (!response.ok) {
         const errorData: ErrorResponse = await response.json()
-        let errorMessage = "Nie udało się rozpocząć sesji nauki."
+        let errorMessage = t("error_starting_study")
         if (Array.isArray(errorData.detail)) {
           errorMessage = errorData.detail
             .map((err) => (typeof err === "object" && "msg" in err ? err.msg : String(err)))
@@ -225,7 +310,7 @@ export default function FlashcardsPage() {
       const data = await response.json()
       const { study_session_id, available_cards, next_session_date } = data
       if (!Array.isArray(available_cards)) {
-        throw new Error("Invalid response format: available_cards is not an array.")
+        throw new Error(t("invalid_response_format"))
       }
       setStudyingDeck({
         deck,
@@ -236,11 +321,12 @@ export default function FlashcardsPage() {
       })
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(`${t("error_starting_study")}: ${err.message}`)
+        console.error("Error starting study session:", err.message)
+        setError(err.message)
       } else {
+        console.error("Unexpected error starting study session:", err)
         setError(t("error_unexpected_starting_study"))
       }
-      console.error("Error starting study session:", err)
     }
   }
 
@@ -248,34 +334,56 @@ export default function FlashcardsPage() {
     setStudyingDeck(null)
   }
 
-  const toggleCollapsibles = (deckId: number) => {
-    setOpenCollapsibles((prev) => ({
-      ...prev,
-      [deckId]: !prev[deckId],
-    }))
+  const handleClearSearch = () => {
+    setSearchQuery("")
+    if (searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
   }
 
+  const toggleSortDirection = () => {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"))
+  }
+
+  // Format date for display
+// Loading state with skeleton UI
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="mr-2 h-16 w-16 animate-spin text-primary" />
-        <span className="text-2xl font-semibold text-primary">{t("loading_decks")}</span>
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <div className="flex flex-col items-center justify-center mb-12">
+          <div className="w-48 h-10 bg-muted animate-pulse rounded-md mb-4"></div>
+          <div className="w-64 h-6 bg-muted animate-pulse rounded-md"></div>
+        </div>
+
+        <div className="w-full max-w-md mx-auto mb-8 bg-muted animate-pulse h-10 rounded-md"></div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="bg-muted animate-pulse rounded-xl h-64"></div>
+          ))}
+        </div>
       </div>
     )
   }
 
+  // Error state
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-destructive">{t("error")}</CardTitle>
+      <div className="container mx-auto px-4 py-8 flex items-center justify-center min-h-[50vh]">
+        <Card className="w-full max-w-md border-destructive/20">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-2xl font-bold text-destructive flex items-center gap-2">
+              <X className="h-6 w-6" />
+              {t("error")}
+            </CardTitle>
+            <CardDescription>{t("error_occurred")}</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-lg">{error}</p>
+          <CardContent className="pb-6">
+            <p className="text-destructive/90 bg-destructive/5 p-4 rounded-md border border-destructive/10">{error}</p>
           </CardContent>
           <CardFooter>
             <Button onClick={fetchDecks} className="w-full">
+              <ArrowLeft className="mr-2 h-4 w-4" />
               {t("try_again")}
             </Button>
           </CardFooter>
@@ -284,6 +392,7 @@ export default function FlashcardsPage() {
     )
   }
 
+  // Study mode
   if (studyingDeck) {
     return (
       <StudyDeck
@@ -297,138 +406,303 @@ export default function FlashcardsPage() {
     )
   }
 
+  // Main content
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       {/* Header */}
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-primary mb-2">{t("flashcards")}</h1>
-        <CustomTooltip content={t("flashcards_tooltip")}>
-          <Button variant="ghost" size="sm" className="rounded-full">
-            <Info className="h-5 w-5" />
+      <motion.div
+        className="flex flex-col items-center justify-center mb-8 md:mb-12"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent mb-2">
+          {t("flashcards")}
+        </h1>
+        <p className="text-muted-foreground text-center max-w-xl mb-2">{t("flashcards_description")}</p>
+        <CustomTooltip
+          content={
+            t("flashcards_tooltip") ||
+            "Fiszki pomagają w nauce poprzez aktywne przypominanie. Twórz własne zestawy lub importuj gotowe materiały."
+          }
+        >
+          <Button variant="ghost" size="sm" className="rounded-full h-8 w-8 p-0">
+            <Info className="h-4 w-4" />
             <span className="sr-only">{t("more_information")}</span>
           </Button>
         </CustomTooltip>
-      </div>
+      </motion.div>
 
       {decks.length === 0 ? (
-        <Card className="w-full max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold">{t("welcome_flashcards")}</CardTitle>
-            <CardDescription>{t("get_started_create_deck")}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center space-y-6 py-8">
-            <BookOpen className="h-24 w-24 text-muted-foreground" />
-            <p className="text-center text-muted-foreground">{t("no_flashcard_decks")}</p>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <ImportFlashcardsModal
-              trigger={<Button className="w-full">{t("import_flashcards")}</Button>}
-              onImportSuccess={fetchDecks}
-            />
-            <EditDeckDialog
-              deck={{ id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
-              onSave={handleSaveWrapper}
-              trigger={
-                <Button className="w-full" variant="default">
-                  <PlusCircle className="h-5 w-5 mr-2" />
-                  {t("create_your_first_deck")}
-                </Button>
-              }
-            />
-          </CardFooter>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Card className="w-full max-w-2xl mx-auto border-dashed bg-background/50 backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-2xl font-bold">{t("welcome_flashcards")}</CardTitle>
+              <CardDescription>{t("get_started_create_deck")}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center justify-center space-y-6 py-12">
+              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
+                <BookOpen className="h-12 w-12 text-primary" />
+              </div>
+              <p className="text-center text-muted-foreground max-w-md">{t("no_flashcard_decks_extended")}</p>
+            </CardContent>
+            <CardFooter className="flex flex-col space-y-4 pt-2 pb-6">
+              <ImportFlashcardsModal
+                trigger={
+                  <Button className="w-full" variant="outline">
+                    {t("import_flashcards")}
+                  </Button>
+                }
+                onImportSuccess={fetchDecks}
+              />
+              <EditDeckDialog
+                deck={{ id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
+                onSave={handleSaveWrapper}
+                trigger={
+                  <Button className="w-full" variant="default">
+                    <PlusCircle className="h-5 w-5 mr-2" />
+                    {t("create_your_first_deck")}
+                  </Button>
+                }
+              />
+            </CardFooter>
+          </Card>
+        </motion.div>
       ) : (
         <>
-          {/* Buttons for Import and Create New Deck */}
-          <div className="mb-8 flex flex-col sm:flex-row justify-center sm:justify-end space-y-4 sm:space-y-0 sm:space-x-4">
-            <ImportFlashcardsModal
-              trigger={<Button className="w-full sm:w-auto">{t("import_flashcards")}</Button>}
-              onImportSuccess={fetchDecks}
-            />
-            <EditDeckDialog
-              deck={{ id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
-              onSave={handleSaveWrapper}
-              trigger={
-                <Button className="w-full sm:w-auto" variant="default">
-                  <PlusCircle className="h-5 w-5 mr-2" />
-                  {t("create_new_deck")}
-                </Button>
-              }
-            />
-          </div>
-          {/* Decks grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {decks.map((deck) => (
-              <div key={deck.id} className="relative group">
-                <Card
-                  className="flex flex-col w-full transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group-hover:z-10"
-                  style={{
-                    minHeight: "400px",
-                    height: "auto",
-                    maxHeight: "400px",
-                    transition: "all 0.3s ease-in-out",
-                  }}
+          {/* Search and Filter Bar */}
+          <motion.div
+            className="mb-8 flex flex-col md:flex-row gap-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+          >
+            <div
+              className={cn(
+                "relative flex-grow transition-all duration-300 rounded-lg",
+                isSearchFocused ? "ring-2 ring-primary/20" : "",
+              )}
+            >
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("search_decks")}
+                className="pl-10 pr-10 h-11 bg-background/60 backdrop-blur-sm border-muted"
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0"
+                  onClick={handleClearSearch}
                 >
-                  <CardHeader className="flex-shrink-0">
-                    <div className="flex justify-between items-center">
-                      <CardTitle className="text-xl font-bold truncate">{deck.name}</CardTitle>
-                      <Collapsible
-                        open={openCollapsibles[deck.id] || false}
-                        onOpenChange={() => toggleCollapsibles(deck.id)}
-                      >
-                        <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="p-1" aria-label="Options">
-                            <MoreVertical className="h-5 w-5" />
-                          </Button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="absolute right-4 top-12 bg-card border border-border rounded-md shadow-lg z-50 p-2">
-                          <div className="flex flex-col">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">{t("clear_search")}</span>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-11 gap-2">
+                    <Filter className="h-4 w-4" />
+                    <span className="hidden sm:inline">{t("sort_by")}</span>
+                    <span className="font-medium">
+                      {sortBy === "name" ? t("name") : sortBy === "cards" ? t("card_count") : t("recent")}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem
+                    onClick={() => setSortBy("name")}
+                    className={cn(sortBy === "name" && "bg-primary/10 font-medium")}
+                  >
+                    {sortBy === "name" && <CheckCircle2 className="h-4 w-4 mr-2 text-primary" />}
+                    {t("name")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setSortBy("cards")}
+                    className={cn(sortBy === "cards" && "bg-primary/10 font-medium")}
+                  >
+                    {sortBy === "cards" && <CheckCircle2 className="h-4 w-4 mr-2 text-primary" />}
+                    {t("card_count")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setSortBy("recent")}
+                    className={cn(sortBy === "recent" && "bg-primary/10 font-medium")}
+                  >
+                    {sortBy === "recent" && <CheckCircle2 className="h-4 w-4 mr-2 text-primary" />}
+                    {t("recent")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <CustomTooltip
+                content={
+                  sortDirection === "asc"
+                    ? t("sort_ascending") || "Sortuj rosnąco"
+                    : t("sort_descending") || "Sortuj malejąco"
+                }
+              >
+                <Button variant="outline" size="icon" className="h-11 w-11" onClick={toggleSortDirection}>
+                  {sortDirection === "asc" ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
+                  <span className="sr-only">{sortDirection === "asc" ? t("ascending") : t("descending")}</span>
+                </Button>
+              </CustomTooltip>
+
+              <CustomTooltip content={t("import_flashcards_tooltip") || "Importuj fiszki z plików CSV, APKG lub TXT"}>
+                <ImportFlashcardsModal
+                  trigger={
+                    <Button variant="outline" className="h-11 gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t("import")}</span>
+                    </Button>
+                  }
+                  onImportSuccess={fetchDecks}
+                />
+              </CustomTooltip>
+
+              <CustomTooltip content={t("create_new_deck_tooltip") || "Utwórz nowy zestaw fiszek"}>
+                <EditDeckDialog
+                  deck={{ id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
+                  onSave={handleSaveWrapper}
+                  trigger={
+                    <Button className="h-11 gap-2">
+                      <PlusCircle className="h-4 w-4" />
+                      <span className="hidden sm:inline">{t("create")}</span>
+                    </Button>
+                  }
+                />
+              </CustomTooltip>
+            </div>
+          </motion.div>
+
+          {/* Results count */}
+          {searchQuery && (
+            <div className="mb-4 text-sm text-muted-foreground">
+              {filteredDecks.length === 0
+                ? t("no_results_found")
+                : t("showing_results", { count: filteredDecks.length, total: decks.length })}
+            </div>
+          )}
+
+          {/* Decks grid */}
+          {filteredDecks.length === 0 && searchQuery ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                <Search className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">{t("no_matching_decks")}</h3>
+              <p className="text-muted-foreground text-center max-w-md mb-6">{t("try_different_search")}</p>
+              <Button variant="outline" onClick={handleClearSearch}>
+                {t("clear_search")}
+              </Button>
+            </div>
+          ) : (
+            <motion.div
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+            >
+              <AnimatePresence>
+                {filteredDecks.map((deck) => (
+                  <motion.div
+                    key={deck.id}
+                    variants={itemVariants}
+                    layout
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    className="group"
+                  >
+                    <Card className="flex flex-col h-full overflow-hidden border-border/60 bg-card/95 backdrop-blur-sm hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 hover:-translate-y-1">
+                      <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0">
+                        <div className="space-y-1.5">
+                          <CardTitle className="text-xl font-bold line-clamp-1 pr-6">{deck.name}</CardTitle>
+                          <CardDescription className="line-clamp-1">
+                            {deck.description || t("no_description")}
+                          </CardDescription>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">{t("options")}</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
                             <EditDeckDialog
                               deck={deck}
                               onSave={handleSaveWrapper}
                               trigger={
-                                <Button variant="ghost" size="sm" className="justify-start">
-                                  <Edit2 className="h-4 w-4 mr-2" />
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                  <Edit className="h-4 w-4 mr-2" />
                                   {t("edit")}
-                                </Button>
+                                </DropdownMenuItem>
                               }
                             />
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="justify-start text-destructive"
-                              onClick={(e: MouseEvent<HTMLButtonElement>) => {
-                                e.stopPropagation()
-                                handleDelete(deck.id)
-                              }}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() => handleDelete(deck.id)}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               {t("delete")}
-                            </Button>
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-grow overflow-hidden">
-                    <p className="text-sm text-muted-foreground">{deck.description || t("no_description")}</p>
-                  </CardContent>
-                  <CardFooter className="mt-auto flex justify-between items-center">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {deck.flashcards.length} {t("cards")}
-                    </p>
-                    <Button variant="default" onClick={() => handleStudy(deck)}>
-                      {t("study")}
-                      <ChevronRight className="h-5 w-5 ml-2" />
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </div>
-            ))}
-          </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </CardHeader>
+
+                      <CardContent className="pb-3 flex-grow">
+                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
+                          {deck.description || t("no_description")}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2 mt-auto">
+                          <Badge variant="secondary" className="flex items-center gap-1">
+                            <BookOpen className="h-3 w-3" />
+                            {deck.flashcards.length} {t("cards")}
+                          </Badge>
+
+                          {deck.conversation_id > 0 && (
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {t("last_studied")}
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+
+                      <CardFooter className="pt-3 flex justify-end">
+                        <CustomTooltip
+                          content={t("start_study_session") || "Rozpocznij sesję nauki z tym zestawem fiszek"}
+                        >
+                          <Button
+                            variant="default"
+                            className="w-full sm:w-auto transition-all duration-300 group-hover:bg-primary/90"
+                            onClick={() => handleStudy(deck)}
+                          >
+                            {t("study")}
+                            <ChevronRight className="h-4 w-4 ml-2 transition-transform duration-300 group-hover:translate-x-1" />
+                          </Button>
+                        </CustomTooltip>
+                      </CardFooter>
+                    </Card>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          )}
         </>
       )}
     </div>
   )
 }
-
