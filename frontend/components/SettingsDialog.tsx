@@ -45,7 +45,7 @@ export function SettingsDialog({ children }: { children: React.ReactNode }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger>{children}</DialogTrigger>
+      <DialogTrigger asChild className={'w-full'}>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[425px] bg-background text-foreground">
         <DialogHeader>
           <DialogTitle>{t('settings')}</DialogTitle>

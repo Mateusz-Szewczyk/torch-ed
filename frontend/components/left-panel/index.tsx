@@ -193,9 +193,9 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
             </div>
 
             {/* Main Navigation */}
-            <div className="flex-grow overflow-y-auto p-2 space-y-6">
+            <div className="flex-grow overflow-y-auto p-1 space-y-4">
               {/* Primary Navigation */}
-              <div className="space-y-1">
+              <div className="space-y-2 p-2">
                 {isPanelVisible && (
                   <h3 className="text-xs uppercase text-muted-foreground font-medium px-2 mb-2">{t("navigation")}</h3>
                 )}
@@ -218,7 +218,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
 
               {/* Conversations Section */}
               {isAuthenticated && (
-                <div className="space-y-1">
+                <div className="space-y-1 p-2">
                   {isPanelVisible && (
                     <h3 className="text-xs uppercase text-muted-foreground font-medium px-2 mb-2">
                       {t("conversations")}
@@ -256,7 +256,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
             </div>
 
             {/* Footer Section */}
-            <div className="border-t border-border/40 p-2 space-y-1">
+            <div className="border-t border-border/40 p-3 space-y-2">
               <NavItem
                 icon={Mail}
                 label={t("send_feedback")}
@@ -347,7 +347,7 @@ const NavItem: React.FC<NavItemProps> = ({
   const buttonClass = `
     w-full group relative overflow-hidden
     ${isPanelVisible ? "justify-start" : "justify-center"}
-    ${isActive ? "bg-primary/10 text-primary" : "hover:bg-secondary/80"}
+    ${isActive ? "bg-primary/10 text-primary" : "hover:bg-secondary/80 hover:text-primary"}
     transition-all duration-200
   `
 

@@ -162,7 +162,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <label htmlFor="title" className="text-sm font-medium">
-                {t("title")}
+                {t("new_title")}
               </label>
               <input
                 id="title"

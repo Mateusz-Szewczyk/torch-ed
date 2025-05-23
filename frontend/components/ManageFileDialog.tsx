@@ -385,7 +385,7 @@ const ManageFileDialog: React.FC<ManageFileDialogProps> = ({ isPanelVisible }) =
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
+      <DialogTrigger asChild className={'w-full'}>
         <Button variant="outline" className={cn("flex w-full", isPanelVisible ? "justify-start" : "justify-center")}>
           <Upload className="h-4 w-4" />
           {isPanelVisible && <span className="ml-2">{t("manage_files")}</span>}

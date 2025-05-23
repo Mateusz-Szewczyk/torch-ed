@@ -76,7 +76,7 @@ export const EditDeckDialog = ({ deck, onSave, trigger }: EditDeckDialogProps) =
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger>{trigger}</DialogTrigger>
+      <DialogTrigger asChild className={'w-full'}>{trigger}</DialogTrigger>
       <DialogContent className="bg-background text-foreground p-6 rounded-lg max-w-3xl w-full sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl flex flex-col max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>{deck.id === 0 ? t('create_new_deck') : t('edit_deck')}</DialogTitle>

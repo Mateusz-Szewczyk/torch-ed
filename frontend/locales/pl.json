@@ -76,6 +76,7 @@
   },
   "new_conversation": "Nowa konwersacja",
   "edit_title": "Edytuj tytuł",
+  "new_title": "Nowy tytuł",
   "delete_conversation": "Usuń konwersację",
   "confirm_delete_title": "Potwierdź usunięcie",
   "confirm_delete_description": "Czy na pewno chcesz usunąć tę konwersację? Tej operacji nie można cofnąć.",
@@ -406,5 +407,6 @@
   "home": "Strona główna",
   "conversations": "Rozmowy",
   "navigation": "Nawigacja",
-  "no_conversations": "Nie masz jeszcze żadnych rozmów."
+  "no_conversations": "Nie masz jeszcze żadnych rozmów.",
+  "preparingDashboard": "Przygotowywanie danych..."
 }
