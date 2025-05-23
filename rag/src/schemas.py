@@ -101,6 +101,7 @@ class UploadedFileRead(BaseModel):
     name: str
     description: Optional[str] = None  # Opcjonalne pole
     category: str
+    created_at: datetime
 
     class Config:
         orm_mode = True

@@ -1,15 +1,14 @@
-// components/ui/dialog.tsx
+"use client"
 
-'use client';
-
-import * as RadixDialog from '@radix-ui/react-dialog';
-import { ReactNode } from 'react';
-import { cn } from "@/lib/utils";
+import * as RadixDialog from "@radix-ui/react-dialog"
+import type { ReactNode } from "react"
+import { X } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface DialogProps {
-  children: ReactNode;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  children: ReactNode
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export const Dialog = ({ children, open, onOpenChange }: DialogProps) => {
@@ -17,139 +16,157 @@ export const Dialog = ({ children, open, onOpenChange }: DialogProps) => {
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       {children}
     </RadixDialog.Root>
-  );
-};
+  )
+}
 
 interface DialogTriggerProps {
-  children: ReactNode;
-  asChild?: boolean;
-  className?: string;
+  children: ReactNode
+  asChild?: boolean
+  className?: string
 }
 
 export const DialogTrigger = ({ children, asChild = false }: DialogTriggerProps) => {
-  return (
-    <RadixDialog.Trigger asChild={asChild}>
-      {children}
-    </RadixDialog.Trigger>
-  );
-};
-
-
-interface DialogContentProps {
-  children: ReactNode;
-  className?: string;
+  return <RadixDialog.Trigger asChild={asChild}>{children}</RadixDialog.Trigger>
 }
 
-export const DialogContent = ({ children, className }: DialogContentProps) => {
+interface DialogContentProps {
+  children: ReactNode
+  className?: string
+  onInteractOutside?: (event: Event) => void
+}
+
+export const DialogContent = ({ children, className, onInteractOutside }: DialogContentProps) => {
   return (
     <RadixDialog.Portal>
       <RadixDialog.Overlay
         className={cn(
-          "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+          "fixed inset-0 z-50 bg-black/50 backdrop-blur-sm",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         )}
       />
       <RadixDialog.Content
         className={cn(
-          "fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
-          "bg-background text-foreground",
-          "dark:bg-background dark:text-foreground",
-          "p-6 rounded-md w-96 max-w-full max-h-[85vh] overflow-y-auto",
-          "shadow-lg",
-          "z-[50]",
-          "overflow-visible",
-          className
+          "fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]",
+          "w-[95vw] max-w-lg sm:max-w-xl md:max-w-2xl lg:max-w-4xl xl:max-w-5xl",
+          "max-h-[90vh] overflow-hidden",
+          "bg-background/95 backdrop-blur-md border border-border/50",
+          "p-6 md:p-8", // Increased padding
+          "rounded-xl shadow-2xl",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out",
+          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          "data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]",
+          "data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
+          "duration-200",
+          className,
         )}
+        onInteractOutside={onInteractOutside}
       >
         {children}
         <RadixDialog.Close
           className={cn(
-            "absolute top-2 right-2",
-            "text-muted-foreground hover:text-foreground",
-            "dark:text-muted-foreground dark:hover:text-foreground"
+            "absolute right-5 top-5 z-10", // Adjusted position
+            "rounded-full p-2 opacity-70 transition-all", // Increased padding
+            "hover:opacity-100 hover:bg-muted hover:scale-110",
+            "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            "disabled:pointer-events-none",
+            "data-[state=open]:bg-accent data-[state=open]:text-muted-foreground",
           )}
         >
-          ×
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
         </RadixDialog.Close>
       </RadixDialog.Content>
     </RadixDialog.Portal>
-  );
-};
+  )
+}
 
 interface DialogHeaderProps {
-  children: ReactNode;
-  className?: string;
+  children: ReactNode
+  className?: string
 }
 
 export const DialogHeader = ({ children, className }: DialogHeaderProps) => {
-  return (
-    <div className={cn("mb-4", className)}>
-      {children}
-    </div>
-  );
-};
+  return <div className={cn("flex flex-col space-y-2.5 text-center sm:text-left mb-6", className)}>{children}</div>
+}
 
 interface DialogTitleProps {
-  children: ReactNode;
-  className?: string;
+  children: ReactNode
+  className?: string
 }
 
 export const DialogTitle = ({ children, className }: DialogTitleProps) => {
   return (
     <RadixDialog.Title
-      className={cn(
-        "text-lg font-semibold",
-        "text-foreground",
-        "dark:text-foreground",
-        className
-      )}
+      className={cn("text-xl font-semibold leading-none tracking-tight text-foreground mb-2", className)}
     >
       {children}
     </RadixDialog.Title>
-  );
-};
+  )
+}
 
 interface DialogDescriptionProps {
-  children: ReactNode;
-  className?: string;
+  children: ReactNode
+  className?: string
 }
 
 export const DialogDescription = ({ children, className }: DialogDescriptionProps) => {
   return (
-    <RadixDialog.Description
-      className={cn(
-        "text-sm text-muted-foreground",
-        "dark:text-muted-foreground",
-        className
-      )}
-    >
+    <RadixDialog.Description className={cn("text-sm text-muted-foreground mt-1.5", className)}>
       {children}
     </RadixDialog.Description>
-  );
-};
+  )
+}
 
 interface DialogFooterProps {
-  children: ReactNode;
-  className?: string;
+  children: ReactNode
+  className?: string
 }
 
 export const DialogFooter = ({ children, className }: DialogFooterProps) => {
   return (
-    <div className={cn("mt-4 flex justify-end space-x-2", className)}>
+    <div className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-3 gap-3 mt-8", className)}>
       {children}
     </div>
-  );
-};
-
-interface DialogCloseProps {
-  children: ReactNode;
-  asChild?: boolean;
-  className?: string;
+  )
 }
 
-export const DialogClose = ({ children, asChild = false }: DialogCloseProps) => {
+interface DialogCloseProps {
+  children: ReactNode
+  asChild?: boolean
+  className?: string
+}
+
+export const DialogClose = ({ children, asChild = false, className }: DialogCloseProps) => {
   return (
-    <RadixDialog.Close asChild={asChild}>
+    <RadixDialog.Close asChild={asChild} className={className}>
       {children}
     </RadixDialog.Close>
-  );
-};
+  )
+}
+
+// Additional utility components for better UX
+
+interface DialogBodyProps {
+  children: ReactNode
+  className?: string
+}
+
+export const DialogBody = ({ children, className }: DialogBodyProps) => {
+  return <div className={cn("overflow-y-auto flex-1 py-4", className)}>{children}</div>
+}
+
+interface DialogScrollAreaProps {
+  children: ReactNode
+  className?: string
+  maxHeight?: string
+}
+
+export const DialogScrollArea = ({ children, className, maxHeight = "60vh" }: DialogScrollAreaProps) => {
+  return (
+    <div className={cn("overflow-y-auto px-1 -mx-1 py-4", className)} style={{ maxHeight }}>
+      {children}
+    </div>
+  )
+}
