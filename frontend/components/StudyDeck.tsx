@@ -1,16 +1,46 @@
-// src/components/StudyDeck.tsx
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, MessageCircle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import Chat from '@/components/Chat';
 import Image from 'next/image';
 import { Flashcard, Deck } from '@/types';
 import { fetchJson } from '@/utils/fetchJson';
+import { cn } from "@/lib/utils";
+
+// Simplified Card component for 3D flip compatibility
+const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      "relative rounded-lg border bg-card text-card-foreground",
+      "shadow-md",
+      "border-border/50",
+      "transition-transform duration-700 ease-out",
+      className,
+    )}
+    {...props}
+  />
+));
+Card.displayName = "Card";
+
+// Simplified CardContent for minimal interference
+const CardContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "p-4",
+        "text-card-foreground",
+        className,
+      )}
+      {...props}
+    />
+  ),
+);
+CardContent.displayName = "CardContent";
 
 type LocalRating = {
   flashcard_id: number;
@@ -31,9 +61,6 @@ interface StudyDeckProps {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || 'http://localhost:8043/api';
 
-/**
- * Utility function to shuffle an array in place using the Fisher-Yates algorithm.
- */
 function shuffle<T>(array: T[]): T[] {
   let currentIndex = array.length;
   while (currentIndex !== 0) {
@@ -54,39 +81,20 @@ export function StudyDeck({
 }: StudyDeckProps) {
   const { t } = useTranslation();
 
-  // 1. Shuffle the initial set of flashcards.
-  const shuffledCards = Array.isArray(available_cards)
-    ? shuffle([...available_cards])
-    : [];
-
-  /**
-   * States:
-   * - cardsQueue: current flashcard queue,
-   * - initialTotalCards: original total count of flashcards (for progress),
-   * - currentIndex: index of the current flashcard.
-   */
+  // State management
+  const shuffledCards = Array.isArray(available_cards) ? shuffle([...available_cards]) : [];
   const [cardsQueue, setCardsQueue] = useState<Flashcard[]>(shuffledCards);
   const [initialTotalCards, setInitialTotalCards] = useState<number>(shuffledCards.length);
   const [currentIndex, setCurrentIndex] = useState(0);
-
-  // 2. Local ratings and seen count.
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [localRatings, setLocalRatings] = useState<LocalRating[]>([]);
   const [cardSeenCount, setCardSeenCount] = useState<CardSeenCount>({});
 
-  // 3. Card flipping state.
-  const [isFlipped, setIsFlipped] = useState(false);
-
-  // 4. Chat toggle.
-  const [isChatOpen, setIsChatOpen] = useState(false);
-
-  // 5. Submission states.
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // 6. Loading state for retake operations.
-  const [isLoading, setIsLoading] = useState(false);
-
-  // 7. Initialize seen count.
+  // Initialize seen count
   useEffect(() => {
     const initialSeenCount: CardSeenCount = {};
     available_cards.forEach((card) => {
@@ -95,7 +103,7 @@ export function StudyDeck({
     setCardSeenCount(initialSeenCount);
   }, [available_cards]);
 
-  // 8. Update seen count whenever currentIndex changes.
+  // Update seen count
   useEffect(() => {
     if (cardsQueue.length === 0) return;
     const cardId = cardsQueue[currentIndex].id;
@@ -105,7 +113,7 @@ export function StudyDeck({
     }));
   }, [currentIndex, cardsQueue]);
 
-  // 9. Save local ratings and seen count to localStorage.
+  // Save to localStorage
   useEffect(() => {
     if (study_session_id !== null) {
       localStorage.setItem(`session-${study_session_id}-ratings`, JSON.stringify(localRatings));
@@ -113,11 +121,7 @@ export function StudyDeck({
     }
   }, [study_session_id, localRatings, cardSeenCount]);
 
-  /**
-   * Handle rating:
-   * - rating 0 (Hard) or 3 (Good): move card to the end of the queue.
-   * - rating 5 (Easy): remove card from the queue.
-   */
+  // Handle rating
   const handleRating = (rating: number) => {
     if (cardsQueue.length === 0) return;
     const currentCard = cardsQueue[currentIndex];
@@ -132,8 +136,7 @@ export function StudyDeck({
     ]);
 
     const updatedQueue = [...cardsQueue];
-
-    if (rating === 0 || rating === 3) {
+    if (rating === 0 || rating == 3) {
       const [removed] = updatedQueue.splice(currentIndex, 1);
       updatedQueue.push(removed);
     } else if (rating === 5) {
@@ -155,9 +158,7 @@ export function StudyDeck({
     setIsFlipped(false);
   };
 
-  /**
-   * Submit ratings and finish the session.
-   */
+  // Handle finish
   const handleFinish = async () => {
     if (localRatings.length === 0) {
       clearLocalStorage();
@@ -180,18 +181,13 @@ export function StudyDeck({
           }),
         });
         console.log('Bulk record response:', response);
-      } else {
-        console.warn('study_session_id is null. Skipping bulk_record request.');
       }
-
       clearLocalStorage();
       onExit();
     } catch (error) {
       if (error instanceof Error) {
-        console.error('Error saving flashcards:', error.message);
         setSubmitError(error.message);
       } else {
-        console.error('Unknown error:', error);
         setSubmitError('Unknown error while saving flashcards.');
       }
     } finally {
@@ -206,16 +202,12 @@ export function StudyDeck({
     }
   };
 
-  /**
-   * Flip the card.
-   */
+  // Handle flip
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
   };
 
-  /**
-   * Retake Hard Cards: fetch them from the server and reset the queue.
-   */
+  // Handle retake hard cards
   const handleRetakeHardCards = async () => {
     try {
       setIsLoading(true);
@@ -231,28 +223,21 @@ export function StudyDeck({
       }
 
       const hardCards: Flashcard[] = await response.json();
-      console.log('Received hardCards:', hardCards);
-
       if (hardCards.length === 0) {
         alert(t('no_hard_cards_found'));
         return;
       }
 
-      // Reset session data
       const newShuffled = shuffle([...hardCards]);
       setCardsQueue(newShuffled);
       setCurrentIndex(0);
       setLocalRatings([]);
-
-      // Reset card seen count for the new session
       const initialSeenCount: CardSeenCount = {};
       hardCards.forEach((card) => {
         initialSeenCount[card.id] = 0;
       });
       setCardSeenCount(initialSeenCount);
-
       setInitialTotalCards(hardCards.length);
-
       setIsFlipped(false);
       clearLocalStorage();
     } catch (err: unknown) {
@@ -261,15 +246,12 @@ export function StudyDeck({
       } else {
         alert(t('error_unexpected_retake_hard_cards'));
       }
-      console.error('Error retaking hard cards:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  /**
-   * Retake Entire Session.
-   */
+  // Handle retake session
   const handleRetakeSession = async () => {
     try {
       setIsLoading(true);
@@ -285,20 +267,15 @@ export function StudyDeck({
       }
 
       const retakeCards: Flashcard[] = await response.json();
-      console.log('Received retakeCards:', retakeCards);
-
       if (retakeCards.length === 0) {
         alert(t('no_cards_to_retake'));
         return;
       }
 
-      // Reset session data
       const newShuffled = shuffle([...retakeCards]);
       setCardsQueue(newShuffled);
       setCurrentIndex(0);
       setLocalRatings([]);
-
-      // Reset card seen count for the new session
       const initialSeenCount: CardSeenCount = {};
       retakeCards.forEach((card) => {
         initialSeenCount[card.id] = 0;
@@ -313,13 +290,17 @@ export function StudyDeck({
       } else {
         alert(t('error_unexpected_retake_cards'));
       }
-      console.error('Error retaking session cards:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Progress calculation
+  const answeredCount = localRatings.filter(r => r.rating === 5).length;
+  const progressPercent = initialTotalCards > 0 ? Math.round((answeredCount / initialTotalCards) * 100) : 0;
+  const seenCount = cardSeenCount[cardsQueue[currentIndex]?.id] || 0;
 
+  // Completion screen
   if (cardsQueue.length === 0) {
     return (
       <div className="h-screen flex items-center justify-center bg-background p-4">
@@ -365,20 +346,28 @@ export function StudyDeck({
               )}
             </Button>
             <div className="flex space-x-4">
-              { initialTotalCards > 0 && (
-                  <>
-              <Button onClick={handleFinish} disabled={isSubmitting || isLoading} className={'w-full'}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('save_and_exit')}
-                  </>
-                ) : (
-                  t('save_and_exit')
-                )}
-              </Button>
-              </>)}
-              <Button onClick={onExit} variant="outline" disabled={isLoading} className={'w-full'}>
+              {initialTotalCards > 0 && (
+                <Button
+                  onClick={handleFinish}
+                  disabled={isSubmitting || isLoading}
+                  className="w-full"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {t('save_and_exit')}
+                    </>
+                  ) : (
+                    t('save_and_exit')
+                  )}
+                </Button>
+              )}
+              <Button
+                onClick={onExit}
+                variant="outline"
+                disabled={isLoading}
+                className="w-full"
+              >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 {t('back_to_decks')}
               </Button>
@@ -397,10 +386,6 @@ export function StudyDeck({
       </div>
     );
   }
-
-  const answeredCount = localRatings.filter(r => r.rating === 5).length;
-  const progressPercent = initialTotalCards > 0 ? Math.round((answeredCount / initialTotalCards) * 100) : 0;
-  const seenCount = cardSeenCount[cardsQueue[currentIndex]?.id] || 0;
 
   return (
     <div className="h-screen w-full bg-background flex items-center justify-center relative">
@@ -437,8 +422,8 @@ export function StudyDeck({
             </div>
             <div className="h-2 w-full bg-muted rounded-md overflow-hidden">
               <div
-                  className="h-2 bg-primary transition-all duration-300"
-                  style={{width: `${progressPercent}%`}}
+                className="h-2 bg-primary transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
@@ -450,119 +435,124 @@ export function StudyDeck({
             })}
           </div>
 
+          {/* Flashcard Area */}
           <div className="w-80 h-64 [perspective:1000px]">
             <Card
-                className={`w-full h-full cursor-pointer transition-transform duration-700 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
-                onClick={handleFlip}
+              className={`w-full h-full cursor-pointer [transform-style:preserve-3d] rounded-lg ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
+              onClick={handleFlip}
             >
               {/* Front Side */}
-              <CardContent
-                  className="absolute w-full h-full p-4 [backface-visibility:hidden] flex items-center justify-center">
-                <div className="max-h-full w-full overflow-y-auto scrollbar-thin">
-                  <p className="text-xl font-semibold text-center">
+              <CardContent className="absolute w-full h-full p-4 bg-card [backface-visibility:hidden] flex items-center justify-center">
+                <div className="max-h-full w-full overflow-y-auto scrollbar-thin text-center">
+                  <p className="text-xl font-semibold text-card-foreground">
                     {cardsQueue[currentIndex].question}
                   </p>
                   {cardsQueue[currentIndex].media_url && (
-                      <Image
-                          src={cardsQueue[currentIndex].media_url}
-                          alt="Flashcard Media"
-                          className="mt-4 max-w-full h-auto rounded shadow"
-                          width={500}
-                          height={300}
-                          objectFit="contain"
-                      />
+                    <Image
+                      src={cardsQueue[currentIndex].media_url}
+                      alt="Flashcard Media"
+                      className="mt-4 max-w-full h-auto rounded shadow"
+                      width={500}
+                      height={300}
+                      style={{ objectFit: 'contain' }}
+                    />
                   )}
+                  <p className="text-sm text-muted-foreground italic mt-2">
+                    {t('click_to_flip')}
+                  </p>
                 </div>
               </CardContent>
 
               {/* Back Side */}
-              <CardContent
-                  className="absolute w-full h-full p-4 [backface-visibility:hidden] [transform:rotateY(180deg)] flex items-center justify-center">
-                <div className="max-h-full w-full overflow-y-auto scrollbar-thin">
-                  <p className="text-xl font-semibold text-center">
+              <CardContent className="absolute w-full h-full p-4 bg-card [backface-visibility:hidden] [transform:rotateY(180deg)] flex items-center justify-center">
+                <div className="max-h-full w-full overflow-y-auto scrollbar-thin text-center">
+                  <p className="text-xl font-semibold text-card-foreground">
                     {cardsQueue[currentIndex].answer}
                   </p>
                   {cardsQueue[currentIndex].media_url && (
-                      <Image
-                          src={cardsQueue[currentIndex].media_url}
-                          alt="Flashcard Media"
-                          className="mt-4 max-w-full h-auto rounded shadow"
-                          width={500}
-                          height={300}
-                          objectFit="contain"
-                      />
+                    <Image
+                      src={cardsQueue[currentIndex].media_url}
+                      alt="Flashcard Media"
+                      className="mt-4 max-w-full h-auto rounded shadow"
+                      width={500}
+                      height={300}
+                      style={{ objectFit: 'contain' }}
+                    />
                   )}
+                  <p className="text-sm text-muted-foreground italic mt-2">
+                    {t('click_to_flip')}
+                  </p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
           <div className="text-sm text-muted-foreground">
-            {t('seen_this_card_x_times', {count: seenCount})}
+            {t('seen_this_card_x_times', { count: seenCount })}
             {cardsQueue[currentIndex].repetitions !== undefined && (
-                <span className="ml-2">
-                  {t('repetition_count')}: {cardsQueue[currentIndex].repetitions}
-                </span>
+              <span className="ml-2">
+                {t('repetition_count')}: {cardsQueue[currentIndex].repetitions}
+              </span>
             )}
           </div>
 
           {/* Rating buttons */}
           <div className="h-20 flex justify-center items-center">
             {isFlipped && (
-                <div className="flex space-x-4">
-                  <Button
-                      onClick={() => handleRating(0)}
-                      className="bg-red-500 hover:bg-red-600 text-white"
-                  >
-                    {t('hard')}
-                  </Button>
-                  <Button
-                      onClick={() => handleRating(3)}
-                      className="bg-blue-300 hover:bg-blue-400 text-gray-800"
-                  >
-                    {t('good')}
-                  </Button>
-                  <Button
-                      onClick={() => handleRating(5)}
-                      className="bg-green-500 hover:bg-green-600 text-white"
-                  >
-                    {t('easy')}
-                  </Button>
-                </div>
+              <div className="flex space-x-4">
+                <Button
+                  onClick={() => handleRating(0)}
+                  className="bg-red-500 hover:bg-red-600 text-white"
+                >
+                  {t('hard')}
+                </Button>
+                <Button
+                  onClick={() => handleRating(3)}
+                  className="bg-blue-300 hover:bg-blue-400 text-gray-800"
+                >
+                  {t('good')}
+                </Button>
+                <Button
+                  onClick={() => handleRating(5)}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                >
+                  {t('easy')}
+                </Button>
+              </div>
             )}
           </div>
 
           {submitError && (
-              <p className="text-destructive">{submitError}</p>
+            <p className="text-destructive">{submitError}</p>
           )}
 
           <Button variant="secondary" onClick={handleFinish} disabled={isSubmitting || isLoading}>
             {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                  {t('save_and_exit')}
-                </>
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t('save_and_exit')}
+              </>
             ) : (
-                t('save_and_exit')
+              t('save_and_exit')
             )}
           </Button>
 
           {(isSubmitting || isLoading) && (
-              <div className="flex items-center space-x-2">
-                <Loader2 className="h-5 w-5 animate-spin text-primary"/>
-                <span>{t('saving_results')}</span>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span>{t('saving_results')}</span>
+            </div>
           )}
         </div>
       </div>
 
       {/* Chat container */}
       {isChatOpen && (
-          <div
-              className="fixed top-0 left-0 w-full h-full md:w-[40%] md:right-0 md:left-auto bg-background md:border-l border-border z-50">
-            {/* Close button for mobile */}
-            <div className="absolute top-4 left-4 md:hidden">
-              <Button variant="ghost" onClick={() => setIsChatOpen(false)}>
+        <div
+          className="fixed top-0 left-0 w-full h-full md:w-[40%] md:right-0 md:left-auto bg-background md:border-l border-border z-50"
+        >
+          <div className="absolute top-4 left-4 md:hidden">
+            <Button variant="ghost" onClick={() => setIsChatOpen(false)}>
               <ArrowLeft className="h-6 w-6" />
             </Button>
           </div>

@@ -408,5 +408,6 @@
   "conversations": "Rozmowy",
   "navigation": "Nawigacja",
   "no_conversations": "Nie masz jeszcze żadnych rozmów.",
-  "preparingDashboard": "Przygotowywanie danych..."
+  "preparingDashboard": "Przygotowywanie danych...",
+  "click_to_flip": "Kliknij, aby odwrócić"
 }
