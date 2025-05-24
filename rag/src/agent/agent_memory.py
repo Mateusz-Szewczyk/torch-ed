@@ -88,5 +88,3 @@ def get_conversation_history(conversation_id: int, max_history_length: int) -> L
         return []
     finally:
         session.close()
-
-# update_conversation_title została przeniesiona do utils.py

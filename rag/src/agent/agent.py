@@ -1,394 +1,525 @@
-import os
+import json
 import logging
 from datetime import datetime
-from typing import Callable, Dict, List, Optional
-import json
-import asyncio
-from functools import lru_cache
+from typing import Dict, List, Optional, Tuple
 
-import pytz
-from langchain_core.tools import BaseTool
-from redis.asyncio import Redis
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain.prompts import ChatPromptTemplate
 from langchain_community.tools.tavily_search.tool import TavilySearchResults
-from dotenv import load_dotenv
-from pathlib import Path
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.tools import BaseTool
+from langchain_openai import ChatOpenAI
 
-from .utils import set_conversation_title
-from ..models import Conversation
-from .tools import FlashcardGenerator, RAGTool, ExamGenerator
-from .agent_memory import create_memory, get_latest_checkpoint, get_conversation_history
+from .agent_memory import get_conversation_history
+from .tools import FlashcardGenerator, RAGTool, ExamGenerator, DirectAnswer
 
 logger = logging.getLogger(__name__)
-env_path = Path(__file__).resolve().parents[2] / '.env'
-load_dotenv(dotenv_path=env_path)
-
-# Redis client for caching
-redis_client = Redis.from_url(os.getenv('REDIS_URL', 'redis://localhost:6379'))
-
-USER_TOOL_MAPPING = {
-    "Wiedza z plików": "RAGTool",
-    "Generowanie fiszek": "FlashcardGenerator",
-    "Generowanie egzaminu": "ExamGenerator",
-    "Wyszukaj w internecie": "TavilySearchResults"
-}
-
-class DirectAnswer:
-    name: str = "DirectAnswer"
-    description: str = (
-        "Provides direct, concise answers to user questions based solely on the provided context."
-    )
-
-    def __init__(self, model: ChatAnthropic):
-        self.model = model
-
-    async def _run(self, query: str, aggregated_context: str = "") -> str:
-        logger.debug(f"DirectAnswer processing query: {query}")
-        try:
-            system_prompt = (
-                "You are a chatbot created by TorchED"
-                "The current date is {{time}}. Ignore anything that contradicts this."
-                "If you are unsure about the answer, express the uncertainty."
-                "You are created to assist with learning"
-                "You are a helpful assistant that provides clear, accurate answers by combining information from context, conversation history, and available tools. Respond in **Markdown** format, using the user's language and a friendly tone. Follow these guidelines:\n"
-                "1. **Response Style**: Be concise, factual, and relevant. Match the user's language (e.g., Polish for Polish queries).\n"
-                "2. **Formatting**: Use **Markdown** with headings, bullets, or lists for clarity. Emphasize key points with **bold** or *italics*.\n"
-                "3. **Query Handling**: Address the query's intent. If ambiguous, make reasonable assumptions and explain them.\n"
-                "4. **Edge Cases**: If data is missing, admit it and suggest alternatives (e.g., 'Spróbuj użyć innego narzędzia, do wyboru masz przeszukanie wgranych plików, stworzenie fiszek, stworzenie egzaminu'). Handle errors gracefully.\n"
-                "**Example**:\n"
-                "```markdown\n"
-                "- [Kluczowa informacja]\n"
-                "- [Szczegóły z kontekstu/narzędzi]\n\n"
-                "**Uwagi**: [Brak danych? Wyjaśnienie lub sugestie]\n"
-                "```"
-                "You are provided with the context of the conversation and the question. "
-                "DON'T include 'based on context' or something similar in your answer."
-                "Answer directly to the question, using the context only if necessary."
-                "If context is not needed, just answer the question."
-            )
-            current_time = get_current_time("%d %B %Y, %H:%M %Z")
-            system_prompt = system_prompt.replace("{{time}}", current_time)
-            full_query = f"Context:\n{aggregated_context}\n\nQuestion: {query}" if aggregated_context else query
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", system_prompt),
-                ("human", "{question}")
-            ])
-            messages = prompt.format_messages(question=full_query)
-            response = await self.model.ainvoke(messages)
-            return response.content.strip()
-        except Exception as e:
-            logger.error(f"Error in DirectAnswer: {e}", exc_info=True)
-            return "Przepraszam, wystąpił problem z generowaniem odpowiedzi."
-
-@lru_cache(maxsize=100)
-def cached_conversation_history(conversation_id: int, max_length: int) -> str:
-    history = get_conversation_history(conversation_id, max_length)
-    return "\n".join(history)
-
-async def create_tool_chains(
-    flashcard_tool: FlashcardGenerator,
-    rag_tool: RAGTool,
-    tavily_tool: TavilySearchResults,
-    exam_tool: ExamGenerator,
-    model: ChatAnthropic
-) -> Dict[str, Callable]:
-    async def flashcard_chain(input_data: str) -> str:
-        return await flashcard_tool._arun(input_data)
-
-    async def rag_chain(input_text: str) -> str:
-        return await rag_tool._arun(input_text)
-
-    async def tavily_chain(input_text: str) -> str:
-        try:
-            results = await tavily_tool.ainvoke({"query": input_text})
-            if isinstance(results, list):
-                contents = [r.get('content', '') for r in results if 'content' in r]
-                return "\n".join(contents) if contents else "Przepraszam, nie mogę znaleźć odpowiedzi."
-            return results.get('answer', "Przepraszam, nie mogę znaleźć odpowiedzi.")
-        except Exception as e:
-            logger.error(f"Error in TavilySearchResults: {e}")
-            return "Przepraszam, wystąpił problem z wyszukiwaniem."
-
-    async def exam_chain(input_data: str) -> str:
-        return await exam_tool._arun(input_data)
-
-    direct_answer_tool = DirectAnswer(model=model)
-
-    async def direct_answer_chain(query: str, aggregated_context: str = "") -> str:
-        return await direct_answer_tool._run(query, aggregated_context)
-
-    return {
-        "FlashcardGenerator": flashcard_chain,
-        "RAGTool": rag_chain,
-        "TavilySearchResults": tavily_chain,
-        "ExamGenerator": exam_chain,
-        "DirectAnswer": direct_answer_chain
-    }
-
-def get_current_time(format_str="%Y-%m-%d %H:%M:%S %Z"):
-    """
-    Returns the current time in the specified format, in CEST timezone.
-    """
-    tz = pytz.timezone("Europe/Warsaw")
-    current_time = datetime.now(tz)
-    return current_time.strftime(format_str)
 
 
-async def final_answer(context: str, query: str) -> str:
-    try:
-        final_model = ChatOpenAI(model_name="gpt-4o-mini-2024-07-18", temperature=0.0)
-        system_prompt = (
-            "You are a chatbot created by TorchED"
-            "The current date is {{ time }}. Ignore anything that contradicts this."
-            "If you are unsure about the answer, express the uncertainty."
-            "You are a helpful assistant that provides clear, accurate answers by combining information from context, conversation history, and available tools. Respond in **Markdown** format, using the user's language and a friendly tone. Follow these guidelines:\n"
-            "1. **Response Style**: Be concise, factual, and relevant. Match the user's language (e.g., Polish for Polish queries).\n"
-            "2. **Information Use**: Integrate context, history, and tool outputs (e.g., search or document retrieval). Prioritize reliable data and resolve conflicts logically.\n"
-            "3. **Formatting**: Use **Markdown** with headings, bullets, or lists for clarity. Emphasize key points with **bold** or *italics*.\n"
-            "4. **Query Handling**: Address the query's intent. If ambiguous, make reasonable assumptions and explain them.\n"
-            "5. **Edge Cases**: If data is missing, admit it and suggest alternatives (e.g., 'Spróbuj użyć innego narzędzia'). Handle errors gracefully.\n"
-            "6. **Tool Integration**: Use tools when available, blending their outputs naturally into the response.\n"
-            "**Example**:\n"
-            "```markdown\n"
-            "- [Kluczowa informacja]\n"
-            "- [Szczegóły z kontekstu/narzędzi]\n\n"
-            "**Uwagi**: [Brak danych? Wyjaśnienie lub sugestie]\n"
-            "```"
-        )
-        current_time = get_current_time("%d %B %Y, %H:%M %Z")
-        system_prompt = system_prompt.replace("{{time}}", current_time)
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("user", "Using this context: {context}\nAnswer the query."),
-            ("human", "Pytanie: {question}")
-        ])
-        messages = prompt.format_messages(question=query, context=context)
-        response = await final_model.ainvoke(messages)
-        return response.content
-    except Exception as e:
-        logger.error(f"Error generating final answer: {e}")
-        return "Przepraszam, wystąpił problem z generowaniem końcowej odpowiedzi."
+class ToolResult:
+    """Container for tool execution results with metadata"""
+
+    def __init__(self, tool_name: str, content: str, success: bool = True, error: Optional[str] = None):
+        self.tool_name = tool_name
+        self.content = content
+        self.success = success
+        self.error = error
+        self.timestamp = datetime.now()
+        print(
+            f"[DEBUG] ToolResult created - Tool: {tool_name}, Success: {success}, Content length: {len(content) if content else 0}, Error: {error}")
+
 
 class ChatAgent:
-    MAX_HISTORY_LENGTH = 4
+    """The main agent responsible for orchestrating tool use and generating final responses."""
+    MAX_HISTORY_LENGTH = 5
 
-    def __init__(
-        self,
-        user_id: str,
-        model: ChatAnthropic,
-        tavily_api_key: str,
-        anthropic_api_key: str,
-        openai_api_key: str,
-        memory: Callable[[], Conversation],
-        conversation_id: Optional[int] = None
-    ):
+    def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, **kwargs):
+        print(f"[DEBUG] ChatAgent initialization - User ID: {user_id}, Conversation ID: {conversation_id}")
         self.user_id = user_id
-        self.model = model
-        self.tavily_api_key = tavily_api_key
-        self.anthropic_api_key = anthropic_api_key
-        self.openai_api_key = openai_api_key
-        self.memory = memory
         self.conversation_id = conversation_id
+        self.openai_api_key = openai_api_key
+        self.tavily_api_key = tavily_api_key
+        # A lightweight model for synthesis and query rewriting
+        self.synthesis_model = ChatOpenAI(model_name="gpt-4o-mini-2024-07-18", temperature=0.1,
+                                          openai_api_key=self.openai_api_key)
         self.tool_instances: Dict[str, BaseTool] = {}
+        print(f"[DEBUG] ChatAgent initialized successfully")
 
     def _initialize_tool(self, tool_name: str) -> BaseTool:
-        """Initialize a tool only when needed."""
+        """Lazy initialization of tools to save resources."""
+        print(f"[DEBUG] Initializing tool: {tool_name}")
+
         if tool_name in self.tool_instances:
+            print(f"[DEBUG] Tool {tool_name} already exists in cache")
             return self.tool_instances[tool_name]
 
-        if tool_name == "TavilySearchResults":
-            tool = TavilySearchResults(
-                name="TavilySearchResults",
-                tavily_api_key=self.tavily_api_key,
-                search_depth='advanced',
-                max_results=5,
-                include_answer=True,
-                include_raw_content=True,
-                include_images=False
-            )
-        elif tool_name == "RAGTool":
-            tool = RAGTool(
-                user_id=self.user_id,
-                model_type="OpenAI",
-                model_name="gpt-4o-mini-2024-07-18",
-                api_key=self.openai_api_key
-            )
-        elif tool_name == "FlashcardGenerator":
-            tool = FlashcardGenerator(
-                user_id=self.user_id,
-                model_type="OpenAI",
-                model_name="gpt-4o-mini-2024-07-18",
-                api_key=self.openai_api_key
-            )
-        elif tool_name == "ExamGenerator":
-            tool = ExamGenerator(
-                user_id=self.user_id,
-                model_name="gpt-4o-mini-2024-07-18",
-                openai_api_key=self.openai_api_key
-            )
+        # Ensure user_id is a string when initializing tools
+        user_id_str = str(self.user_id)
+        print(f"[DEBUG] User ID for tool initialization: {user_id_str}")
+
+        try:
+            if tool_name == "TavilySearchResults":
+                print(f"[DEBUG] Creating TavilySearchResults with API key: {self.tavily_api_key[:10]}...")
+                tool = TavilySearchResults(tavily_api_key=self.tavily_api_key, max_results=3)
+            elif tool_name == "RAGTool":
+                print(f"[DEBUG] Creating RAGTool with user_id: {user_id_str}")
+                tool = RAGTool(user_id=user_id_str, api_key=self.openai_api_key)
+            elif tool_name == "FlashcardGenerator":
+                print(f"[DEBUG] Creating FlashcardGenerator with user_id: {user_id_str}")
+                tool = FlashcardGenerator(user_id=user_id_str, api_key=self.openai_api_key)
+            elif tool_name == "ExamGenerator":
+                print(f"[DEBUG] Creating ExamGenerator with user_id: {user_id_str}")
+                tool = ExamGenerator(user_id=user_id_str, openai_api_key=self.openai_api_key)
+            elif tool_name == "DirectAnswer":
+                print(f"[DEBUG] Creating DirectAnswer tool")
+                tool = DirectAnswer(model=self.synthesis_model)
+            else:
+                print(f"[ERROR] Unknown tool requested: {tool_name}")
+                raise ValueError(f"Unknown tool: {tool_name}")
+
+            self.tool_instances[tool_name] = tool
+            print(f"[DEBUG] Tool {tool_name} initialized and cached successfully")
+            return tool
+
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize tool {tool_name}: {str(e)}")
+            raise
+
+    async def _create_standalone_query(self, query: str, history: str) -> str:
+        """Uses an LLM to rephrase a follow-up query into a standalone question."""
+        print(f"[DEBUG] Creating standalone query from: '{query}'")
+        print(f"[DEBUG] History length: {len(history) if history else 0}")
+
+        if not history:
+            print(f"[DEBUG] No history, returning original query")
+            return query
+
+        system_prompt = "Given a chat history and a follow-up question, rephrase the follow-up question to be a standalone question that can be understood without the history. If the question is already standalone, return it unchanged."
+        user_prompt = f"""
+Chat History:
+---
+{history}
+---
+Follow-up Question: "{query}"
+
+Standalone Question:
+"""
+        try:
+            print(f"[DEBUG] Sending query to synthesis model for standalone conversion")
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+            response = await self.synthesis_model.ainvoke(messages)
+            standalone_query = response.content.strip().strip('"')
+            print(f"[DEBUG] Original query: '{query}' -> Standalone query: '{standalone_query}'")
+            logger.info(f"Original query: '{query}'. Standalone query: '{standalone_query}'")
+            return standalone_query
+        except Exception as e:
+            print(f"[ERROR] Failed to create standalone query: {str(e)}")
+            print(f"[DEBUG] Returning original query due to error")
+            return query
+
+    async def _get_prioritized_context(self, query: str, selected_tools: List[str]) -> Tuple[Optional[str], str]:
+        """Implements the RAG-first content sourcing strategy."""
+        print(f"[DEBUG] Getting prioritized context for query: '{query}'")
+        print(f"[DEBUG] Selected tools: {selected_tools}")
+
+        source_name = "general knowledge"
+        retrieved_context = None
+
+        # Prioritize RAGTool if selected
+        if "RAGTool" in selected_tools:
+            print(f"[DEBUG] RAGTool is selected, attempting to retrieve context...")
+            logger.info("Attempting to retrieve context from RAGTool...")
+            rag_tool = self._initialize_tool("RAGTool")
+            try:
+                print(f"[DEBUG] Calling RAGTool._arun with query: '{query}'")
+                rag_result = await rag_tool._arun(query)
+                print(f"[DEBUG] RAGTool result length: {len(rag_result) if rag_result else 0}")
+                print(f"[DEBUG] RAGTool result preview: {rag_result[:200] if rag_result else 'None'}...")
+
+                if rag_result and "error" not in rag_result.lower() and len(rag_result) > 50:
+                    print(f"[DEBUG] RAGTool provided sufficient context ({len(rag_result)} chars)")
+                    logger.info("Successfully retrieved context from RAGTool.")
+                    retrieved_context = rag_result
+                    source_name = "your documents"
+                else:
+                    print(
+                        f"[DEBUG] RAGTool context insufficient - Length: {len(rag_result) if rag_result else 0}, Contains error: {'error' in rag_result.lower() if rag_result else False}")
+            except Exception as e:
+                print(f"[ERROR] RAGTool execution failed: {str(e)}")
+                logger.error(f"Error executing RAGTool: {e}")
+
+        # If RAGTool didn't provide context or wasn't selected, try Tavily if selected
+        if not retrieved_context and "TavilySearchResults" in selected_tools:
+            print(f"[DEBUG] RAG provided no context, attempting TavilySearchResults...")
+            logger.info(
+                "RAG provided no context or wasn't selected. Attempting to retrieve from TavilySearchResults...")
+            tavily_tool = self._initialize_tool("TavilySearchResults")
+            try:
+                print(f"[DEBUG] Calling TavilySearchResults with query: '{query}'")
+                search_results = await tavily_tool.ainvoke({"query": query})
+                print(f"[DEBUG] Tavily search results type: {type(search_results)}")
+                print(f"[DEBUG] Tavily search results length: {len(search_results) if search_results else 0}")
+
+                if search_results and isinstance(search_results, list):
+                    print(f"[DEBUG] Processing {len(search_results)} Tavily results")
+                    combined_content = "\n\n".join([r.get('content', '') for r in search_results if 'content' in r])
+                    print(f"[DEBUG] Combined Tavily content length: {len(combined_content)}")
+
+                    if len(combined_content) > 50:
+                        print(f"[DEBUG] Tavily provided sufficient context ({len(combined_content)} chars)")
+                        logger.info("Successfully retrieved context from TavilySearchResults.")
+                        retrieved_context = combined_content
+                        source_name = "a web search"
+                    else:
+                        print(f"[DEBUG] Tavily content too short: {len(combined_content)} chars")
+                else:
+                    print(f"[DEBUG] Tavily returned unexpected format or empty results")
+            except Exception as e:
+                print(f"[ERROR] TavilySearchResults execution failed: {str(e)}")
+                logger.error(f"Error executing Tavily Search: {e}")
+
+        if not retrieved_context:
+            print(f"[DEBUG] No substantial context found from any source")
+            logger.info("No substantial context found from RAG or Tavily.")
         else:
-            raise ValueError(f"Unknown tool: {tool_name}")
+            print(f"[DEBUG] Final context source: {source_name}, length: {len(retrieved_context)}")
 
-        self.tool_instances[tool_name] = tool
-        return tool
+        return retrieved_context, source_name
 
-    async def _initialize_tool_chains(self, selected_tools: Optional[List[str]] = None) -> Dict[str, Callable]:
-        selected_tools = selected_tools or []
-        tool_chains = {}
+    async def final_synthesis(self, original_query: str, history: str, context: Optional[str], context_source: str,
+                              tool_results: Dict[str, ToolResult]) -> str:
+        """Generates the final, user-facing response, including navigational guidance and conversation history."""
+        print(f"[DEBUG] Starting final synthesis")
+        print(f"[DEBUG] Original query: '{original_query}'")
+        print(f"[DEBUG] Context source: {context_source}")
+        print(f"[DEBUG] Context length: {len(context) if context else 0}")
+        print(f"[DEBUG] Tool results: {list(tool_results.keys())}")
 
-        # Always include DirectAnswer
-        direct_answer_tool = DirectAnswer(model=self.model)
+        if 'FlashcardGenerator' in tool_results and tool_results['FlashcardGenerator'].success:
+            print(f"[DEBUG] Returning FlashcardGenerator result")
 
-        async def direct_answer_chain(query: str, aggregated_context: str = "") -> str:
-            return await direct_answer_tool._run(query, aggregated_context)
+            try:
+                flashcard_data = json.loads(tool_results['FlashcardGenerator'].content)
+                if 'error' in flashcard_data:
+                    print(f"[DEBUG] FlashcardGenerator JSON contains error: {flashcard_data['error']}")
+                    return f"Napotkałem problem podczas tworzenia fiszek:\n{flashcard_data['error']}"
 
-        tool_chains["DirectAnswer"] = direct_answer_chain
+                topic = flashcard_data.get('topic', 'Twoje fiszki')
+                num_flashcards = len(flashcard_data.get('flashcards', []))
 
-        # Initialize only the tools that are selected
-        for user_tool_name in selected_tools:
-            internal_tool_key = USER_TOOL_MAPPING.get(user_tool_name, "DirectAnswer")
-            if internal_tool_key == "DirectAnswer":
+                nav_msg = f"""## ✅ Fiszki zostały pomyślnie utworzone!
+
+    **📚 Temat:** {topic}  
+    **🔢 Liczba fiszek:** {num_flashcards} (ilość fiszek może się minimalnie różnić od podanej w zapytaniu)
+
+    ### 🎯 Co dalej?
+    Twoje nowe fiszki czekają na Ciebie! Możesz teraz:
+    - 📖 **Przeglądać** wszystkie swoje fiszki
+    - 🧠 **Ćwiczyć** w trybie nauki
+    - 📊 **Śledzić** swoje postępy
+
+    👈 Przejdź do sekcji **'Fiszki'** w menu nawigacyjnym po lewej stronie, aby rozpocząć naukę!"""
+
+                return nav_msg
+
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"[DEBUG] FlashcardGenerator JSON parsing failed: {str(e)}")
+                return """## ✅ Fiszki zostały pomyślnie utworzone!
+
+    ### 🎯 Co dalej?
+    Twoje nowe fiszki są gotowe do nauki! 
+
+    👈 Przejdź do sekcji **'Fiszki'** w menu nawigacyjnym po lewej stronie, aby:
+    - 📖 Przeglądać swoje fiszki
+    - 🧠 Rozpocząć sesję nauki
+    - 📊 Monitorować postępy"""
+
+        if 'ExamGenerator' in tool_results and tool_results['ExamGenerator'].success:
+            print(f"[DEBUG] Returning ExamGenerator result")
+            try:
+                exam_data = json.loads(tool_results['ExamGenerator'].content)
+                if 'error' in exam_data:
+                    print(f"[DEBUG] ExamGenerator JSON contains error: {exam_data['error']}")
+                    return f"Napotkałem problem podczas tworzenia egzaminu:\n{exam_data['error']}"
+
+                topic = exam_data.get('topic', 'Twój egzamin')
+                num_questions = exam_data.get('num_of_questions', len(exam_data.get('questions', [])))
+
+                nav_msg = f"""## ✅ Egzamin został pomyślnie utworzony!
+
+    **📝 Temat:** {topic}  
+    **❓ Liczba pytań:** {num_questions}
+
+    ### 🎯 Co dalej?
+    Twój nowy egzamin jest gotowy do rozwiązania! Możesz teraz:
+    - 📋 **Przystąpić** do egzaminu
+    - ⏱️ **Sprawdzić** swoje wyniki w czasie rzeczywistym
+    - 📈 **Analizować** swoje odpowiedzi po zakończeniu
+
+    👈 Przejdź do sekcji **'Egzaminy'** w menu nawigacyjnym po lewej stronie, aby rozpocząć test!
+
+    ### 💡 Wskazówka
+    Pamiętaj, że możesz rozwiązywać egzamin wielokrotnie, aby poprawić swoje wyniki."""
+
+                return nav_msg
+
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"[DEBUG] ExamGenerator JSON parsing failed: {str(e)}")
+                return """## ✅ Egzamin został pomyślnie utworzony!
+
+    ### 🎯 Co dalej?
+    Twój nowy egzamin czeka na rozwiązanie!
+
+    👈 Przejdź do sekcji **'Egzaminy'** w menu nawigacyjnym po lewej stronie, aby:
+    - 📋 Przystąpić do testu
+    - ⏱️ Sprawdzić swoje wyniki
+    - 📈 Przeanalizować odpowiedzi
+
+    ### 💡 Wskazówka
+    Możesz rozwiązywać egzamin wielokrotnie, aby doskonalić swoją wiedzę!"""
+
+        # If a DirectAnswer tool was explicitly used and successful, return its content
+        if 'DirectAnswer' in tool_results and tool_results['DirectAnswer'].success:
+            print(f"[DEBUG] Returning DirectAnswer result")
+            return tool_results['DirectAnswer'].content
+
+        # If no specific generator or direct answer tool was primarily invoked,
+        # create a conversational answer based on retrieved context.
+        print(f"[DEBUG] Creating conversational answer using synthesis model")
+        system_prompt = """
+    You are TorchED, a helpful AI learning assistant. Your goal is to provide a clear, accurate, and helpful final answer.
+    - Continue the conversation naturally, using the provided history for context.
+    - Use the 'Retrieved Information' to form the basis of your answer.
+    - Be honest about your sources. If no information was retrieved, say so.
+    - Format your response using Markdown for readability.
+    """
+        prompt_context = f"""
+    **Conversation History:**
+    {history if history else "This is the beginning of the conversation."}
+
+    **Retrieved Information (Source: {context_source}):**
+    ---
+    {context or "No specific information was retrieved."}
+    ---
+
+    Based on the history and retrieved information, answer the user's latest query.
+
+    **User's Latest Query:** "{original_query}"
+
+    **Your Answer:**
+    """
+        try:
+            print(f"[DEBUG] Sending final synthesis request to model")
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=prompt_context)]
+            response = await self.synthesis_model.ainvoke(messages)
+            print(f"[DEBUG] Final synthesis completed, response length: {len(response.content)}")
+            return response.content
+        except Exception as e:
+            print(f"[ERROR] Final synthesis failed: {str(e)}")
+            return f"I apologize, but I encountered an error while generating the final response: {str(e)}"
+
+    async def invoke(self, query: str, selected_tool_names: List[str]) -> str:
+        """Main execution logic for the agent, with smarter tool routing."""
+        print(f"[DEBUG] ========== AGENT INVOKE START ==========")
+        print(f"[DEBUG] Query: '{query}'")
+        print(f"[DEBUG] Selected tool names: {selected_tool_names}")
+
+        history_list = get_conversation_history(self.conversation_id, self.MAX_HISTORY_LENGTH)
+        history_str = "\n".join(history_list)
+        print(f"[DEBUG] Conversation history length: {len(history_list)} messages")
+
+        internal_tool_map = {
+            "Wiedza z plików": "RAGTool",
+            "Generowanie fiszek": "FlashcardGenerator",
+            "Generowanie egzaminu": "ExamGenerator",
+            "Wyszukaj w internecie": "TavilySearchResults"
+        }
+
+        # Convert user-friendly names to internal tool names, maintaining order
+        ordered_tools_to_execute = [
+            internal_tool_map[name] for name in selected_tool_names if name in internal_tool_map
+        ]
+        print(f"[DEBUG] Mapped tools to execute: {ordered_tools_to_execute}")
+
+        standalone_query = await self._create_standalone_query(query, history_str)
+        context, context_source = None, "general knowledge"  # Initialize context to None and default source
+        print(f"[DEBUG] Standalone query created: '{standalone_query}'")
+
+        tool_results: Dict[str, ToolResult] = {}
+
+        # --- Tool Execution Loop ---
+        print(f"[DEBUG] ========== TOOL EXECUTION LOOP START ==========")
+        for tool_name in ordered_tools_to_execute:
+            print(f"[DEBUG] ========== EXECUTING TOOL: {tool_name} ==========")
+            logger.info(f"Attempting to execute tool: {tool_name}")
+
+            try:
+                tool = self._initialize_tool(tool_name)
+                print(f"[DEBUG] Tool {tool_name} initialized successfully")
+            except Exception as e:
+                print(f"[ERROR] Failed to initialize tool {tool_name}: {str(e)}")
+                tool_results[tool_name] = ToolResult(tool_name, "", success=False,
+                                                     error=f"Initialization failed: {str(e)}")
                 continue
 
-            tool = self._initialize_tool(internal_tool_key)
+            tool_execution_successful = False
+            tool_output = None
+            tool_error = None
 
-            if internal_tool_key == "FlashcardGenerator":
-                # Create a proper closure that captures the tool instance
-                def create_flashcard_chain(tool_instance):
-                    async def flashcard_chain(input_data: str) -> str:
-                        return await tool_instance._arun(input_data)
+            try:
+                if tool_name == "RAGTool":
+                    print(f"[DEBUG] Executing RAGTool with standalone query: '{standalone_query}'")
+                    rag_output = await tool._arun(standalone_query)
+                    print(f"[DEBUG] RAGTool raw output length: {len(rag_output) if rag_output else 0}")
+                    print(f"[DEBUG] RAGTool output preview: {rag_output[:300] if rag_output else 'None'}...")
 
-                    return flashcard_chain
-
-                tool_chains[internal_tool_key] = create_flashcard_chain(tool)
-
-            elif internal_tool_key == "RAGTool":
-                # Create a proper closure that captures the tool instance
-                def create_rag_chain(tool_instance):
-                    async def rag_chain(input_text: str) -> str:
-                        return await tool_instance._arun(input_text)
-
-                    return rag_chain
-
-                tool_chains[internal_tool_key] = create_rag_chain(tool)
-
-            elif internal_tool_key == "ExamGenerator":
-                # Create a proper closure that captures the tool instance
-                def create_exam_chain(tool_instance):
-                    async def exam_chain(input_data: str) -> str:
-                        return await tool_instance._arun(input_data)
-
-                    return exam_chain
-
-                tool_chains[internal_tool_key] = create_exam_chain(tool)
-
-            elif internal_tool_key == "TavilySearchResults":
-                # Create a proper closure that captures the tool instance
-                def create_tavily_chain(tool_instance):
-                    async def tavily_chain(input_text: str) -> str:
-                        try:
-                            results = await tool_instance.ainvoke({"query": input_text})
-                            if isinstance(results, list):
-                                contents = [r.get('content', '') for r in results if 'content' in r]
-                                return "\n".join(contents) if contents else "Przepraszam, nie mogę znaleźć odpowiedzi."
-                            return results.get('answer', "Przepraszam, nie mogę znaleźć odpowiedzi.")
-                        except Exception as e:
-                            logger.error(f"Error in TavilySearchResults: {e}")
-                            return "Przepraszam, wystąpił problem z wyszukiwaniem."
-
-                    return tavily_chain
-
-                tool_chains[internal_tool_key] = create_tavily_chain(tool)
-
-        return tool_chains
-
-    async def handle_query(self, query: str, selected_tools: Optional[List[str]] = None) -> str:
-        logger.info(f"Handling query='{query}' for user={self.user_id}, tools={selected_tools}")
-        try:
-            conversation = get_latest_checkpoint(self.user_id, self.conversation_id)
-            if not conversation:
-                conversation = create_memory(user_id=self.user_id)
-            conversation_id = conversation.id
-
-            cache_key = f"history:{conversation_id}:{self.MAX_HISTORY_LENGTH}"
-            cached_history = await redis_client.get(cache_key)
-            if cached_history:
-                aggregated_context = cached_history.decode()
-            else:
-                aggregated_context = cached_conversation_history(conversation_id, self.MAX_HISTORY_LENGTH)
-                await redis_client.setex(cache_key, 3600, aggregated_context)
-
-            if len(get_conversation_history(conversation_id, self.MAX_HISTORY_LENGTH)) <= 2:
-                await asyncio.to_thread(set_conversation_title, conversation, query, self.model)
-
-            tool_chains = await self._initialize_tool_chains(selected_tools)
-
-            if not selected_tools:
-                return await tool_chains["DirectAnswer"](query, aggregated_context=aggregated_context)
-
-            tasks = []
-            for user_tool_name in selected_tools:
-                internal_tool_key = USER_TOOL_MAPPING.get(user_tool_name, "DirectAnswer")
-                tool_func = tool_chains.get(internal_tool_key)
-                if tool_func:
-                    if internal_tool_key == "RAGTool":
-                        tasks.append(tool_func(query))
-                    elif internal_tool_key in ["FlashcardGenerator", "ExamGenerator"]:
-                        input_data = json.dumps({"description": aggregated_context, "query": query}, ensure_ascii=False)
-                        tasks.append(tool_func(input_data))
-                    elif internal_tool_key == "TavilySearchResults":
-                        # TavilySearchResults doesn't accept aggregated_context parameter
-                        tasks.append(tool_func(query))
-                    elif internal_tool_key == "DirectAnswer":
-                        tasks.append(tool_func(query, aggregated_context=aggregated_context))
+                    if rag_output and "error" not in rag_output.lower() and len(rag_output) > 50:
+                        print(f"[DEBUG] RAGTool execution successful - setting context")
+                        context = rag_output
+                        context_source = "your documents"
+                        tool_execution_successful = True
                     else:
-                        # Default case - try with aggregated_context, fallback to just query
-                        try:
-                            tasks.append(tool_func(query, aggregated_context=aggregated_context))
-                        except TypeError:
-                            tasks.append(tool_func(query))
+                        print(f"[DEBUG] RAGTool returned insufficient context")
+                        print(f"[DEBUG] - Output exists: {rag_output is not None}")
+                        print(f"[DEBUG] - Contains 'error': {'error' in rag_output.lower() if rag_output else False}")
+                        print(f"[DEBUG] - Length > 50: {len(rag_output) > 50 if rag_output else False}")
+                        logger.info("RAGTool returned insufficient context.")
+                        tool_error = rag_output if rag_output else "No content from RAGTool"
 
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            aggregated_context = ""
-            for response in results:
-                if isinstance(response, Exception):
-                    logger.error(f"Tool error: {response}")
-                    continue
-                aggregated_context += f"\n\n{response}"
+                    tool_results[tool_name] = ToolResult(tool_name, rag_output, success=tool_execution_successful,
+                                                         error=tool_error)
 
-            return await final_answer(aggregated_context, query)
-        except Exception as e:
-            logger.error(f"Error handling query: {e}", exc_info=True)
-            return f"Przepraszam, wystąpił problem: {str(e)}"
+                elif tool_name == "TavilySearchResults":
+                    print(f"[DEBUG] Executing TavilySearchResults")
+                    print(f"[DEBUG] Current context length: {len(context) if context else 0}")
 
+                    # Only run if RAGTool hasn't already provided sufficient context
+                    if not context or len(context) < 50:
+                        print(f"[DEBUG] Context insufficient, proceeding with Tavily search")
+                        tavily_output_raw = await tool.ainvoke({"query": standalone_query})
+                        print(f"[DEBUG] Tavily raw output type: {type(tavily_output_raw)}")
+                        print(f"[DEBUG] Tavily raw output: {tavily_output_raw}")
 
-async def agent_response(
-    user_id: str,
-    query: str,
-    model_name: str = "claude-3-haiku-20240307",
-    anthropic_api_key: str = None,
-    tavily_api_key: str = None,
-    conversation_id: int = None,
-    openai_api_key: str = None,
-    selected_tools: Optional[List[str]] = None
-) -> str:
-    anthropic_api_key = anthropic_api_key or os.getenv('ANTHROPIC_API_KEY')
-    openai_api_key = openai_api_key or os.getenv('OPENAI_API_KEY')
-    tavily_api_key = tavily_api_key or os.getenv('TAVILY_API_KEY')
+                        if tavily_output_raw and isinstance(tavily_output_raw, list):
+                            print(f"[DEBUG] Processing {len(tavily_output_raw)} Tavily results")
+                            combined_content = "\n\n".join(
+                                [r.get('content', '') for r in tavily_output_raw if 'content' in r])
+                            print(f"[DEBUG] Combined Tavily content length: {len(combined_content)}")
 
-    if not all([anthropic_api_key, openai_api_key, tavily_api_key]):
-        raise ValueError("Missing required API keys.")
+                            if len(combined_content) > 50:
+                                print(f"[DEBUG] Tavily execution successful - setting context")
+                                context = combined_content
+                                context_source = "a web search"
+                                tool_execution_successful = True
+                            else:
+                                print(f"[DEBUG] Tavily returned insufficient content")
+                                logger.info("TavilySearchResults returned insufficient context.")
+                                tool_error = "No substantial content from TavilySearchResults"
+                        else:
+                            print(f"[DEBUG] Tavily returned unexpected format")
+                            tool_error = "TavilySearchResults returned unexpected format"
 
-    model = ChatAnthropic(anthropic_api_key=anthropic_api_key, model=model_name, temperature=0.1)
-    agent = ChatAgent(
-        user_id=user_id,
-        model=model,
-        tavily_api_key=tavily_api_key,
-        anthropic_api_key=anthropic_api_key,
-        openai_api_key=openai_api_key,
-        memory=create_memory,
-        conversation_id=conversation_id
-    )
-    return await agent.handle_query(query, selected_tools)
+                        tool_results[tool_name] = ToolResult(tool_name,
+                                                             combined_content if 'combined_content' in locals() else "",
+                                                             success=tool_execution_successful, error=tool_error)
+                    else:
+                        print(f"[DEBUG] Skipping Tavily - context already available from {context_source}")
+                        logger.info(f"Skipping {tool_name} as context already retrieved from {context_source}.")
+                        tool_results[tool_name] = ToolResult(tool_name, "Skipped - context already available.",
+                                                             success=True)
+
+                elif tool_name in ["FlashcardGenerator", "ExamGenerator"]:
+                    print(f"[DEBUG] Executing {tool_name}")
+                    print(f"[DEBUG] Available context length: {len(context) if context else 0}")
+
+                    # Sprawdź czy to zapytanie o ogólną wiedzę czy o konkretne pliki
+                    query_lower = query.lower()
+                    is_general_knowledge_request = any(keyword in query_lower for keyword in [
+                        "język", "matematyka", "historia", "geografia", "fizyka", "chemia",
+                        "biologia", "podstawowe", "nauka", "słownictwo", "gramatyka", "japoński",
+                        "angielski", "francuski", "niemiecki", "hiszpański", "włoski", "rosyjski"
+                    ]) and not any(file_keyword in query_lower for file_keyword in [
+                        "plik", "dokument", "materiał", "tekst", "z pliku", "na podstawie"
+                    ])
+
+                    if context:
+                        # Standardowa ścieżka z kontekstem z plików/internetu
+                        generator_input = json.dumps({
+                            "description": context,
+                            "query": query
+                        })
+                        print(f"[DEBUG] Generator input prepared from context, length: {len(generator_input)}")
+
+                    elif is_general_knowledge_request:
+                        # Nowa ścieżka - generowanie z ogólnej wiedzy
+                        print(f"[DEBUG] Detected general knowledge request, generating from LLM knowledge")
+                        generator_input = json.dumps({
+                            "description": f"Generate educational content based on general knowledge for: {query}",
+                            "query": query,
+                            "use_general_knowledge": True
+                        })
+                        print(f"[DEBUG] Generator input prepared from general knowledge")
+
+                    else:
+                        # Brak kontekstu i nie jest to zapytanie o ogólną wiedzę
+                        print(
+                            f"[DEBUG] {tool_name} cannot execute - no context available and not general knowledge request")
+                        tool_output = json.dumps({
+                            "error": f"Aby wygenerować {tool_name.replace('Generator', '').lower()}, potrzebuję kontekstu. Proszę wybierz 'Wiedza z plików' lub 'Wyszukaj w internecie', albo przeformułuj zapytanie tak, aby dotyczyło ogólnej wiedzy."
+                        }, ensure_ascii=False)
+                        tool_execution_successful = False
+                        tool_error = "No context available for generator tool."
+                        tool_results[tool_name] = ToolResult(tool_name, tool_output, success=tool_execution_successful,
+                                                             error=tool_error)
+                        continue
+
+                    print(f"[DEBUG] Generator input preview: {generator_input[:200]}...")
+
+                    tool_output = await tool._arun(generator_input)
+                    print(f"[DEBUG] {tool_name} output length: {len(tool_output) if tool_output else 0}")
+                    print(f"[DEBUG] {tool_name} output preview: {tool_output[:300] if tool_output else 'None'}...")
+
+                    tool_execution_successful = True  # Assume success unless error handling below indicates otherwise
+
+                    # Check for an error message within the JSON output
+                    try:
+                        parsed_output = json.loads(tool_output)
+                        if 'error' in parsed_output:
+                            print(f"[DEBUG] {tool_name} returned error in JSON: {parsed_output['error']}")
+                            tool_execution_successful = False
+                            tool_error = parsed_output['error']
+                        else:
+                            print(f"[DEBUG] {tool_name} executed successfully")
+                    except json.JSONDecodeError:
+                        print(f"[DEBUG] {tool_name} output is not valid JSON, checking for error keywords")
+                        # Not JSON, maybe raw error message or unexpected output
+                        if "error" in tool_output.lower() or "failed" in tool_output.lower():
+                            print(f"[DEBUG] {tool_name} output contains error keywords")
+                            tool_execution_successful = False
+                            tool_error = tool_output
+
+                    tool_results[tool_name] = ToolResult(tool_name, tool_output, success=tool_execution_successful,
+                                                         error=tool_error)
+
+                    # If a generator tool ran successfully, it's usually the final step
+                    if tool_execution_successful:
+                        print(f"[DEBUG] {tool_name} successful, proceeding to final synthesis")
+                        result = await self.final_synthesis(query, history_str, context, context_source, tool_results)
+                        print(f"[DEBUG] ========== AGENT INVOKE END (EARLY RETURN) ==========")
+                        return result
+
+                else:
+                    print(f"[WARNING] Tool {tool_name} not explicitly handled in routing logic")
+                    logger.warning(
+                        f"Tool {tool_name} is in selected_tools but not explicitly handled in routing logic.")
+                    tool_results[tool_name] = ToolResult(tool_name, "Tool not handled by router logic.", success=False,
+                                                         error="Unhandled tool")
+
+            except Exception as e:
+                print(f"[ERROR] Exception during {tool_name} execution: {str(e)}")
+                logger.error(f"Error during execution of {tool_name}: {e}", exc_info=True)
+                tool_results[tool_name] = ToolResult(tool_name, str(e), success=False, error=str(e))
+
+        print(f"[DEBUG] ========== TOOL EXECUTION LOOP END ==========")
+        print(f"[DEBUG] Proceeding to final synthesis with all tool results")
+        result = await self.final_synthesis(query, history_str, context, context_source, tool_results)
+        print(f"[DEBUG] ========== AGENT INVOKE END ==========")
+        return result

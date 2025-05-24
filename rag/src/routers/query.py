@@ -7,7 +7,7 @@ from ..schemas import QueryResponse, QueryRequest
 from ..dependencies import get_db
 from ..auth import get_current_user  # Dekodowanie tokenu, zwraca obiekt User
 from ..models import User
-from ..agent.agent import agent_response
+from ..agent.agent import ChatAgent
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -49,15 +49,16 @@ async def query_knowledge(
     logger.info(f"Received query from user_id: {user_id} - '{query}', selected_tools: {selected_tools}")
 
     try:
-        answer = await agent_response(
-            user_id=str(user_id),
-            query=query,
+        agent = ChatAgent(
+            user_id=user_id,
             conversation_id=conversation_id,
-            model_name="claude-3-haiku-20240307",
             anthropic_api_key=ANTHROPIC_API_KEY,
             tavily_api_key=TAVILY_API_KEY,
             openai_api_key=OPENAI_API_KEY,
-            selected_tools=selected_tools
+        )
+        answer = await agent.invoke(
+            selected_tool_names=selected_tools,
+            query=query,
         )
         if not isinstance(answer, str):
             logger.error(f"agent_response returned non-string: {type(answer)}")
