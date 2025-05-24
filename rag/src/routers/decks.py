@@ -10,6 +10,7 @@ import csv
 
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
+from fastapi_cache.decorator import cache
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
@@ -61,7 +62,7 @@ async def create_deck(
         logger.error(f"Błąd podczas tworzenia decka: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Błąd podczas tworzenia decka: {str(e)}")
 
-
+@cache(expire=300)
 @router.get("/", response_model=List[DeckInfoRead])
 async def get_decks(
         db: Session = Depends(get_db),

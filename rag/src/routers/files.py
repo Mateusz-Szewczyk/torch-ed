@@ -1,6 +1,7 @@
 # routers/files.py
 
 from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile
+from fastapi_cache.decorator import cache
 from pix2text.utils import overlap
 from sqlalchemy.orm import Session
 from typing import List
@@ -153,6 +154,7 @@ async def upload_file(
             except Exception as e:
                 logger.error(f"Failed to delete uploaded file: {safe_filename}. Error: {e}")
 
+@cache(expire=300)
 @router.get("/list/", response_model=List[UploadedFileRead])
 async def list_uploaded_files(
     db: Session = Depends(get_db),
