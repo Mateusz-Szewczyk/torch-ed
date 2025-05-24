@@ -213,9 +213,36 @@ interface ConversationItemProps {
 
 const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onClick, onEdit, onDelete }) => {
   return (
-    <div className="group flex items-center rounded-md hover:bg-secondary/50 transition-colors">
-      <Button variant="ghost" size="sm" className="flex-grow justify-start text-sm py-1 px-2 h-8" onClick={onClick}>
-        <span className="truncate">{conversation.title || "Untitled"}</span>
+    <div
+      className="group flex items-center rounded-md hover:bg-secondary/50 transition-colors"
+      style={{
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+        overflow: 'hidden'
+      }}
+    >
+      <Button
+        variant="ghost"
+        size="sm"
+        className="flex-grow justify-start text-sm py-1 px-2 h-8"
+        onClick={onClick}
+        style={{
+          minWidth: 0,
+          overflow: 'hidden'
+        }}
+      >
+        <span
+          className="truncate"
+          style={{
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {conversation.title || "Untitled"}
+        </span>
       </Button>
 
       <DropdownMenu>
