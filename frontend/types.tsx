@@ -1,5 +1,3 @@
-// src/types.ts
-
 export interface ExamAnswer {
   id?: number;
   text: string;
@@ -29,12 +27,24 @@ export interface Flashcard {
   repetitions?: number | undefined;
 }
 
+export interface DeckInfo {
+  id: number;
+  user_id: number;
+  name: string;
+  description?: string;
+  conversation_id: number;
+  flashcard_count: number;
+  created_at: string;
+  last_session?: string;
+}
+
 export interface Deck {
   id: number;
+  user_id: number;
   name: string;
   description?: string;
   flashcards: Flashcard[];
-  conversation_id: number;
+  conversation_id?: number;
 }
 
 export interface ErrorDetail {
@@ -50,7 +60,7 @@ export interface ErrorResponse {
 export interface BulkRecordRating {
   flashcard_id: number;
   rating: number;
-  answered_at: string; // ISO string
+  answered_at: string;
 }
 
 export interface BulkRecordRequest {

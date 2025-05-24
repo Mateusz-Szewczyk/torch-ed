@@ -10,10 +10,11 @@ import csv
 
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
-from ..models import Deck, Flashcard, User
-from ..schemas import DeckCreate, DeckRead
+from ..models import Deck, Flashcard, User, StudySession
+from ..schemas import DeckCreate, DeckRead, DeckInfoRead
 from ..dependencies import get_db
 from ..auth import get_current_user
 
@@ -61,24 +62,58 @@ async def create_deck(
         raise HTTPException(status_code=500, detail=f"Błąd podczas tworzenia decka: {str(e)}")
 
 
-@router.get("/", response_model=List[DeckRead])
+@router.get("/", response_model=List[DeckInfoRead])
 async def get_decks(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
-    Pobiera wszystkie decki przypisane do zalogowanego użytkownika.
+    Pobiera wszystkie decki przypisane do zalogowanego użytkownika wraz z liczbą fiszek i datą ostatniej sesji.
     """
     logger.info(f"Pobieranie wszystkich decków dla user_id={current_user.id_}")
     try:
-        decks = (
-            db.query(Deck)
-            .options(joinedload(Deck.flashcards))
+        decks_info = (
+            db.query(
+                Deck.id,
+                Deck.user_id,
+                Deck.name,
+                Deck.description,
+                Deck.conversation_id,
+                func.count(func.distinct(Flashcard.id)).label('flashcard_count'),
+                Deck.created_at,
+                func.max(StudySession.completed_at).label('last_session')
+            )
+            .outerjoin(Flashcard, Flashcard.deck_id == Deck.id)
+            .outerjoin(StudySession, StudySession.deck_id == Deck.id)
             .filter(Deck.user_id == current_user.id_)
+            .group_by(
+                Deck.id,
+                Deck.user_id,
+                Deck.name,
+                Deck.description,
+                Deck.conversation_id,
+                Deck.created_at
+            )
+            .order_by(desc(Deck.created_at))
             .all()
         )
-        logger.debug(f"Pobrano decki: {decks}")
-        return decks
+
+        # Konwertuj wyniki na format DeckInfoRead
+        result = []
+        for deck_info in decks_info:
+            result.append({
+                'id': deck_info.id,
+                'user_id': deck_info.user_id,
+                'name': deck_info.name,
+                'description': deck_info.description,
+                'conversation_id': deck_info.conversation_id,
+                'flashcard_count': deck_info.flashcard_count,
+                'created_at': deck_info.created_at,
+                'last_session': deck_info.last_session
+            })
+
+        logger.debug(f"Pobrano informacje o {len(result)} deckach")
+        return result
     except Exception as e:
         logger.error(f"Błąd podczas pobierania decków: {e}")
         raise HTTPException(status_code=500, detail=f"Błąd podczas pobierania decków: {str(e)}")
@@ -86,12 +121,12 @@ async def get_decks(
 
 @router.get("/{deck_id}/", response_model=DeckRead)
 async def get_deck(
-    deck_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        deck_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
-    Pobiera konkretny deck po ID, jeśli należy do zalogowanego użytkownika.
+    Pobiera konkretny deck po ID wraz z wszystkimi fiszkami, jeśli należy do zalogowanego użytkownika.
     """
     logger.info(f"Pobieranie decka z ID={deck_id} dla user_id={current_user.id_}")
     try:
@@ -104,12 +139,12 @@ async def get_deck(
         if not deck:
             logger.error(f"Deck z ID={deck_id} nie znaleziony dla tego użytkownika.")
             raise HTTPException(status_code=404, detail="Deck nie znaleziony.")
-        logger.debug(f"Pobrano deck: {deck}")
+
+        logger.debug(f"Pobrano deck z {len(deck.flashcards)} fiszkami")
         return deck
     except Exception as e:
         logger.error(f"Błąd podczas pobierania decka: {e}")
         raise HTTPException(status_code=500, detail=f"Błąd podczas pobierania decka: {str(e)}")
-
 
 @router.put("/{deck_id}/", response_model=DeckRead)
 async def update_deck(

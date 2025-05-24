@@ -96,6 +96,19 @@ class DeckRead(BaseModel):
     class Config:
         orm_mode = True
 
+class DeckInfoRead(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    description: Optional[str] = None
+    conversation_id: Optional[int] = None
+    flashcard_count: int
+    created_at: Optional[datetime] = None
+    last_session: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
 class UploadedFileRead(BaseModel):
     id: int
     name: str

@@ -310,7 +310,7 @@ export function StudyExam({ exam, onExit }: StudyExamProps) {
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-primary">
-                  ~{Math.ceil(numQuestions * 1.5)}m
+                  ~{Math.ceil(numQuestions * 0.7)}m
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {t("estimated_time")}

@@ -409,5 +409,15 @@
   "navigation": "Nawigacja",
   "no_conversations": "Nie masz jeszcze żadnych rozmów.",
   "preparingDashboard": "Przygotowywanie danych...",
-  "click_to_flip": "Kliknij, aby odwrócić"
+  "click_to_flip": "Kliknij, aby odwrócić",
+  "no_results_found": "Nie znaleziono wyników",
+  "no_matching_decks": "Brak pasujących talii",
+  "try_different_search": "Spróbuj zmienić zapytanie lub wyczyścić wyszukiwanie, aby zobaczyć wszystkie talie.",
+  "no_matching_exams": "Brak pasujących egzaminów",
+  "estimated_time": "Szacowany czas",
+  "complete": "Ukończone",
+  "of": "z",
+  "created": "Utworzono",
+  "last_studied": "Ostatnio przerabiane",
+  "no_flashcard_decks_extended": "Nie masz jeszcze żadnych talii fiszek. Utwórz nową talię, aby rozpocząć naukę! Możesz także skorzystać z naszego inteligentnego czatu, aby wygenerować fiszki dostosowane do Twoich potrzeb."
 }

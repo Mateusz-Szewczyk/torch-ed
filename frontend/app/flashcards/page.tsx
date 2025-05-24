@@ -22,6 +22,8 @@ import {
   SortDesc,
   Filter,
   CheckCircle2,
+  Calendar,
+  Clock,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -36,7 +38,7 @@ import { StudyDeck } from "@/components/StudyDeck"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
-import type { Deck, Flashcard, ErrorResponse } from "@/types"
+import type { Deck, DeckInfo, Flashcard, ErrorResponse } from "@/types"
 
 // Animation variants for framer-motion
 const containerVariants = {
@@ -59,12 +61,12 @@ const itemVariants = {
 }
 
 // Sort options for decks
-type SortOption = "name" | "cards" | "recent"
+type SortOption = "name" | "cards" | "recent" | "last_session"
 type SortDirection = "asc" | "desc"
 
 export default function FlashcardsPage() {
-  const [decks, setDecks] = useState<Deck[]>([])
-  const [filteredDecks, setFilteredDecks] = useState<Deck[]>([])
+  const [deckInfos, setDeckInfos] = useState<DeckInfo[]>([])
+  const [filteredDeckInfos, setFilteredDeckInfos] = useState<DeckInfo[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>("")
@@ -89,9 +91,9 @@ export default function FlashcardsPage() {
   const CONVERSATIONS_URL = `${API_URL}/chats/`
 
   /**
-   * Fetch decks from backend.
+   * Fetch deck infos from backend (without flashcards).
    */
-  const fetchDecks = useCallback(async () => {
+  const fetchDeckInfos = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -104,8 +106,8 @@ export default function FlashcardsPage() {
         const errorData: ErrorResponse = await response.json()
         throw new Error((errorData.detail as string) || t("error_fetch_decks"))
       }
-      const data: Deck[] = await response.json()
-      setDecks(data)
+      const data: DeckInfo[] = await response.json()
+      setDeckInfos(data)
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || t("error_fetch_decks"))
@@ -118,21 +120,48 @@ export default function FlashcardsPage() {
     }
   }, [API_BASE_URL, t])
 
-  useEffect(() => {
-    fetchDecks()
-  }, [fetchDecks])
+  /**
+   * Fetch specific deck with flashcards.
+   */
+  const fetchDeck = useCallback(async (deckId: number): Promise<Deck | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${deckId}/`, {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      })
+      if (!response.ok) {
+        const errorData: ErrorResponse = await response.json()
+        throw new Error((errorData.detail as string) || t("error_fetch_deck"))
+      }
+      const deck: Deck = await response.json()
+      return deck
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || t("error_fetch_deck"))
+      } else {
+        setError(t("error_unexpected_fetch_deck"))
+      }
+      console.error(err)
+      return null
+    }
+  }, [API_BASE_URL, t])
 
-  // Filter and sort decks based on search query and sort options
   useEffect(() => {
-    let result = [...decks]
+    fetchDeckInfos()
+  }, [fetchDeckInfos])
+
+  // Filter and sort deck infos based on search query and sort options
+  useEffect(() => {
+    let result = [...deckInfos]
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       result = result.filter(
-        (deck) =>
-          deck.name.toLowerCase().includes(query) ||
-          (deck.description && deck.description.toLowerCase().includes(query)),
+        (deckInfo) =>
+          deckInfo.name.toLowerCase().includes(query) ||
+          (deckInfo.description && deckInfo.description.toLowerCase().includes(query)),
       )
     }
 
@@ -142,17 +171,22 @@ export default function FlashcardsPage() {
         return sortDirection === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
       } else if (sortBy === "cards") {
         return sortDirection === "asc"
-          ? a.flashcards.length - b.flashcards.length
-          : b.flashcards.length - a.flashcards.length
+          ? a.flashcard_count - b.flashcard_count
+          : b.flashcard_count - a.flashcard_count
+      } else if (sortBy === "last_session") {
+        const aDate = a.last_session ? new Date(a.last_session).getTime() : 0
+        const bDate = b.last_session ? new Date(b.last_session).getTime() : 0
+        return sortDirection === "asc" ? aDate - bDate : bDate - aDate
       } else {
-        // recent
-        // Using ID as a proxy for recency since we don't have created_at
-        return sortDirection === "asc" ? a.id - b.id : b.id - a.id
+        // recent (created_at)
+        const aDate = new Date(a.created_at).getTime()
+        const bDate = new Date(b.created_at).getTime()
+        return sortDirection === "asc" ? aDate - bDate : bDate - aDate
       }
     })
 
-    setFilteredDecks(result)
-  }, [decks, searchQuery, sortBy, sortDirection])
+    setFilteredDeckInfos(result)
+  }, [deckInfos, searchQuery, sortBy, sortDirection])
 
   /**
    * Saves (creates/updates) a deck.
@@ -171,7 +205,7 @@ export default function FlashcardsPage() {
       }
 
       if (updatedDeck.id === 0) {
-        // Create a new deck (with conversation_id defaulting to 0)
+        // Create a new deck
         const response = await fetch(API_BASE_URL, {
           method: "POST",
           credentials: "include",
@@ -182,9 +216,8 @@ export default function FlashcardsPage() {
           const errorData: ErrorResponse = await response.json()
           throw new Error((errorData.detail as string) || t("error_creating_deck"))
         }
-        const newDeck: Deck = await response.json()
-        setDecks((prevDecks) => [...prevDecks, newDeck])
-        // Usuń powiadomienie toast
+        // Refresh deck infos after creating
+        await fetchDeckInfos()
       } else {
         // Update existing deck
         const response = await fetch(`${API_BASE_URL}${updatedDeck.id}/`, {
@@ -197,11 +230,8 @@ export default function FlashcardsPage() {
           const errorData: ErrorResponse = await response.json()
           throw new Error((errorData.detail as string) || t("error_updating_deck"))
         }
-        const updatedDeckFromServer: Deck = await response.json()
-        setDecks((prevDecks) =>
-          prevDecks.map((deck) => (deck.id === updatedDeckFromServer.id ? updatedDeckFromServer : deck)),
-        )
-        // Usuń powiadomienie toast
+        // Refresh deck infos after updating
+        await fetchDeckInfos()
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -214,7 +244,6 @@ export default function FlashcardsPage() {
     }
   }
 
-  // Wrapper to pass to EditDeckDialog
   const handleSaveWrapper = (updatedDeck: Deck): void => {
     void handleSave(updatedDeck)
   }
@@ -229,8 +258,7 @@ export default function FlashcardsPage() {
         const errorData: ErrorResponse = await response.json()
         throw new Error((errorData.detail as string) || t("error_deleting_deck"))
       }
-      setDecks((prev) => prev.filter((deck) => deck.id !== deckId))
-      // Usuń powiadomienie toast
+      setDeckInfos((prev) => prev.filter((deckInfo) => deckInfo.id !== deckId))
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error("Error deleting deck:", err.message)
@@ -245,9 +273,15 @@ export default function FlashcardsPage() {
   /**
    * Starts a study session for a deck.
    */
-  const handleStudy = async (deck: Deck) => {
+  const handleStudy = async (deckInfo: DeckInfo) => {
     try {
-      let convId = deck.conversation_id
+      // First, fetch the full deck with flashcards
+      const deck = await fetchDeck(deckInfo.id)
+      if (!deck) {
+        throw new Error(t("error_fetch_deck"))
+      }
+
+      let convId = deckInfo.conversation_id
       if (!convId || convId === 0) {
         // Create a new conversation for the deck
         const convResponse = await fetch(CONVERSATIONS_URL, {
@@ -261,6 +295,7 @@ export default function FlashcardsPage() {
         }
         const newConv = await convResponse.json()
         convId = newConv.id
+
         // Update the deck in the database with the new conversation_id
         const updateResponse = await fetch(`${API_BASE_URL}${deck.id}/`, {
           method: "PUT",
@@ -282,12 +317,12 @@ export default function FlashcardsPage() {
           const updateError = await updateResponse.json()
           throw new Error(updateError.detail || t("error_updating_deck"))
         }
-        const updatedDeck = await updateResponse.json()
-        setDecks((prev) => prev.map((d) => (d.id === deck.id ? updatedDeck : d)))
-        deck = updatedDeck // update local deck object
+
+        // Refresh deck infos to reflect the new conversation_id
+        await fetchDeckInfos()
       }
 
-      // Start the study session using the conversation_id from the deck
+      // Start the study session
       const response = await fetch(`${STUDY_SESSIONS_URL}start`, {
         method: "POST",
         credentials: "include",
@@ -345,7 +380,25 @@ export default function FlashcardsPage() {
   }
 
   // Format date for display
-// Loading state with skeleton UI
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  // Loading state with skeleton UI
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -381,7 +434,7 @@ export default function FlashcardsPage() {
             <p className="text-destructive/90 bg-destructive/5 p-4 rounded-md border border-destructive/10">{error}</p>
           </CardContent>
           <CardFooter>
-            <Button onClick={fetchDecks} className="w-full">
+            <Button onClick={fetchDeckInfos} className="w-full">
               <ArrowLeft className="mr-2 h-4 w-4" />
               {t("try_again")}
             </Button>
@@ -432,7 +485,7 @@ export default function FlashcardsPage() {
         </CustomTooltip>
       </motion.div>
 
-      {decks.length === 0 ? (
+      {deckInfos.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -456,10 +509,10 @@ export default function FlashcardsPage() {
                     {t("import_flashcards")}
                   </Button>
                 }
-                onImportSuccess={fetchDecks}
+                onImportSuccess={fetchDeckInfos}
               />
               <EditDeckDialog
-                deck={{ id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
+                deck={{ id: 0, user_id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
                 onSave={handleSaveWrapper}
                 trigger={
                   <Button className="w-full" variant="default">
@@ -516,7 +569,10 @@ export default function FlashcardsPage() {
                     <Filter className="h-4 w-4" />
                     <span className="hidden sm:inline">{t("sort_by")}</span>
                     <span className="font-medium">
-                      {sortBy === "name" ? t("name") : sortBy === "cards" ? t("card_count") : t("recent")}
+                      {sortBy === "name" ? t("name") :
+                       sortBy === "cards" ? t("card_count") :
+                       sortBy === "last_session" ? t("last_session") :
+                       t("recent")}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -542,6 +598,13 @@ export default function FlashcardsPage() {
                     {sortBy === "recent" && <CheckCircle2 className="h-4 w-4 mr-2 text-primary" />}
                     {t("recent")}
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setSortBy("last_session")}
+                    className={cn(sortBy === "last_session" && "bg-primary/10 font-medium")}
+                  >
+                    {sortBy === "last_session" && <CheckCircle2 className="h-4 w-4 mr-2 text-primary" />}
+                    {t("last_session")}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -566,13 +629,13 @@ export default function FlashcardsPage() {
                       <span className="hidden sm:inline">{t("import")}</span>
                     </Button>
                   }
-                  onImportSuccess={fetchDecks}
+                  onImportSuccess={fetchDeckInfos}
                 />
               </CustomTooltip>
 
               <CustomTooltip content={t("create_new_deck_tooltip") || "Utwórz nowy zestaw fiszek"}>
                 <EditDeckDialog
-                  deck={{ id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
+                  deck={{ id: 0, user_id: 0, name: "", description: "", flashcards: [], conversation_id: 0 }}
                   onSave={handleSaveWrapper}
                   trigger={
                     <Button className="h-11 gap-2">
@@ -588,14 +651,14 @@ export default function FlashcardsPage() {
           {/* Results count */}
           {searchQuery && (
             <div className="mb-4 text-sm text-muted-foreground">
-              {filteredDecks.length === 0
+              {filteredDeckInfos.length === 0
                 ? t("no_results_found")
-                : t("showing_results", { count: filteredDecks.length, total: decks.length })}
+                : t("showing_results", { count: filteredDeckInfos.length, total: deckInfos.length })}
             </div>
           )}
 
           {/* Decks grid */}
-          {filteredDecks.length === 0 && searchQuery ? (
+          {filteredDeckInfos.length === 0 && searchQuery ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
                 <Search className="h-8 w-8 text-muted-foreground" />
@@ -614,9 +677,9 @@ export default function FlashcardsPage() {
               animate="visible"
             >
               <AnimatePresence>
-                {filteredDecks.map((deck) => (
+                {filteredDeckInfos.map((deckInfo) => (
                   <motion.div
-                    key={deck.id}
+                    key={deckInfo.id}
                     variants={itemVariants}
                     layout
                     exit={{ opacity: 0, scale: 0.8 }}
@@ -624,22 +687,29 @@ export default function FlashcardsPage() {
                   >
                     <Card className="flex flex-col h-full overflow-hidden border-border/60 bg-card/95 backdrop-blur-sm hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 hover:-translate-y-1">
                       <CardHeader className="pb-3 flex flex-row items-start justify-between space-y-0">
-                        <div className="space-y-1.5">
-                          <CardTitle className="text-xl font-bold line-clamp-1 pr-6">{deck.name}</CardTitle>
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <CardTitle className="text-xl font-bold line-clamp-1 pr-2">{deckInfo.name}</CardTitle>
                           <CardDescription className="line-clamp-1">
-                            {deck.description || t("no_description")}
+                            {deckInfo.description || t("no_description")}
                           </CardDescription>
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
                               <MoreHorizontal className="h-4 w-4" />
                               <span className="sr-only">{t("options")}</span>
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-48">
                             <EditDeckDialog
-                              deck={deck}
+                              deck={{
+                                id: deckInfo.id,
+                                user_id: deckInfo.user_id,
+                                name: deckInfo.name,
+                                description: deckInfo.description,
+                                flashcards: [],
+                                conversation_id: deckInfo.conversation_id
+                              }}
                               onSave={handleSaveWrapper}
                               trigger={
                                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
@@ -651,7 +721,7 @@ export default function FlashcardsPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
-                              onSelect={() => handleDelete(deck.id)}
+                              onSelect={() => handleDelete(deckInfo.id)}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               {t("delete")}
@@ -661,15 +731,31 @@ export default function FlashcardsPage() {
                       </CardHeader>
 
                       <CardContent className="pb-3 flex-grow">
-                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
-                          {deck.description || t("no_description")}
+                        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                          {deckInfo.description || t("no_description")}
                         </p>
 
-                        <div className="flex flex-wrap gap-2 mt-auto">
-                          <Badge variant="secondary" className="flex items-center gap-1">
-                            <BookOpen className="h-3 w-3" />
-                            {deck.flashcards.length} {t("cards")}
-                          </Badge>
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary" className="flex items-center gap-1">
+                              <BookOpen className="h-3 w-3" />
+                              {deckInfo.flashcard_count} {t("cards")}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              <span>{t("created")}: {formatDate(deckInfo.created_at)}</span>
+                            </Badge>
+                          </div>
+                          {deckInfo.last_session && (
+                            <div className="flex items-center gap-1">
+                                <Badge variant="outline" className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  <span>{t("last_studied")}: {formatDateTime(deckInfo.last_session)}</span>
+                                </Badge>
+                            </div>
+                            )}
                         </div>
                       </CardContent>
 
@@ -680,7 +766,8 @@ export default function FlashcardsPage() {
                           <Button
                             variant="default"
                             className="w-full sm:w-auto transition-all duration-300 group-hover:bg-primary/90"
-                            onClick={() => handleStudy(deck)}
+                            onClick={() => handleStudy(deckInfo)}
+                            disabled={deckInfo.flashcard_count === 0}
                           >
                             {t("study")}
                             <ChevronRight className="h-4 w-4 ml-2 transition-transform duration-300 group-hover:translate-x-1" />
