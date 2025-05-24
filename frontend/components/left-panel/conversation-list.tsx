@@ -48,7 +48,6 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
   const [newTitle, setNewTitle] = useState("")
 
-
   // Open edit dialog
   const openEditDialog = (conv: Conversation) => {
     setCurrentEditingConv(conv)
@@ -106,7 +105,15 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   }
 
   return (
-    <div className="w-full" id="conversations-section">
+    <div
+      className="w-full"
+      id="conversations-section"
+      style={{
+        maxWidth: '100%',
+        overflow: 'hidden',
+        boxSizing: 'border-box'
+      }}
+    >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CollapsibleTrigger asChild>
           <Button
@@ -133,8 +140,22 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             {t("new_conversation")}
           </Button>
 
-          <ScrollArea className="h-[calc(100vh-350px)] pr-2">
-            <div className="space-y-1 py-1">
+          <ScrollArea
+            className="h-[calc(100vh-350px)] pr-2"
+            style={{
+              width: '100%',
+              maxWidth: '100%',
+              overflow: 'hidden'
+            }}
+          >
+            <div
+              className="space-y-1 py-1"
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box'
+              }}
+            >
               {conversations.length === 0 ? (
                 <p className="text-sm text-muted-foreground px-2 py-2 text-center italic">{t("no_conversations")}</p>
               ) : (
@@ -211,18 +232,32 @@ interface ConversationItemProps {
   onDelete: () => void
 }
 
-const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onClick, onEdit, onDelete }) => {
+const ConversationItem: React.FC<ConversationItemProps> = ({
+  conversation,
+  onClick,
+  onEdit,
+  onDelete
+}) => {
   return (
     <div
-      className="group flex items-center rounded-md hover:bg-secondary/50 max-w-[100%] transition-colors"
+      className="group flex items-center rounded-md hover:bg-secondary/50 transition-colors"
+      style={{
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box'
+      }}
     >
       <Button
         variant="ghost"
         size="sm"
-        className="flex-grow justify-start text-sm py-1 px-2 h-8"
+        className="justify-start text-sm py-1 px-2 h-8"
         onClick={onClick}
         style={{
+          flex: '1 1 0',
           minWidth: 0,
+          maxWidth: 'calc(100% - 32px)',
           overflow: 'hidden'
         }}
       >
@@ -232,7 +267,8 @@ const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onCli
             maxWidth: '100%',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
+            whiteSpace: 'nowrap',
+            display: 'block'
           }}
         >
           {conversation.title || "Untitled"}
@@ -241,7 +277,16 @@ const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onCli
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            style={{
+              flexShrink: 0,
+              minWidth: '28px',
+              maxWidth: '28px'
+            }}
+          >
             <MoreVertical className="h-4 w-4" />
             <span className="sr-only">Options</span>
           </Button>
