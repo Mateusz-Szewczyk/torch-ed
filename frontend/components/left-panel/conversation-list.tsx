@@ -106,13 +106,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
 
   return (
     <div
-      className="w-full"
+      className="w-full max-w-full overflow-hidden box-border"
       id="conversations-section"
-      style={{
-        maxWidth: '100%',
-        overflow: 'hidden',
-        boxSizing: 'border-box'
-      }}
     >
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CollapsibleTrigger asChild>
@@ -140,22 +135,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             {t("new_conversation")}
           </Button>
 
-          <ScrollArea
-            className="h-[calc(100vh-350px)] pr-2"
-            style={{
-              width: '100%',
-              maxWidth: '100%',
-              overflow: 'hidden'
-            }}
-          >
-            <div
-              className="space-y-1 py-1"
-              style={{
-                width: '100%',
-                maxWidth: '100%',
-                boxSizing: 'border-box'
-              }}
-            >
+          <ScrollArea className="h-[calc(100vh-350px)] pr-2 w-full max-w-full overflow-hidden">
+            <div className="space-y-1 py-1 w-full max-w-full box-border">
               {conversations.length === 0 ? (
                 <p className="text-sm text-muted-foreground px-2 py-2 text-center italic">{t("no_conversations")}</p>
               ) : (
@@ -239,38 +220,14 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
   onDelete
 }) => {
   return (
-    <div
-      className="group flex items-center rounded-md hover:bg-secondary/50 transition-colors"
-      style={{
-        width: '100%',
-        maxWidth: '100%',
-        minWidth: 0,
-        overflow: 'hidden',
-        boxSizing: 'border-box'
-      }}
-    >
+    <div className="group flex items-center rounded-md hover:bg-secondary/50 transition-colors w-full max-w-full min-w-0 overflow-hidden box-border">
       <Button
         variant="ghost"
         size="sm"
-        className="justify-start text-sm py-1 px-2 h-8"
+        className="flex-1 justify-start text-sm py-1 px-2 h-8 min-w-0 overflow-hidden"
         onClick={onClick}
-        style={{
-          flex: '1 1 0',
-          minWidth: 0,
-          maxWidth: 'calc(100% - 32px)',
-          overflow: 'hidden'
-        }}
       >
-        <span
-          className="truncate"
-          style={{
-            maxWidth: '100%',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            display: 'block'
-          }}
-        >
+        <span className="truncate block max-w-full">
           {conversation.title || "Untitled"}
         </span>
       </Button>
@@ -280,12 +237,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0"
-            style={{
-              flexShrink: 0,
-              minWidth: '28px',
-              maxWidth: '28px'
-            }}
+            className="h-7 w-7 p-0 flex-shrink-0 min-w-[28px] max-w-[28px]"
           >
             <MoreVertical className="h-4 w-4" />
             <span className="sr-only">Options</span>
