@@ -214,13 +214,7 @@ interface ConversationItemProps {
 const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onClick, onEdit, onDelete }) => {
   return (
     <div
-      className="group flex items-center rounded-md hover:bg-secondary/50 transition-colors"
-      style={{
-        width: '100%',
-        maxWidth: '100%',
-        boxSizing: 'border-box',
-        overflow: 'hidden'
-      }}
+      className="group flex items-center rounded-md hover:bg-secondary/50 max-w-[100%] transition-colors"
     >
       <Button
         variant="ghost"

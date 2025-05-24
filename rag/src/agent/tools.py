@@ -39,6 +39,16 @@ async def cleanup_redis():
         redis_client = None
 
 
+async def clear_user_cache(user_id: str):
+    """Clears all cache for user - for debugging purposes"""
+    redis_client = await init_redis()
+    pattern = f"*:{user_id}:*"
+    keys = await redis_client.keys(pattern)
+    if keys:
+        await redis_client.delete(*keys)
+        print(f"[DEBUG] Cleared {len(keys)} cache entries for user {user_id}")
+
+
 embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
 
 
@@ -60,32 +70,89 @@ class FlashcardGenerator(BaseTool):
 
     async def _run(self, input_str: str) -> str:
         try:
+            print(f"[DEBUG] FlashcardGenerator._run - Input: {input_str[:200]}...")
+
             # Inicjalizuj klienta Redis
             redis_client = await init_redis()
 
             input_data = json.loads(input_str)
             context = input_data.get('description', '').strip()
             query = input_data.get('query', 'Stwórz 5 fiszek').strip()
-            use_general_knowledge = input_data.get('use_general_knowledge', False)
+
+            print(f"[DEBUG] FlashcardGenerator - Context length: {len(context)}")
+            print(f"[DEBUG] FlashcardGenerator - Query: '{query}'")
 
             cache_key = f"flashcard:{self.user_id}:{hash(query + context)}"
             if cached_result := await redis_client.get(cache_key):
                 print(f"[DEBUG] FlashcardGenerator found cached result, length: {len(cached_result.decode())}")
-                return cached_result.decode()
 
-            if use_general_knowledge:
-                print(f"[DEBUG] FlashcardGenerator using general knowledge mode")
-                system_prompt = """
-You are a specialist in educational content creation. Your task is to generate flashcards based on your general knowledge about the requested topic.
+                # Walidacja cached result
+                try:
+                    cached_data = json.loads(cached_result.decode())
+                    # Sprawdź czy cached result zawiera prawidłowe fiszki
+                    if cached_data.get('flashcards') and len(cached_data.get('flashcards', [])) > 0:
+                        print(
+                            f"[DEBUG] FlashcardGenerator - Valid cached result with {len(cached_data['flashcards'])} flashcards")
+
+                        # Sprawdź czy fiszki nie zostały już zapisane do bazy
+                        # Jeśli nie, zapisz je teraz
+                        db = SessionLocal()
+                        try:
+                            existing_deck = db.query(Deck).filter(
+                                Deck.user_id == self.user_id,
+                                Deck.name == cached_data['topic']
+                            ).first()
+
+                            if not existing_deck:
+                                print(f"[DEBUG] FlashcardGenerator - Cached data not in DB, saving now")
+                                new_deck = Deck(user_id=self.user_id, name=cached_data['topic'],
+                                                description=cached_data['description'])
+                                db.add(new_deck)
+                                db.flush()
+                                flashcard_objects = [
+                                    Flashcard(question=card['question'], answer=card['answer'], deck_id=new_deck.id)
+                                    for card in cached_data['flashcards']
+                                ]
+                                db.bulk_save_objects(flashcard_objects)
+                                db.commit()
+                                print(f"[DEBUG] FlashcardGenerator - Saved cached data to database")
+                            else:
+                                print(f"[DEBUG] FlashcardGenerator - Data already exists in database")
+                        except Exception as e:
+                            db.rollback()
+                            print(f"[DEBUG] FlashcardGenerator - Error saving cached data: {e}")
+                        finally:
+                            db.close()
+
+                        return cached_result.decode()
+                    else:
+                        print(f"[DEBUG] FlashcardGenerator - Cached result invalid (no flashcards), regenerating")
+                        # Usuń nieprawidłowy cache
+                        await redis_client.delete(cache_key)
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"[DEBUG] FlashcardGenerator - Cached result corrupted: {str(e)}, regenerating")
+                    # Usuń zepsuty cache
+                    await redis_client.delete(cache_key)
+
+            # Uniwersalny prompt
+            system_prompt = """
+You are a specialist in educational content creation. Your task is to generate flashcards based on the provided information.
 - Your response must be a single, valid JSON object.
-- Generate high-quality, educational flashcards on the requested topic using your training data.
-- Use the user's language.
-- Create the exact number of flashcards requested or a reasonable amount if not specified.
+- Create high-quality, educational flashcards based on the provided context and user request.
+- Use the user's language (Polish if the request is in Polish).
+- Generate the exact number of flashcards requested or a reasonable amount if not specified.
+- If the context contains specific information, focus on that. If the context is minimal, use your knowledge about the topic mentioned in the user request.
+- Each flashcard should have a clear question and a concise, accurate answer.
 """
-                user_prompt = f"""
-**User Request:** "{query}"
 
-Create educational flashcards for this topic using your general knowledge.
+            user_prompt = f"""
+**Context/Information:**
+---
+{context}
+---
+
+**Your Task:**
+Create educational flashcards based on the above information and context.
 
 **Required JSON Output Format:**
 {{
@@ -97,51 +164,21 @@ Create educational flashcards for this topic using your general knowledge.
   ]
 }}
 """
-            else:
-                # Standardowy prompt dla kontekstu z plików
-                if not context:
-                    return json.dumps({
-                        "error": "Cannot generate flashcards without context. Please ask a question about your files or the web first."
-                    }, ensure_ascii=False)
 
-                system_prompt = """
-You are a specialist in educational content creation. Your task is to generate flashcards based *only* on the provided context.
-- Your response must be a single, valid JSON object.
-- **Anti-Hallucination Rule**: Do not use any information outside of the provided context. If the context is insufficient to create the requested flashcards, return an empty list for the 'flashcards' key.
-- Generate the exact number of flashcards requested in the user's command.
-- Use the user's language.
-"""
-                user_prompt = f"""
-**Primary Command:** "{query}"
-
-**Source Material (Context):**
----
-{context}
----
-
-**Your Task:**
-Following the Primary Command, create a set of flashcards using *only* the Source Material above. The topic and description of the deck must also be derived from the source material.
-
-**Required JSON Output Format:**
-{{
-  "topic": "Deck Name Related to the Context",
-  "description": "A Brief Description of the Flashcard Deck's Content",
-  "flashcards": [
-    {{"question": "Question 1 about a key fact from the source material", "answer": "Concise answer from the source material"}},
-    {{"question": "Question 2 about another key fact from the source material", "answer": "Concise answer from the source material"}}
-  ]
-}}
-"""
-
+            print(f"[DEBUG] FlashcardGenerator - Sending request to LLM")
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             response = await self._model.ainvoke(messages)
             parsed_response = self._output_parser.parse(response.content)
 
-            if not parsed_response.get('flashcards'):
+            if not parsed_response.get('flashcards') or len(parsed_response.get('flashcards', [])) == 0:
+                print(f"[DEBUG] FlashcardGenerator - No flashcards generated")
                 return json.dumps({
-                    "error": "I could not find enough information in the provided text to generate flashcards for your query."
+                    "error": "I could not generate flashcards for your query. Please try rephrasing your request."
                 }, ensure_ascii=False)
 
+            print(f"[DEBUG] FlashcardGenerator - Generated {len(parsed_response.get('flashcards', []))} flashcards")
+
+            # Zapisz do bazy danych
             db = SessionLocal()
             try:
                 new_deck = Deck(user_id=self.user_id, name=parsed_response['topic'],
@@ -161,12 +198,14 @@ Following the Primary Command, create a set of flashcards using *only* the Sourc
             except Exception as e:
                 db.rollback()
                 logger.error(f"Database error in FlashcardGenerator: {e}")
+                print(f"[ERROR] FlashcardGenerator database error: {str(e)}")
                 return json.dumps({"error": str(e)}, ensure_ascii=False)
             finally:
                 db.close()
 
         except Exception as e:
             logger.error(f"Error in FlashcardGenerator: {e}")
+            print(f"[ERROR] FlashcardGenerator exception: {str(e)}")
             return json.dumps({"error": "Failed to generate flashcards due to an internal error."}, ensure_ascii=False)
 
     async def _arun(self, input_str: str) -> str:
@@ -269,24 +308,97 @@ class ExamGenerator(BaseTool):
         self._model = ChatOpenAI(model_name=model_name, openai_api_key=openai_api_key, temperature=0.15)
         self._output_parser = JsonOutputParser()
 
-    async def _get_prompts(self, context: str, query: str, use_general_knowledge: bool = False) -> Tuple[str, str]:
-        if use_general_knowledge:
+    async def _run(self, input_str: str) -> str:
+        try:
+            print(f"[DEBUG] ExamGenerator._run - Input: {input_str[:200]}...")
+
+            # Inicjalizuj klienta Redis
+            redis_client = await init_redis()
+
+            input_data = json.loads(input_str)
+            context = input_data.get('description', '').strip()
+            query = input_data.get('query', '').strip()
+
+            print(f"[DEBUG] ExamGenerator - Context length: {len(context)}")
+            print(f"[DEBUG] ExamGenerator - Query: '{query}'")
+
+            cache_key = f"exam:{self.user_id}:{hash(query + context)}"
+            if cached_result := await redis_client.get(cache_key):
+                print(f"[DEBUG] ExamGenerator found cached result, length: {len(cached_result.decode())}")
+
+                # Walidacja cached result
+                try:
+                    cached_data = json.loads(cached_result.decode())
+                    # Sprawdź czy cached result zawiera prawidłowe pytania
+                    if cached_data.get('questions') and len(cached_data.get('questions', [])) > 0:
+                        print(
+                            f"[DEBUG] ExamGenerator - Valid cached result with {len(cached_data['questions'])} questions")
+
+                        # Sprawdź czy egzamin nie został już zapisany do bazy
+                        db = SessionLocal()
+                        try:
+                            existing_exam = db.query(Exam).filter(
+                                Exam.user_id == self.user_id,
+                                Exam.name == cached_data['topic']
+                            ).first()
+
+                            if not existing_exam:
+                                print(f"[DEBUG] ExamGenerator - Cached data not in DB, saving now")
+                                new_exam = Exam(user_id=self.user_id, name=cached_data['topic'],
+                                                description=cached_data['description'])
+                                db.add(new_exam)
+                                db.flush()
+                                for question_data in cached_data['questions']:
+                                    new_question = ExamQuestion(text=question_data['question'], exam_id=new_exam.id)
+                                    db.add(new_question)
+                                    db.flush()
+                                    answer_objects = [
+                                        ExamAnswer(
+                                            text=answer_data['text'],
+                                            is_correct=answer_data['is_correct'],
+                                            question_id=new_question.id
+                                        ) for answer_data in question_data['answers']
+                                    ]
+                                    db.bulk_save_objects(answer_objects)
+                                db.commit()
+                                print(f"[DEBUG] ExamGenerator - Saved cached data to database")
+                            else:
+                                print(f"[DEBUG] ExamGenerator - Data already exists in database")
+                        except Exception as e:
+                            db.rollback()
+                            print(f"[DEBUG] ExamGenerator - Error saving cached data: {e}")
+                        finally:
+                            db.close()
+
+                        return cached_result.decode()
+                    else:
+                        print(f"[DEBUG] ExamGenerator - Cached result invalid (no questions), regenerating")
+                        # Usuń nieprawidłowy cache
+                        await redis_client.delete(cache_key)
+                except (json.JSONDecodeError, KeyError) as e:
+                    print(f"[DEBUG] ExamGenerator - Cached result corrupted: {str(e)}, regenerating")
+                    # Usuń zepsuty cache
+                    await redis_client.delete(cache_key)
+
+            # Uniwersalny prompt
             system_prompt = """
-You are a professional educator and assessment designer. Your role is to create a fair and challenging exam based on your general knowledge.
-- **Format Compliance**: Your output must be a single, valid JSON object conforming perfectly to the requested schema.
-- **Language**: Use the same language as the user's command.
-- **Quantity**: Fulfill the exact number of questions requested in the command. If not specified, create 5 questions.
+You are a professional educator and assessment designer. Your role is to create a fair and challenging exam.
+- Your response must be a single, valid JSON object conforming perfectly to the requested schema.
+- Create exam questions based on the provided context and user request.
+- Use the user's language (Polish if the request is in Polish).
+- Generate the exact number of questions requested or a reasonable amount if not specified.
+- If the context contains specific information, focus on that. If the context is minimal, use your knowledge about the topic mentioned in the user request.
+- Each question should have exactly 4 answers: one correct and three plausible distractors.
 """
+
             user_prompt = f"""
-**Primary Command:** "{query}"
+**Context/Information:**
+---
+{context}
+---
 
 **Your Task:**
-Execute the Primary Command by designing an exam using your general knowledge about the requested topic.
-
-**Detailed Requirements:**
-1.  **Exam Metadata**: Generate a `topic` and `description` that accurately summarize the exam content.
-2.  **Question Design**: Create clear, unambiguous questions testing key concepts.
-3.  **Answer Design**: For each question, provide four answers: one that is correct, and three plausible but incorrect distractors.
+Create an exam based on the above information and context.
 
 **Required JSON Output Format:**
 {{
@@ -306,80 +418,21 @@ Execute the Primary Command by designing an exam using your general knowledge ab
   ]
 }}
 """
-        else:
-            system_prompt = """
-You are a professional educator and assessment designer. Your role is to create a fair and challenging exam.
-- **Strict Anti-Hallucination Rule**: You must create all questions, correct answers, and incorrect distractors using *only* the provided Source Material. Never invent or use external information.
-- **Format Compliance**: Your output must be a single, valid JSON object conforming perfectly to the requested schema.
-- **Language**: Use the same language as the user's command.
-- **Quantity**: Fulfill the exact number of questions requested in the command. If the material is insufficient, create as many as possible.
-"""
-            user_prompt = f"""
-**Primary Command:** "{query}"
 
-**Source Material (Context):**
----
-{context}
----
-
-**Your Task:**
-Execute the Primary Command by designing an exam. All elements of the exam must be derived *exclusively* from the Source Material.
-
-**Detailed Requirements:**
-1.  **Exam Metadata**: Generate a `topic` and `description` that accurately summarize the Source Material.
-2.  **Question Design**: Create clear, unambiguous questions testing key concepts from the text.
-3.  **Answer Design**: For each question, provide four answers: one that is verifiably correct from the text, and three plausible but incorrect distractors also based on the text.
-
-**Required JSON Output Format:**
-{{
-  "topic": "Exam Topic Derived from Source Material",
-  "description": "A concise description of the exam's content.",
-  "num_of_questions": <integer>,
-  "questions": [
-    {{
-      "question": "A specific question based *only* on the source material.",
-      "answers": [
-        {{"text": "A plausible but incorrect answer (distractor).", "is_correct": false}},
-        {{"text": "The single correct answer, directly from the source material.", "is_correct": true}},
-        {{"text": "Another plausible but incorrect answer.", "is_correct": false}},
-        {{"text": "A third plausible but incorrect answer.", "is_correct": false}}
-      ]
-    }}
-  ]
-}}
-"""
-        return system_prompt, user_prompt
-
-    async def _run(self, input_str: str) -> str:
-        try:
-            # Inicjalizuj klienta Redis
-            redis_client = await init_redis()
-
-            input_data = json.loads(input_str)
-            context = input_data.get('description', '').strip()
-            query = input_data.get('query', '').strip()
-            use_general_knowledge = input_data.get('use_general_knowledge', False)
-
-            cache_key = f"exam:{self.user_id}:{hash(query + context)}"
-            if cached_result := await redis_client.get(cache_key):
-                print(f"[DEBUG] ExamGenerator found cached result, length: {len(cached_result.decode())}")
-                return cached_result.decode()
-
-            if not use_general_knowledge and not context:
-                return json.dumps({
-                    "error": "Cannot generate an exam without context. Please ask a question about your files or the web first."
-                }, ensure_ascii=False)
-
-            system_prompt, user_prompt = await self._get_prompts(context, query, use_general_knowledge)
+            print(f"[DEBUG] ExamGenerator - Sending request to LLM")
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             response = await self._model.ainvoke(messages)
             parsed_response = self._output_parser.parse(response.content)
 
-            if not parsed_response.get('questions'):
+            if not parsed_response.get('questions') or len(parsed_response.get('questions', [])) == 0:
+                print(f"[DEBUG] ExamGenerator - No questions generated")
                 return json.dumps({
-                    "error": "I could not find enough information in the provided text to generate an exam for your query."
+                    "error": "I could not generate exam questions for your query. Please try rephrasing your request."
                 }, ensure_ascii=False)
 
+            print(f"[DEBUG] ExamGenerator - Generated {len(parsed_response.get('questions', []))} questions")
+
+            # Zapisz do bazy danych
             db = SessionLocal()
             try:
                 new_exam = Exam(user_id=self.user_id, name=parsed_response['topic'],
@@ -406,12 +459,14 @@ Execute the Primary Command by designing an exam. All elements of the exam must 
             except Exception as e:
                 db.rollback()
                 logger.error(f"Database error during exam save: {e}")
-                raise
+                print(f"[ERROR] ExamGenerator database error: {str(e)}")
+                return json.dumps({"error": str(e)}, ensure_ascii=False)
             finally:
                 db.close()
 
         except Exception as e:
             logger.error(f"Error in ExamGenerator: {e}")
+            print(f"[ERROR] ExamGenerator exception: {str(e)}")
             return json.dumps({"error": "Failed to generate the exam due to an internal error."}, ensure_ascii=False)
 
     async def _arun(self, input_str: str) -> str:
