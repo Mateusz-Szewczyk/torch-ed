@@ -311,7 +311,7 @@ const LeftPanel: React.FC<LeftPanelProps> = ({ isPanelVisible, isMobile, toggleP
       {/* Modals and Dialogs */}
       <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
 
-      <ProfileDialog isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} t={t} />
+      <ProfileDialog isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} />
     </>
   )
 }
