@@ -419,5 +419,6 @@
   "of": "z",
   "created": "Utworzono",
   "last_studied": "Ostatnio przerabiane",
-  "no_flashcard_decks_extended": "Nie masz jeszcze żadnych talii fiszek. Utwórz nową talię, aby rozpocząć naukę! Możesz także skorzystać z naszego inteligentnego czatu, aby wygenerować fiszki dostosowane do Twoich potrzeb."
+  "no_flashcard_decks_extended": "Nie masz jeszcze żadnych talii fiszek. Utwórz nową talię, aby rozpocząć naukę! Możesz także skorzystać z naszego inteligentnego czatu, aby wygenerować fiszki dostosowane do Twoich potrzeb.",
+  "no_tests_available_extended": "Brak dostępnych egzaminów. Możesz dodać nowy egzamin ręcznie lub skorzystać z naszego inteligentnego czatu, aby wygenerować egzamin dostosowany do Twoich potrzeb."
 }

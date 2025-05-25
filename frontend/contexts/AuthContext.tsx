@@ -16,6 +16,7 @@ interface AuthContextType {
   tokenExpired: boolean;
   setTokenExpired: (flag: boolean) => void;
   setAccessDenied: (flag: boolean) => void;
+  clearMessages: () => void; // Nowa funkcja do czyszczenia komunikatów
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -25,6 +26,7 @@ export const AuthContext = createContext<AuthContextType>({
   tokenExpired: false,
   setTokenExpired: () => {},
   setAccessDenied: () => {},
+  clearMessages: () => {},
 });
 
 interface AuthProviderProps {
@@ -39,10 +41,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Funkcja do czyszczenia wszystkich komunikatów
+  const clearMessages = useCallback(() => {
+    setAccessDenied(false);
+    setTokenExpired(false);
+  }, []);
+
   // Funkcja opakowująca fetch używana do weryfikacji sesji
   const customFetch = useCallback(async (url: string, options?: RequestInit) => {
     return await fetch(url, { credentials: 'include', ...options });
   }, []);
+
+  // Wrapper dla setIsAuthenticated - czyści komunikaty przy wylogowaniu
+  const handleSetIsAuthenticated = useCallback((auth: boolean) => {
+    setIsAuthenticated(auth);
+    if (!auth) {
+      // Gdy użytkownik zostaje wylogowany, wyczyść wszystkie komunikaty
+      clearMessages();
+    }
+  }, [clearMessages]);
 
   // Sprawdzenie sesji przy montowaniu komponentu
   useEffect(() => {
@@ -52,17 +69,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           process.env.NEXT_PUBLIC_API_FLASK_URL ||
           'http://localhost:14440/api/v1';
 
-        const authUrl = `${API_BASE_URL}/auth/login`;
-        console.log('Auth Request URL:', authUrl);
-        console.log('Available cookies:', document.cookie);
+        const authUrl = `${API_BASE_URL}/auth/session-check`;
+        console.log('Session check URL:', authUrl);
 
         const res = await customFetch(authUrl);
-        console.log('Auth Response status:', res.status);
-        console.log('Auth Response status text:', res.statusText);
+        console.log('Session check status:', res.status);
 
         if (res.ok) {
-          setIsAuthenticated(true);
-          console.log('User authenticated successfully.');
+          const data = await res.json();
+          setIsAuthenticated(data.authenticated);
+          console.log('User authenticated:', data.authenticated);
         } else {
           setIsAuthenticated(false);
           console.log('User not authenticated.');
@@ -78,17 +94,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     void checkSession();
   }, [customFetch]);
 
-  // Globalne przechwytywanie fetch – jeżeli którykolwiek endpoint zwróci 401 i użytkownik jest zalogowany,
-  // wywołujemy wylogowanie z komunikatem o nieaktywności.
+  // Wyczyść komunikaty przy zmianie route
+  useEffect(() => {
+    clearMessages();
+  }, [pathname, clearMessages]);
+
+  // Globalne przechwytywanie fetch
   useEffect(() => {
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
       const response = await originalFetch(...args);
-      if (response.status === 401 && isAuthenticated) {
-        console.warn('Received 401 – wylogowanie z powodu nieaktywności.');
+
+      // Tylko jeśli user jest authenticated i dostaje 401, znaczy że token expired
+      if (response.status === 401 && isAuthenticated && !isLoading) {
+        console.warn('Received 401 – token expired, logging out.');
         setIsAuthenticated(false);
+        // Pokaż komunikat tylko jeśli użytkownik był rzeczywiście zalogowany
         setTokenExpired(true);
-        router.push('/');
+
+        // Delay przekierowania żeby user zobaczył komunikat
+        setTimeout(() => {
+          router.push('/');
+        }, 1000);
       }
       return response;
     };
@@ -96,19 +123,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       window.fetch = originalFetch;
     };
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, isLoading, router]);
 
-  // Dodatkowe przekierowanie – gdy sesja została sprawdzona i użytkownik nie jest autoryzowany, a nie jest na stronie głównej.
+  // Przekierowanie dla nieautoryzowanych użytkowników
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== '/') {
+    // Tylko jeśli loading zakończony, user nie authenticated, nie jest na głównej
+    // I nie wyświetlamy już komunikatu o tokenExpired (żeby nie dublować)
+    if (!isLoading && !isAuthenticated && pathname !== '/' && !tokenExpired) {
+      console.log('Access denied - redirecting to home');
       setAccessDenied(true);
-      router.push('/');
+
+      // Delay przekierowania żeby user zobaczył komunikat
+      setTimeout(() => {
+        router.push('/');
+      }, 1000);
     }
-  }, [isLoading, isAuthenticated, pathname, router]);
+  }, [isLoading, isAuthenticated, pathname, router, tokenExpired]);
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, setIsAuthenticated, accessDenied, setAccessDenied, tokenExpired, setTokenExpired}}
+      value={{
+        isAuthenticated,
+        setIsAuthenticated: handleSetIsAuthenticated,
+        accessDenied,
+        setAccessDenied,
+        tokenExpired,
+        setTokenExpired,
+        clearMessages
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -1,7 +1,10 @@
-from typing import Tuple
+import datetime
+import hashlib
+import secrets
 
 from dotenv import load_dotenv
-from flask import request, redirect, Blueprint, jsonify, url_for, Response
+from flask import request, redirect, Blueprint, jsonify, url_for
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 from werkzeug import Response
 from ..utils import FRONTEND, COOKIE_AUTH, data_check, send_email, signature_check
@@ -413,3 +416,273 @@ def delete_user(iden: int) -> Response:
     # Implementacja usuwania użytkownika
     ...
     return redirect(FRONTEND)
+
+
+@user_auth.route('/forgot-password', methods=['POST'])
+def forgot_password() -> Response | tuple:
+    """
+    Wysyła email z linkiem do resetowania hasła.
+    Zawsze zwraca sukces dla bezpieczeństwa.
+    """
+    try:
+        data = request.get_json()
+        if not data or not data.get('email'):
+            return jsonify({'error': 'Email is required'}), 400
+
+        email = data.get('email').strip().lower()
+
+        # Znajdź użytkownika
+        user: User | None = session.query(User).filter_by(email=email).first()
+
+        if user and user.confirmed:
+            # Generuj bezpieczny token
+            reset_token = secrets.token_urlsafe(48)
+            token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
+
+            # POPRAWKA: Użyj utcnow() zamiast now(UTC) dla consistency
+            expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=30)
+
+            # Usuń stare tokeny
+            session.execute(
+                text("DELETE FROM password_reset_tokens WHERE user_id = :user_id"),
+                {"user_id": user.id_}
+            )
+
+            # Zapisz nowy token
+            session.execute(
+                text(
+                    "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, :expires_at)"),
+                {
+                    "user_id": user.id_,
+                    "token_hash": token_hash,
+                    "expires_at": expires_at
+                }
+            )
+            session.commit()
+
+            # Stwórz link resetowania
+            reset_link = f"{FRONTEND}/reset-password?token={reset_token}"
+
+            # Email template (bez zmian)
+            message = f"""
+            <html>
+              <head>
+                <style>
+                  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; background: #f8fafc; padding: 20px; }}
+                  .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
+                  .header {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; padding: 30px 20px; text-align: center; }}
+                  .content {{ padding: 30px 20px; }}
+                  .button {{ display: inline-block; padding: 14px 28px; background: #4f46e5; color: white !important; text-decoration: none; border-radius: 8px; font-weight: 600; }}
+                  .warning {{ background: #fef3c7; border: 1px solid #f59e0b; padding: 12px; border-radius: 6px; margin: 20px 0; color: #92400e; }}
+                  .footer {{ background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; }}
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <div class="header">
+                    <h1>🔒 Resetowanie hasła</h1>
+                    <p>TorchED - Bezpieczne resetowanie</p>
+                  </div>
+                  <div class="content">
+                    <p>Cześć!</p>
+                    <p>Otrzymaliśmy prośbę o zresetowanie hasła do Twojego konta w TorchED.</p>
+
+                    <div style="text-align: center; margin: 30px 0;">
+                      <a href="{reset_link}" class="button">🔑 Zresetuj hasło</a>
+                    </div>
+
+                    <div class="warning">
+                      <strong>⚠️ Ważne:</strong>
+                      <ul style="margin: 8px 0 0 20px;">
+                        <li>Link jest ważny przez <strong>30 minut</strong></li>
+                        <li>Jeśli nie prosiłeś o reset, zignoruj tę wiadomość</li>
+                        <li>Nie udostępniaj tego linku nikomu</li>
+                      </ul>
+                    </div>
+
+                    <p style="font-size: 14px; color: #64748b; margin-top: 20px;">
+                      Jeśli przycisk nie działa, skopiuj ten link:<br>
+                      <a href="{reset_link}" style="color: #4f46e5; word-break: break-all;">{reset_link}</a>
+                    </p>
+                  </div>
+                  <div class="footer">
+                    <p>© 2025 TorchED. Wiadomość wysłana automatycznie.</p>
+                  </div>
+                </div>
+              </body>
+            </html>
+            """
+
+            # Wyślij email
+            send_email(email, "🔒 Resetowanie hasła - TorchED", message, html=True)
+
+        return jsonify({
+            'success': True,
+            'message': 'Jeśli podany email istnieje w naszej bazie, wysłaliśmy link do resetowania hasła.'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error in forgot_password: {e}")
+        return jsonify({'error': 'Wystąpił błąd. Spróbuj ponownie później.'}), 500
+
+
+@user_auth.route('/reset-password', methods=['POST'])
+def reset_password() -> Response | tuple:
+    """
+    Resetuje hasło na podstawie tokenu.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Brak danych'}), 400
+
+        token = data.get('token')
+        new_password = data.get('new_password')
+        confirm_password = data.get('confirm_password')
+
+        if not all([token, new_password, confirm_password]):
+            return jsonify({'error': 'Wszystkie pola są wymagane'}), 400
+
+        if new_password != confirm_password:
+            return jsonify({'error': 'Hasła nie są identyczne'}), 400
+
+        if len(new_password) < 8:
+            return jsonify({'error': 'Hasło musi mieć co najmniej 8 znaków'}), 400
+
+        # Zahashuj token do sprawdzenia w bazie
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        # Znajdź token w bazie
+        result = session.execute(
+            text("""
+            SELECT prt.user_id, prt.expires_at, u.email 
+            FROM password_reset_tokens prt 
+            JOIN users u ON prt.user_id = u.id_ 
+            WHERE prt.token_hash = :token_hash
+            """),
+            {"token_hash": token_hash}
+        ).fetchone()
+
+        if not result:
+            return jsonify({'error': 'Token nieprawidłowy lub wygasł'}), 400
+
+        user_id, expires_at, email = result
+
+        # POPRAWKA: Zapewnij że oba datetime są "naive" (bez timezone)
+        current_time = datetime.datetime.utcnow()  # naive datetime
+
+        # Konwertuj expires_at do naive datetime
+        if expires_at:
+            # Jeśli expires_at jest string
+            if isinstance(expires_at, str):
+                try:
+                    # Spróbuj parsować z timezone
+                    if 'T' in expires_at and ('+' in expires_at or 'Z' in expires_at):
+                        expires_at = datetime.datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                        expires_at = expires_at.replace(tzinfo=None)  # Make naive
+                    else:
+                        # Parse jako naive datetime
+                        expires_at = datetime.datetime.fromisoformat(expires_at)
+                except ValueError:
+                    # Fallback parsing
+                    expires_at = datetime.datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
+
+            # Jeśli expires_at jest aware datetime object
+            elif hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is not None:
+                expires_at = expires_at.replace(tzinfo=None)  # Make naive
+
+        # Teraz oba są naive - można porównać
+        if current_time > expires_at:
+            session.execute(
+                text("DELETE FROM password_reset_tokens WHERE token_hash = :token_hash"),
+                {"token_hash": token_hash}
+            )
+            session.commit()
+            return jsonify({'error': 'Token wygasł. Poproś o nowy link.'}), 400
+
+        # Aktualizuj hasło użytkownika
+        hashed_password = generate_password_hash(new_password, salt_length=24)
+        session.execute(
+            text("UPDATE users SET password = :password WHERE id_ = :user_id"),
+            {"password": hashed_password, "user_id": user_id}
+        )
+
+        # Usuń użyty token
+        session.execute(
+            text("DELETE FROM password_reset_tokens WHERE user_id = :user_id"),
+            {"user_id": user_id}
+        )
+
+        session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Hasło zostało pomyślnie zmienione. Możesz się teraz zalogować.'
+        }), 200
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error in reset_password: {e}")
+        return jsonify({'error': 'Wystąpił błąd. Spróbuj ponownie później.'}), 500
+
+
+@user_auth.route('/session-check', methods=['GET'])
+def session_check() -> Response | tuple:
+    """
+    Sprawdza czy użytkownik jest zalogowany poprzez weryfikację JWT token z cookie.
+    Endpoint odpowiednik login() ale dla sprawdzania sesji.
+    """
+    try:
+        # Pobierz token z cookie (używa tego samego COOKIE_AUTH co login)
+        token = request.cookies.get(COOKIE_AUTH, None)
+        if not token:
+            return jsonify({'authenticated': False}), 401
+
+        # Dekoduj i weryfikuj token (odwrotność generate_token)
+        try:
+            decoded_data = decode_token(token.encode('utf-8'))
+        except Exception as e:
+            logger.error(f"Token decode error: {e}")
+            return jsonify({'authenticated': False, 'error': 'Invalid token'}), 401
+
+        # Sprawdź czy token nie wygasł i ma prawidłową strukturę
+        if not decoded_data:
+            return jsonify({'authenticated': False, 'error': 'Token verification failed'}), 401
+
+        # Pobierz user_id z zdekodowanego tokenu
+        user_id = decoded_data.get('user_id')
+        if not user_id:
+            return jsonify({'authenticated': False, 'error': 'Invalid token payload'}), 401
+
+        # Sprawdź czy użytkownik nadal istnieje w bazie (podobnie jak w login)
+        user = session.query(User).filter_by(id_=user_id).first()
+        if not user:
+            return jsonify({'authenticated': False, 'error': 'User not found'}), 401
+
+        # Sprawdź dodatkowe warunki (jak w login przy data_check)
+        if not user.confirmed:
+            return jsonify({
+                'authenticated': True,  # Token jest ważny
+                'user_id': user.id_,
+                'email': user.email,
+                'confirmed': False,
+                'message': 'Account not confirmed'
+            }), 200
+
+        # Sprawdź czy token ma prawidłowy issuer (jak w generate_token)
+        iss = decoded_data.get('iss')
+        if iss != 'TorchED_BACKEND_AUTH':
+            return jsonify({'authenticated': False, 'error': 'Invalid token issuer'}), 401
+
+        # Zwróć sukces z informacjami o użytkowniku
+        return jsonify({
+            'authenticated': True,
+            'user_id': user.id_,
+            'email': user.email,
+            'confirmed': user.confirmed,
+            'role': user.role
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error in session_check: {e}")
+        return jsonify({'authenticated': False}), 401

@@ -9,80 +9,283 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useTranslation } from "react-i18next"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, X, AlertCircle, CheckCircle, Info } from "lucide-react"
+import { Eye, EyeOff, X, AlertCircle, CheckCircle, Info, ArrowLeft, Mail, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface LoginRegisterDialogProps {
   children: React.ReactNode
-  setIsAuthenticated: (val: boolean) => void // Callback to set logged-in state
+  setIsAuthenticated: (val: boolean) => void
+  autoOpen?: boolean
+  initialView?: "auth" | "forgot-password" | "reset-password"
 }
 
-// Toast notification types
 type ToastType = "success" | "error" | "info"
+type View = "auth" | "forgot-password" | "reset-password"
 
 interface Toast {
   message: string
   type: ToastType
 }
 
-// Validation patterns
-const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[0-9\W]).{8,}$/
+interface PasswordRequirement {
+  id: string
+  label: string
+  regex: RegExp
+  met: boolean
+}
 
-export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegisterDialogProps) {
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+
+// Enhanced password validation with individual requirements
+const createPasswordRequirements = (): PasswordRequirement[] => [
+  {
+    id: 'length',
+    label: 'Co najmniej 8 znaków',
+    regex: /.{8,}/,
+    met: false
+  },
+  {
+    id: 'lowercase',
+    label: 'Jedna mała litera (a-z)',
+    regex: /[a-z]/,
+    met: false
+  },
+  {
+    id: 'uppercase',
+    label: 'Jedna duża litera (A-Z)',
+    regex: /[A-Z]/,
+    met: false
+  },
+  {
+    id: 'number',
+    label: 'Jedna cyfra (0-9)',
+    regex: /[0-9]/,
+    met: false
+  },
+  {
+    id: 'special',
+    label: 'Jeden znak specjalny (!@#$%^&*)',
+    regex: /[!@#$%^&*(),.?":{}|<>]/,
+    met: false
+  }
+]
+
+// Password Requirements Component
+const PasswordRequirements = ({
+  password,
+  onValidityChange,
+  show = true
+}: {
+  password: string
+  onValidityChange: (isValid: boolean) => void
+  show?: boolean
+}) => {
+  const [requirements, setRequirements] = useState<PasswordRequirement[]>(createPasswordRequirements())
+
+  useEffect(() => {
+    const updatedRequirements = requirements.map(req => ({
+      ...req,
+      met: req.regex.test(password)
+    }))
+
+    setRequirements(updatedRequirements)
+
+    // Check if all requirements are met
+    const allMet = updatedRequirements.every(req => req.met)
+    onValidityChange(allMet)
+  }, [password, onValidityChange])
+
+  if (!show) return null
+
+  return (
+    <div className="mt-3 p-3 border border-border/50 rounded-lg bg-muted/30">
+      <p className="text-sm font-medium text-muted-foreground mb-2">Wymagania hasła:</p>
+      <ul className="space-y-1">
+        {requirements.map((req) => (
+          <li
+            key={req.id}
+            className={cn(
+              "flex items-center text-xs transition-colors duration-200",
+              req.met ? "text-green-600" : "text-muted-foreground"
+            )}
+          >
+            <div className={cn(
+              "w-4 h-4 rounded-full mr-2 flex items-center justify-center transition-colors duration-200",
+              req.met ? "bg-green-500" : "bg-muted-foreground/20"
+            )}>
+              {req.met && <Check className="w-2.5 h-2.5 text-white" />}
+            </div>
+            {req.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// Email validation component
+const EmailValidation = ({
+  email,
+  onValidityChange
+}: {
+  email: string
+  onValidityChange: (isValid: boolean) => void
+}) => {
+  const [isValid, setIsValid] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!email) {
+      setIsValid(null)
+      onValidityChange(false)
+      return
+    }
+
+    const valid = EMAIL_REGEX.test(email)
+    setIsValid(valid)
+    onValidityChange(valid)
+  }, [email, onValidityChange])
+
+  if (!email || isValid === null) return null
+
+  return (
+    <div className={cn(
+      "flex items-center text-xs mt-1 transition-colors duration-200",
+      isValid ? "text-green-600" : "text-orange-600"
+    )}>
+      {isValid ? (
+        <>
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Adres email jest prawidłowy
+        </>
+      ) : (
+        <>
+          <AlertCircle className="h-3 w-3 mr-1" />
+          Podaj prawidłowy adres email
+        </>
+      )}
+    </div>
+  )
+}
+
+export function LoginRegisterDialog({
+  children,
+  setIsAuthenticated,
+  autoOpen = false,
+  initialView = "auth"
+}: LoginRegisterDialogProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [currentView, setCurrentView] = useState<View>(initialView)
+  const [isStable, setIsStable] = useState(false)
+  const [forceOpen, setForceOpen] = useState(false)
+
   const { t } = useTranslation()
   const router = useRouter()
 
-  // Fields for login
+  // Toast notification state
+  const [toast, setToast] = useState<Toast | null>(null)
+
+  // Login fields
   const [loginEmail, setLoginEmail] = useState("")
   const [loginPassword, setLoginPassword] = useState("")
   const [showLoginPassword, setShowLoginPassword] = useState(false)
 
-  // Fields for registration
+  // Register fields
   const [registerEmail, setRegisterEmail] = useState("")
   const [registerPassword, setRegisterPassword] = useState("")
   const [registerPassword2, setRegisterPassword2] = useState("")
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
   const [showRegisterPassword2, setShowRegisterPassword2] = useState(false)
 
-  // Validation states
-  const [emailValid, setEmailValid] = useState<boolean | null>(null)
-  const [passwordValid, setPasswordValid] = useState<boolean | null>(null)
-  const [passwordsMatch, setPasswordsMatch] = useState<boolean | null>(null)
+  // Forgot password fields
+  const [forgotEmail, setForgotEmail] = useState("")
+  const [isLoadingForgot, setIsLoadingForgot] = useState(false)
 
-  // State for notifications - now just a single toast
-  const [toast, setToast] = useState<Toast | null>(null)
+  // Reset password fields
+  const [resetToken, setResetToken] = useState("")
+  const [resetPassword, setResetPassword] = useState("")
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("")
+  const [showResetPassword, setShowResetPassword] = useState(false)
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false)
+  const [isLoadingReset, setIsLoadingReset] = useState(false)
 
-  // API base URL
+  // Enhanced validation states
+  const [registerEmailValid, setRegisterEmailValid] = useState(false)
+  const [registerPasswordValid, setRegisterPasswordValid] = useState(false)
+  const [registerPasswordsMatch, setRegisterPasswordsMatch] = useState(false)
+  const [forgotEmailValid, setForgotEmailValid] = useState(false)
+  const [resetPasswordValid, setResetPasswordValid] = useState(false)
+  const [resetPasswordsMatch, setResetPasswordsMatch] = useState(false)
+
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || "http://localhost:14440/api/v1"
 
-  // Email validation
+  // Stabilizacja po mount
   useEffect(() => {
-    if (registerEmail) {
-      setEmailValid(EMAIL_REGEX.test(registerEmail))
-    } else {
-      setEmailValid(null)
-    }
-  }, [registerEmail])
+    const timer = setTimeout(() => {
+      setIsStable(true)
+      if (autoOpen || initialView === "reset-password") {
+        setIsOpen(true)
+        setForceOpen(true)
+      }
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [autoOpen, initialView])
 
-  // Password validation
+  // Handle token from URL for reset password
   useEffect(() => {
-    if (registerPassword) {
-      setPasswordValid(PASSWORD_REGEX.test(registerPassword))
-    } else {
-      setPasswordValid(null)
-    }
-  }, [registerPassword])
+    if (isStable && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const token = urlParams.get('token')
 
-  // Password matching validation
+      if (token && !resetToken) {
+        setResetToken(token)
+        setCurrentView("reset-password")
+        setIsOpen(true)
+        setForceOpen(true)
+        const newUrl = window.location.pathname
+        window.history.replaceState({}, document.title, newUrl)
+      }
+    }
+  }, [isStable, resetToken])
+
+  // Password confirmation validation
   useEffect(() => {
     if (registerPassword && registerPassword2) {
-      setPasswordsMatch(registerPassword === registerPassword2)
+      setRegisterPasswordsMatch(registerPassword === registerPassword2)
     } else {
-      setPasswordsMatch(null)
+      setRegisterPasswordsMatch(false)
     }
   }, [registerPassword, registerPassword2])
+
+  useEffect(() => {
+    if (resetPassword && resetConfirmPassword) {
+      setResetPasswordsMatch(resetPassword === resetConfirmPassword)
+    } else {
+      setResetPasswordsMatch(false)
+    }
+  }, [resetPassword, resetConfirmPassword])
+
+  // Controlled dialog handler
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!isStable) return
+    if (!open && forceOpen && currentView === "reset-password") return
+    if (!open && currentView === "reset-password") return
+
+    setIsOpen(open)
+    if (!open) {
+      setForceOpen(false)
+    }
+  }, [isStable, forceOpen, currentView])
+
+  // Reset form when view changes
+  useEffect(() => {
+    if (currentView === "auth") {
+      setForgotEmail("")
+      setResetToken("")
+      setResetPassword("")
+      setResetConfirmPassword("")
+      setForceOpen(false)
+    }
+  }, [currentView])
 
   // Clear toast after 8 seconds
   useEffect(() => {
@@ -92,7 +295,6 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
     }
   }, [toast])
 
-  // Show toast notification
   const showToast = useCallback((message: string, type: ToastType = "info") => {
     setToast({ message, type })
   }, [])
@@ -113,14 +315,9 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
 
       if (!response.ok) {
         const errData = await response.json()
-        // Check if response is HTTP 423
         if (response.status === 423) {
           showToast(
-            errData.message ||
-              t(
-                "login_register_dialog.account_not_confirmed",
-                "Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail, aby potwierdzić rejestrację.",
-              ),
+            errData.message || "Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail.",
             "error",
           )
           return
@@ -131,33 +328,21 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
       const data = await response.json()
       const { is_confirmed, message } = data
 
-      // Show message based on confirmation status
       if (!is_confirmed) {
         showToast(
-          message ||
-            t(
-              "login_register_dialog.account_not_confirmed",
-              "Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail, aby potwierdzić rejestrację.",
-            ),
+          message || "Twoje konto nie zostało potwierdzone. Sprawdź swój e-mail.",
           "error",
         )
-        // Optional: Prevent login for unconfirmed users
-        // return; // Uncomment to block unconfirmed users
       } else {
-        showToast(message || t("login_register_dialog.login_success", "Zalogowano pomyślnie"), "success")
+        showToast(message || "Zalogowano pomyślnie", "success")
       }
 
-      // Hide the dialog
       setIsOpen(false)
-
-      // Mark user as authenticated
       setIsAuthenticated(true)
-
-      // Redirect to home
       router.push("/")
     } catch (err) {
       console.error("Error logging in:", err)
-      showToast(t("login_register_dialog.login_error", "Nie udało się zalogować, sprawdź podane informacje!"), "error")
+      showToast("Nie udało się zalogować, sprawdź podane informacje!", "error")
     }
   }
 
@@ -165,25 +350,18 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate inputs before submission
-    if (!emailValid) {
-      showToast(t("login_register_dialog.invalid_email", "Podaj poprawny adres email"), "error")
+    if (!registerEmailValid) {
+      showToast("Podaj poprawny adres email", "error")
       return
     }
 
-    if (!passwordValid) {
-      showToast(
-        t(
-          "login_register_dialog.invalid_password",
-          "Hasło musi zawierać co najmniej 8 znaków, jedną małą literę i jedną cyfrę lub znak specjalny",
-        ),
-        "error",
-      )
+    if (!registerPasswordValid) {
+      showToast("Hasło nie spełnia wszystkich wymagań", "error")
       return
     }
 
-    if (!passwordsMatch) {
-      showToast(t("login_register_dialog.passwords_dont_match", "Hasła nie są takie same!"), "error")
+    if (!registerPasswordsMatch) {
+      showToast("Hasła nie są identyczne", "error")
       return
     }
 
@@ -207,64 +385,172 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
         throw new Error(errData.error || "Failed to register")
       }
 
-      // After successful registration
-      await response.json()
+      showToast("Zarejestrowano pomyślnie. Sprawdź swój e-mail, aby potwierdzić rejestrację.", "success")
 
-      showToast(
-        t(
-          "login_register_dialog.register_success",
-          "Zarejestrowano pomyślnie. Sprawdź swój e-mail, aby potwierdzić rejestrację.",
-        ),
-        "success",
-      )
-
-      // Reset form fields
       setRegisterEmail("")
       setRegisterPassword("")
       setRegisterPassword2("")
 
-      // Switch to login tab
       const loginTab = document.querySelector('[data-value="login"]') as HTMLElement
       if (loginTab) loginTab.click()
     } catch (err) {
       console.error("Error registering:", err)
-      showToast(t("login_register_dialog.register_error", "Nie udało się zarejestrować: ") + String(err), "error")
+      showToast("Nie udało się zarejestrować: " + String(err), "error")
     }
   }
 
-  // Render validation message
-  const ValidationMessage = ({
-    valid,
-    message,
-    showWhenValid = false,
-  }: {
-    valid: boolean | null
-    message: string
-    showWhenValid?: boolean
-  }) => {
-    if (valid === null) return null
-    if (!valid || showWhenValid) {
-      return (
-        <p className={cn("text-xs mt-1 flex items-center", valid ? "text-green-500" : "text-red-500")}>
-          {valid ? <CheckCircle className="h-3 w-3 mr-1" /> : <AlertCircle className="h-3 w-3 mr-1" />}
-          {message}
-        </p>
-      )
+  // Handle forgot password
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!forgotEmailValid) {
+      showToast("Podaj poprawny adres email", "error")
+      return
     }
+
+    setIsLoadingForgot(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        showToast(
+          data.message || "Jeśli podany email istnieje w naszej bazie, wysłaliśmy link do resetowania hasła.",
+          "success"
+        )
+        setCurrentView("auth")
+      } else {
+        throw new Error(data.error || "Failed to send reset email")
+      }
+    } catch (err) {
+      console.error("Error sending reset email:", err)
+      showToast("Wystąpił błąd. Spróbuj ponownie później.", "error")
+    } finally {
+      setIsLoadingForgot(false)
+    }
+  }
+
+  // Handle reset password
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!resetPasswordValid) {
+      showToast("Hasło nie spełnia wszystkich wymagań", "error")
+      return
+    }
+
+    if (!resetPasswordsMatch) {
+      showToast("Hasła nie są identyczne", "error")
+      return
+    }
+
+    setIsLoadingReset(true)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: resetToken,
+          new_password: resetPassword,
+          confirm_password: resetConfirmPassword,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        showToast(
+          data.message || "Hasło zostało pomyślnie zmienione. Możesz się teraz zalogować.",
+          "success"
+        )
+
+        setTimeout(() => {
+          setCurrentView("auth")
+          setResetToken("")
+          setResetPassword("")
+          setResetConfirmPassword("")
+          setForceOpen(false)
+        }, 2000)
+      } else {
+        throw new Error(data.error || "Failed to reset password")
+      }
+    } catch (err) {
+      console.error("Error resetting password:", err)
+      showToast(String(err).replace("Error: ", ""), "error")
+    } finally {
+      setIsLoadingReset(false)
+    }
+  }
+
+  const renderDialogTitle = () => {
+    switch (currentView) {
+      case "forgot-password":
+        return "Resetowanie hasła"
+      case "reset-password":
+        return "Nowe hasło"
+      default:
+        return t("login_register_dialog.title", "Logowanie / Rejestracja")
+    }
+  }
+
+  if (!isStable) {
     return null
   }
 
   return (
     <>
-      {/* Modal */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog
+        open={isOpen}
+        onOpenChange={handleOpenChange}
+        modal={true}
+      >
         <DialogTrigger asChild>{children}</DialogTrigger>
-        <DialogContent className="sm:max-w-2xl bg-background text-foreground" aria-labelledby="auth-dialog-title">
+        <DialogContent
+          className="sm:max-w-2xl bg-background text-foreground max-h-[90vh] overflow-y-auto"
+          aria-labelledby="auth-dialog-title"
+          onPointerDownOutside={(e) => {
+            if (forceOpen && currentView === "reset-password") {
+              e.preventDefault()
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (forceOpen && currentView === "reset-password") {
+              e.preventDefault()
+            }
+          }}
+          onInteractOutside={(e) => {
+            if (forceOpen && currentView === "reset-password") {
+              e.preventDefault()
+            }
+          }}
+        >
           <DialogHeader>
-            <DialogTitle>{t("login_register_dialog.title")}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {currentView !== "auth" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setCurrentView("auth")
+                    setForceOpen(false)
+                  }}
+                  className="p-1 h-auto"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
+              {renderDialogTitle()}
+            </DialogTitle>
           </DialogHeader>
 
-          {/* Toast notification inside dialog - only one at a time */}
+          {/* Toast notification */}
           {toast && (
             <div
               className={cn(
@@ -292,161 +578,323 @@ export function LoginRegisterDialog({ children, setIsAuthenticated }: LoginRegis
             </div>
           )}
 
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login" data-value="login">
-                {t("login_register_dialog.login")}
-              </TabsTrigger>
-              <TabsTrigger value="register" data-value="register">
-                {t("login_register_dialog.register")}
-              </TabsTrigger>
-            </TabsList>
+          {/* Auth View (Login/Register) */}
+          {currentView === "auth" && (
+            <Tabs defaultValue="login" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login" data-value="login">
+                  Logowanie
+                </TabsTrigger>
+                <TabsTrigger value="register" data-value="register">
+                  Rejestracja
+                </TabsTrigger>
+              </TabsList>
 
-            {/* LOGIN TAB */}
-            <TabsContent value="login">
-              <form onSubmit={handleLogin}>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="login-email">{t("login_register_dialog.email")}</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder={t("login_register_dialog.email_placeholder", "Podaj email")}
-                      required
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      aria-describedby="login-email-error"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="login-password">{t("login_register_dialog.password")}</Label>
-                    <div className="relative">
+              {/* LOGIN TAB */}
+              <TabsContent value="login">
+                <form onSubmit={handleLogin}>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="login-email">Email</Label>
                       <Input
-                        id="login-password"
-                        type={showLoginPassword ? "text" : "password"}
+                        id="login-email"
+                        type="email"
+                        placeholder="Podaj swój adres email"
                         required
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        aria-describedby="login-password-error"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
                       />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        aria-label={showLoginPassword ? "Hide password" : "Show password"}
-                      >
-                        {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="login-password">Hasło</Label>
+                      <div className="relative">
+                        <Input
+                          id="login-password"
+                          type={showLoginPassword ? "text" : "password"}
+                          required
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          placeholder="Minimum 8 znaków"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                          aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                        >
+                          {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <Button type="submit" className="w-full">
-                  {t("login_register_dialog.login")}
-                </Button>
-              </form>
-            </TabsContent>
 
-            {/* REGISTER TAB */}
-            <TabsContent value="register">
-              <form onSubmit={handleRegister}>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="register-email">{t("login_register_dialog.email")}</Label>
+                  <div className="flex flex-col gap-3">
+                    <Button type="submit" className="w-full">
+                      Zaloguj się
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="text-sm text-muted-foreground p-0 h-auto"
+                      onClick={() => setCurrentView("forgot-password")}
+                    >
+                      Zapomniałeś hasła?
+                    </Button>
+                  </div>
+                </form>
+              </TabsContent>
+
+              {/* REGISTER TAB */}
+              <TabsContent value="register">
+                <form onSubmit={handleRegister}>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="register-email">Email</Label>
+                      <Input
+                        id="register-email"
+                        type="email"
+                        placeholder="Podaj swój adres email"
+                        required
+                        value={registerEmail}
+                        onChange={(e) => setRegisterEmail(e.target.value)}
+                        className={cn(
+                          registerEmail && (registerEmailValid ? "border-green-500" : "border-orange-500")
+                        )}
+                      />
+                      <EmailValidation
+                        email={registerEmail}
+                        onValidityChange={setRegisterEmailValid}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="register-password">Hasło</Label>
+                      <div className="relative">
+                        <Input
+                          id="register-password"
+                          type={showRegisterPassword ? "text" : "password"}
+                          required
+                          value={registerPassword}
+                          onChange={(e) => setRegisterPassword(e.target.value)}
+                          placeholder="Minimum 8 znaków"
+                          className={cn(
+                            registerPassword && (registerPasswordValid ? "border-green-500" : "border-orange-500")
+                          )}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                          onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                          aria-label={showRegisterPassword ? "Hide password" : "Show password"}
+                        >
+                          {showRegisterPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      <PasswordRequirements
+                        password={registerPassword}
+                        onValidityChange={setRegisterPasswordValid}
+                        show={registerPassword.length > 0}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="register-confirm-password">Potwierdź hasło</Label>
+                      <div className="relative">
+                        <Input
+                          id="register-confirm-password"
+                          type={showRegisterPassword2 ? "text" : "password"}
+                          required
+                          value={registerPassword2}
+                          onChange={(e) => setRegisterPassword2(e.target.value)}
+                          placeholder="Powtórz hasło"
+                          className={cn(
+                            registerPassword2 && (registerPasswordsMatch ? "border-green-500" : "border-orange-500")
+                          )}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                          onClick={() => setShowRegisterPassword2(!showRegisterPassword2)}
+                          aria-label={showRegisterPassword2 ? "Hide password" : "Show password"}
+                        >
+                          {showRegisterPassword2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {registerPassword2 && (
+                        <div className={cn(
+                          "flex items-center text-xs mt-1",
+                          registerPasswordsMatch ? "text-green-600" : "text-orange-600"
+                        )}>
+                          {registerPasswordsMatch ? (
+                            <>
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Hasła są identyczne
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Hasła nie są identyczne
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={!registerEmailValid || !registerPasswordValid || !registerPasswordsMatch}
+                  >
+                    Zarejestruj się
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          )}
+
+          {/* Forgot Password View */}
+          {currentView === "forgot-password" && (
+            <form onSubmit={handleForgotPassword}>
+              <div className="grid gap-4 py-4">
+                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Mail className="h-5 w-5 text-blue-600" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-medium">Zresetujemy Twoje hasło</p>
+                    <p>Podaj adres email, a wyślemy Ci link do resetowania hasła.</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="forgot-email">Adres email</Label>
+                  <Input
+                    id="forgot-email"
+                    type="email"
+                    placeholder="Podaj swój adres email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className={cn(
+                      forgotEmail && (forgotEmailValid ? "border-green-500" : "border-orange-500")
+                    )}
+                  />
+                  <EmailValidation
+                    email={forgotEmail}
+                    onValidityChange={setForgotEmailValid}
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoadingForgot || !forgotEmailValid}
+              >
+                {isLoadingForgot ? "Wysyłanie..." : "Wyślij link resetowania"}
+              </Button>
+            </form>
+          )}
+
+          {/* Reset Password View */}
+          {currentView === "reset-password" && (
+            <form onSubmit={handleResetPassword}>
+              <div className="grid gap-4 py-4">
+                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <div className="text-sm text-green-800">
+                    <p className="font-medium">Link jest prawidłowy</p>
+                    <p>Ustaw nowe hasło dla swojego konta.</p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="reset-password">Nowe hasło</Label>
+                  <div className="relative">
                     <Input
-                      id="register-email"
-                      type="email"
-                      placeholder={t("login_register_dialog.email_placeholder", "Podaj email")}
+                      id="reset-password"
+                      type={showResetPassword ? "text" : "password"}
                       required
-                      value={registerEmail}
-                      onChange={(e) => setRegisterEmail(e.target.value)}
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      placeholder="Minimum 8 znaków"
                       className={cn(
-                        emailValid === false && "border-red-500 focus-visible:ring-red-500",
-                        emailValid === true && "border-green-500 focus-visible:ring-green-500",
-                      )}
-                      aria-describedby="register-email-error"
-                    />
-                    <ValidationMessage
-                      valid={emailValid}
-                      message={t("login_register_dialog.invalid_email", "Podaj poprawny adres email")}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="register-password">{t("login_register_dialog.password")}</Label>
-                    <div className="relative">
-                      <Input
-                        id="register-password"
-                        type={showRegisterPassword ? "text" : "password"}
-                        required
-                        value={registerPassword}
-                        onChange={(e) => setRegisterPassword(e.target.value)}
-                        className={cn(
-                          passwordValid === false && "border-red-500 focus-visible:ring-red-500",
-                          passwordValid === true && "border-green-500 focus-visible:ring-green-500",
-                        )}
-                        aria-describedby="register-password-error"
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        onClick={() => setShowRegisterPassword(!showRegisterPassword)}
-                        aria-label={showRegisterPassword ? "Hide password" : "Show password"}
-                      >
-                        {showRegisterPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <ValidationMessage
-                      valid={passwordValid}
-                      message={t(
-                        "login_register_dialog.password_requirements",
-                        "Hasło musi zawierać co najmniej 8 znaków, jedną małą literę i jedną cyfrę lub znak specjalny",
+                        resetPassword && (resetPasswordValid ? "border-green-500" : "border-orange-500")
                       )}
                     />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowResetPassword(!showResetPassword)}
+                      aria-label={showResetPassword ? "Hide password" : "Show password"}
+                    >
+                      {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="confirm-password">{t("login_register_dialog.confirm_password")}</Label>
-                    <div className="relative">
-                      <Input
-                        id="confirm-password"
-                        type={showRegisterPassword2 ? "text" : "password"}
-                        required
-                        value={registerPassword2}
-                        onChange={(e) => setRegisterPassword2(e.target.value)}
-                        className={cn(
-                          passwordsMatch === false && "border-red-500 focus-visible:ring-red-500",
-                          passwordsMatch === true && "border-green-500 focus-visible:ring-green-500",
-                        )}
-                        aria-describedby="confirm-password-error"
-                      />
-                      <button
-                        type="button"
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        onClick={() => setShowRegisterPassword2(!showRegisterPassword2)}
-                        aria-label={showRegisterPassword2 ? "Hide password" : "Show password"}
-                      >
-                        {showRegisterPassword2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <ValidationMessage
-                      valid={passwordsMatch}
-                      message={t("login_register_dialog.passwords_dont_match", "Hasła nie są takie same!")}
-                    />
-                  </div>
+                  <PasswordRequirements
+                    password={resetPassword}
+                    onValidityChange={setResetPasswordValid}
+                    show={resetPassword.length > 0}
+                  />
                 </div>
-                <Button type="submit" className="w-full" disabled={!emailValid || !passwordValid || !passwordsMatch}>
-                  {t("login_register_dialog.register")}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="reset-confirm-password">Potwierdź nowe hasło</Label>
+                  <div className="relative">
+                    <Input
+                      id="reset-confirm-password"
+                      type={showResetConfirmPassword ? "text" : "password"}
+                      required
+                      value={resetConfirmPassword}
+                      onChange={(e) => setResetConfirmPassword(e.target.value)}
+                      placeholder="Powtórz hasło"
+                      className={cn(
+                        resetConfirmPassword && (resetPasswordsMatch ? "border-green-500" : "border-orange-500")
+                      )}
+                    />
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                      aria-label={showResetConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      {showResetConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {resetConfirmPassword && (
+                    <div className={cn(
+                      "flex items-center text-xs mt-1",
+                      resetPasswordsMatch ? "text-green-600" : "text-orange-600"
+                    )}>
+                      {resetPasswordsMatch ? (
+                        <>
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Hasła są identyczne
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          Hasła nie są identyczne
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoadingReset || !resetPasswordValid || !resetPasswordsMatch}
+              >
+                {isLoadingReset ? "Resetowanie..." : "Ustaw nowe hasło"}
+              </Button>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
     </>
   )
 }
+
+export default LoginRegisterDialog

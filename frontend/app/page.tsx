@@ -34,43 +34,71 @@ interface FuturePlan {
 
 export default function HomePage() {
   const { t } = useTranslation();
-  const { isAuthenticated, accessDenied, setAccessDenied, setTokenExpired, tokenExpired } = useContext(AuthContext);
+  const {
+    isAuthenticated,
+    accessDenied,
+    setAccessDenied,
+    setTokenExpired,
+    tokenExpired,
+    clearMessages
+  } = useContext(AuthContext);
 
-  const [fadeOut, setFadeOut] = useState(false);
+  const [fadeOutAccess, setFadeOutAccess] = useState(false);
+  const [fadeOutToken, setFadeOutToken] = useState(false);
 
+  // Effect dla accessDenied - tylko gdy user NIE jest authenticated
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (accessDenied) {
-      timer = setTimeout(() => {
-        setFadeOut(true);
+    if (accessDenied && !isAuthenticated) {
+      const fadeTimer = setTimeout(() => {
+        setFadeOutAccess(true);
       }, 4500);
+
       const resetTimer = setTimeout(() => {
         setAccessDenied(false);
-        setFadeOut(false);
-      }, 8000);
+        setFadeOutAccess(false);
+      }, 6000);
+
       return () => {
-        clearTimeout(timer);
+        clearTimeout(fadeTimer);
         clearTimeout(resetTimer);
       };
+    } else if (accessDenied && isAuthenticated) {
+      // Jeśli user jest authenticated, nie pokazuj komunikatu o accessDenied
+      setAccessDenied(false);
     }
-  }, [accessDenied, setAccessDenied]);
+  }, [accessDenied, isAuthenticated, setAccessDenied]);
 
+  // Effect dla tokenExpired - tylko gdy user PRZESZEDŁ z authenticated na nieAuthenticated
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (tokenExpired) {
-      timer = setTimeout(() => {
-        setFadeOut(true);
+    if (tokenExpired && !isAuthenticated) {
+      const fadeTimer = setTimeout(() => {
+        setFadeOutToken(true);
       }, 4500);
+
       const resetTimer = setTimeout(() => {
         setTokenExpired(false);
-        setFadeOut(false);
-      }, 8000);
+        setFadeOutToken(false);
+      }, 6000);
+
       return () => {
-        clearTimeout(timer);
+        clearTimeout(fadeTimer);
         clearTimeout(resetTimer);
       };
+    } else if (tokenExpired && isAuthenticated) {
+      // Jeśli user jest authenticated, nie pokazuj komunikatu o tokenExpired
+      setTokenExpired(false);
     }
-  }, [tokenExpired, setTokenExpired]);
+  }, [tokenExpired, isAuthenticated, setTokenExpired]);
+
+  // Wyczyść komunikaty gdy user się loguje
+  useEffect(() => {
+    if (isAuthenticated) {
+      clearMessages();
+      setFadeOutAccess(false);
+      setFadeOutToken(false);
+    }
+  }, [isAuthenticated, clearMessages]);
+
 
   const sections = [
     {
@@ -258,27 +286,35 @@ export default function HomePage() {
   return (
     <>
       {content}
-      {accessDenied && (
+
+      {/* Komunikat o accessDenied - tylko gdy NIE authenticated */}
+      {accessDenied && !isAuthenticated && (
         <div
           className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center bg-red-600 bg-opacity-90 backdrop-blur-md text-white py-3 px-6 rounded-xl shadow-lg z-50 transition-all duration-500 ${
-            fadeOut ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+            fadeOutAccess ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
           }`}
         >
           <MdErrorOutline className="mr-2 text-xl" />
           <p className="text-sm font-medium">
-            Niestety nie masz dostępu do tego zasobu, spróbuj zalogować/zarejestrować się i spróbuj ponownie.
+            {t('access_denied_message', {
+              defaultValue: 'Niestety nie masz dostępu do tego zasobu, spróbuj zalogować/zarejestrować się i spróbuj ponownie.'
+            })}
           </p>
         </div>
       )}
-      {tokenExpired && (
+
+      {/* Komunikat o tokenExpired - tylko gdy NIE authenticated */}
+      {tokenExpired && !isAuthenticated && (
         <div
-          className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center bg-red-600 bg-opacity-90 backdrop-blur-md text-white py-3 px-6 rounded-xl shadow-lg z-50 transition-all duration-500 ${
-            fadeOut ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+          className={`fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center bg-orange-600 bg-opacity-90 backdrop-blur-md text-white py-3 px-6 rounded-xl shadow-lg z-50 transition-all duration-500 ${
+            fadeOutToken ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
           }`}
         >
           <MdErrorOutline className="mr-2 text-xl" />
           <p className="text-sm font-medium">
-            Z powodu nieaktywności zostałeś wylogowany. Zaloguj się ponownie aby kontynuować
+            {t('token_expired_message', {
+              defaultValue: 'Z powodu nieaktywności zostałeś wylogowany. Zaloguj się ponownie aby kontynuować.'
+            })}
           </p>
         </div>
       )}
