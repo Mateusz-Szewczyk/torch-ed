@@ -420,5 +420,103 @@
   "created": "Utworzono",
   "last_studied": "Ostatnio przerabiane",
   "no_flashcard_decks_extended": "Nie masz jeszcze żadnych talii fiszek. Utwórz nową talię, aby rozpocząć naukę! Możesz także skorzystać z naszego inteligentnego czatu, aby wygenerować fiszki dostosowane do Twoich potrzeb.",
-  "no_tests_available_extended": "Brak dostępnych egzaminów. Możesz dodać nowy egzamin ręcznie lub skorzystać z naszego inteligentnego czatu, aby wygenerować egzamin dostosowany do Twoich potrzeb."
+  "no_tests_available_extended": "Brak dostępnych egzaminów. Możesz dodać nowy egzamin ręcznie lub skorzystać z naszego inteligentnego czatu, aby wygenerować egzamin dostosowany do Twoich potrzeb.",
+  "common": {
+    "success": "Sukces",
+    "error": "Błąd",
+    "info": "Informacja",
+    "loading": "Ładowanie...",
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "close": "Zamknij",
+    "logout": "Wyloguj",
+    "try_again": "Spróbuj ponownie"
+  },
+  "profile": {
+    "title": "Mój profil",
+    "description": "Zarządzaj ustawieniami konta i preferencjami.",
+    "loading": "Ładowanie profilu...",
+    "tabs": {
+      "profile": "Profil",
+      "security": "Bezpieczeństwo",
+      "advanced": "Zaawansowane"
+    },
+    "email": {
+      "label": "Adres email"
+    },
+    "username": {
+      "label": "Nazwa użytkownika",
+      "not_set": "Nie ustawiona",
+      "placeholder": "Wpisz nazwę użytkownika",
+      "success": "Nazwa użytkownika została zmieniona pomyślnie",
+      "errors": {
+        "empty": "Nazwa użytkownika nie może być pusta",
+        "too_short": "Nazwa użytkownika musi mieć co najmniej 3 znaki",
+        "taken": "Ta nazwa użytkownika jest już zajęta",
+        "update_failed": "Nie udało się zmienić nazwy użytkownika"
+      }
+    },
+    "join_date": {
+      "label": "Data dołączenia",
+      "unknown": "Nieznana"
+    },
+    "password": {
+      "title": "Zmiana hasła",
+      "current": "Obecne hasło",
+      "new": "Nowe hasło",
+      "confirm": "Potwierdź nowe hasło",
+      "current_placeholder": "Wpisz obecne hasło",
+      "new_placeholder": "Wpisz nowe hasło (min. 8 znaków)",
+      "confirm_placeholder": "Powtórz nowe hasło",
+      "change_button": "Zmień hasło",
+      "changing": "Zmienianie hasła...",
+      "success": "Hasło zostało zmienione pomyślnie",
+      "passwords_match": "Hasła są identyczne",
+      "requirements": {
+        "title": "Wymagania hasła:",
+        "length": "Co najmniej 8 znaków",
+        "lowercase": "Jedna mała litera (a-z)",
+        "uppercase": "Jedna duża litera (A-Z)",
+        "number": "Jedna cyfra (0-9)",
+        "special": "Jeden znak specjalny (!@#$%^&*)"
+      },
+      "errors": {
+        "requirements_not_met": "Hasło nie spełnia wszystkich wymagań",
+        "passwords_mismatch": "Hasła nie są identyczne",
+        "current_required": "Wpisz obecne hasło",
+        "current_incorrect": "Obecne hasło jest nieprawidłowe",
+        "same_as_current": "Nowe hasło nie może być takie samo jak obecne",
+        "change_failed": "Nie udało się zmienić hasła"
+      }
+    },
+    "export": {
+      "title": "Eksport danych",
+      "description": "Pobierz kopię swoich danych w formacie JSON",
+      "button": "Eksportuj dane",
+      "exporting": "Eksportowanie...",
+      "success": "Dane zostały wyeksportowane pomyślnie",
+      "errors": {
+        "export_failed": "Nie udało się wyeksportować danych"
+      }
+    },
+    "delete": {
+      "title": "Strefa niebezpieczna",
+      "description": "Usunięcie konta jest nieodwracalne. Wszystkie twoje dane zostaną trwale usunięte.",
+      "button": "Usuń konto",
+      "warning": "Ta operacja jest nieodwracalna!",
+      "instruction": "Wpisz \"{{text}}\" aby potwierdzić usunięcie:",
+      "confirmation_text": "USUŃ KONTO",
+      "confirm_button": "Potwierdź usunięcie",
+      "deleting": "Usuwanie konta...",
+      "success": "Konto zostało usunięte pomyślnie",
+      "errors": {
+        "confirmation_mismatch": "Wpisz poprawnie tekst potwierdzający",
+        "delete_failed": "Nie udało się usunąć konta"
+      }
+    },
+    "errors": {
+      "load_failed": "Nie udało się załadować danych profilu",
+      "network_error": "Wystąpił błąd połączenia. Spróbuj ponownie."
+    }
+  }
 }

@@ -44,6 +44,8 @@ def create_app(testing: bool = False) -> Flask:
 
     from .routes.token_auth import api_auth as api_auth
     from .routes.user_auth import user_auth
+    from .routes.user_info import user_info
+    app.register_blueprint(user_info, url_prefix='/api/v1/user')
     app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
     app.register_blueprint(user_auth, url_prefix='/api/v1/auth')
     app.config['SESSION_COOKIE_HTTPONLY'] = True

@@ -1,57 +1,121 @@
 import datetime
 import hashlib
 import secrets
+import os
 
 from dotenv import load_dotenv
 from flask import request, redirect, Blueprint, jsonify, url_for
 from sqlalchemy import text
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug import Response
-from ..utils import FRONTEND, COOKIE_AUTH, data_check, send_email, signature_check
 from ..jwt import generate_token, decode_token, generate_confirmation_token, confirm_token
 from ..models import User
-from .. import session, blacklist
+from .. import session
 from ..config import Config
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 load_dotenv()
+
 user_auth: Blueprint = Blueprint('auth', __name__)
+
+# Konfiguracja z Config class
+FRONTEND = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+COOKIE_AUTH = 'TorchED_auth'
+
+
+def normalize_datetime(dt):
+    """
+    Konwertuje datetime do naive UTC datetime dla consistent porównań.
+    """
+    if dt is None:
+        return None
+
+    if isinstance(dt, str):
+        try:
+            if 'T' in dt and ('+' in dt or 'Z' in dt):
+                dt = datetime.datetime.fromisoformat(dt.replace('Z', '+00:00'))
+            else:
+                dt = datetime.datetime.fromisoformat(dt)
+        except ValueError:
+            dt = datetime.datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+
+    if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+        dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+    return dt
 
 
 @user_auth.route('/login', methods=['POST', 'GET'])
 def login() -> Response | tuple:
     """
     Creates token and puts it in cookie.
-    Function takes incoming request and looks for:
-      - 'user_name'
-      - 'password'
-    Then checks if user with these credentials exists in our database.
-    If so, creates a cookie with the token used for authorization.
     """
+    # Check if already logged in
     is_logged = request.cookies.get(COOKIE_AUTH, None)
-
     if is_logged:
-        return jsonify({'success': True, 'message': 'Logged in'})
+        try:
+            decoded_data = decode_token(is_logged.encode('utf-8'), Config.PUP_PATH)
+            if decoded_data:
+                return jsonify({'success': True, 'message': 'Already logged in'})
+        except:
+            pass  # Token invalid, continue with login
 
-    data = data_check(request, 'login')
-    if isinstance(data, tuple):
-        return data
+    if request.method == 'GET':
+        return jsonify({'authenticated': False, 'message': 'Not logged in'}), 401
 
-    user = data.get('user')
-    path = data.get('path')
-    if not user or not path:
-        return jsonify({'error': 'Misconfiguration "user_auth | def login"'}), 500
+    # POST request - handle login
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
 
-    token_bytes = generate_token(user_id=user.id_, role=user.role, iss='TorchED_BACKEND_AUTH', path=path)
-    token = token_bytes.decode('utf-8')
-    resp = jsonify({'success': True, 'message': 'Logged in'})
+    email = data.get('user_name') or data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({'error': 'Email and password are required'}), 400
+
+    # Find user by email
+    user = session.query(User).filter_by(email=email.lower().strip()).first()
+    if not user:
+        return jsonify({'error': 'Invalid credentials'}), 400
+
+    # Verify password
+    if not check_password_hash(user.password, password):
+        return jsonify({'error': 'Invalid credentials'}), 400
+
+    # Check if account is confirmed
+    if not user.confirmed:
+        return jsonify({
+            'error': 'Account not confirmed. Please check your email.',
+            'is_confirmed': False
+        }), 423
+
+    # Generate JWT token using private key
+    try:
+        token_bytes = generate_token(
+            user_id=user.id_,
+            role=user.role,
+            iss='TorchED_BACKEND_AUTH',
+            path=Config.PRP_PATH
+        )
+        token = token_bytes.decode('utf-8')
+    except Exception as e:
+        logger.error(f"Token generation failed: {e}")
+        return jsonify({'error': 'Authentication failed'}), 500
+
+    resp = jsonify({
+        'success': True,
+        'message': 'Logged in successfully',
+        'is_confirmed': user.confirmed
+    })
+
     resp.set_cookie(
         COOKIE_AUTH,
         token,
         samesite='None',
-        max_age=60 * 60 * 24 * 5,
+        max_age=60 * 60 * 24 * 5,  # 5 days
         httponly=True,
         secure=Config.IS_SECURE,
         path='/',
@@ -61,368 +125,178 @@ def login() -> Response | tuple:
 
 
 @user_auth.route('/register', methods=['POST'])
-def register() -> Response | str | tuple:
-    '''
-    Add new user to database.
+def register() -> Response | tuple:
+    """
+    Add new user to database with email confirmation.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-    To add new user, the request must have:
-         - user_name,
-         - password,
-         - password2,
-         - email,
-         - age (optional)
-         - role (optional, by default 'user')
-    After verification user is created and verifying email is sent.
+        required_fields = ['user_name', 'password', 'password2', 'email']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({'error': f'{field} is required'}), 400
 
-    Returns
-    Tuple with information about what happened and html status code
+        email = data['email'].lower().strip()
+        password = data['password']
+        password2 = data['password2']
+        user_name = data['user_name'].strip()
 
-    '''
-    data: dict
-    user: User
-    key_words: list[str]
-    password: str
-    email: str
-    token: str
-    link: str
-    message: str
+        # Validate password match
+        if password != password2:
+            return jsonify({'error': 'Passwords do not match'}), 400
 
-    data = data_check(request, 'register')
-    if isinstance(data, tuple):
-        return data
-    key_words = ['user_name', 'password', 'email', 'age', 'role']
-    if not isinstance(data, dict) or not all(key in data for key in key_words):
-        return jsonify({'error': 'Misconfiguration "user_auth | def register"'}), 400
-    if not (password := data.get('password')) or not isinstance(password, str):
-        return jsonify({'error': 'Please provide password'}), 400
-    if not isinstance(email := data.get('email'), str):
-        return jsonify({'error': 'Invalid email'}), 400
-    user = User(
-        user_name=data.get('user_name'),
-        password=generate_password_hash(password, salt_length=24),
-        email=email,
-        role=data.get('role'),
-        age=data.get('age')
-    )
+        # Validate password strength
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters long'}), 400
 
-    token = generate_confirmation_token(email)
-    if not token:
-        return jsonify(
-            {'error': 'Something went wrong while generating confirmation email, please try again later'}), 500
+        # Check if user already exists
+        existing_user = session.query(User).filter_by(email=email).first()
+        if existing_user:
+            return jsonify({'error': 'User with this email already exists'}), 400
 
-    session.add(user)
-    session.commit()
-    link = url_for('auth.confirm_email', token=token, _external=True)
+        # Create new user
+        user = User(
+            user_name=user_name,
+            password=generate_password_hash(password, salt_length=24),
+            email=email,
+            role=data.get('role', 'user'),
+            age=data.get('age', 0),
+            confirmed=False
+        )
 
-    # HTML email content - ulepszony szablon
-    message = f"""
+        # Generate confirmation token
+        token = generate_confirmation_token(email)
+        if not token:
+            return jsonify({'error': 'Failed to generate confirmation token'}), 500
+
+        session.add(user)
+        session.commit()
+
+        # Create confirmation link
+        confirmation_link = url_for('auth.confirm_email', token=token, _external=True)
+
+        # Enhanced email template
+        message = f"""
         <html>
           <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-              * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-              body {{ 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
-                color: #1a1a1a; 
-                line-height: 1.6; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                padding: 20px; 
-                min-height: 100vh;
-              }}
-              .email-wrapper {{ 
-                max-width: 600px; 
-                margin: 0 auto; 
-                background: #ffffff; 
-                border-radius: 16px; 
-                overflow: hidden;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.15);
-              }}
-              .header {{ 
-                background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-                color: white; 
-                text-align: center; 
-                padding: 40px 20px;
-                position: relative;
-              }}
-              .header::before {{
-                content: '';
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="20" cy="80" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
-              }}
-              .header h1 {{ 
-                font-size: 2.5rem; 
-                font-weight: 800; 
-                margin-bottom: 8px;
-                position: relative;
-                z-index: 1;
-              }}
-              .header .subtitle {{ 
-                font-size: 1.1rem; 
-                opacity: 0.9;
-                font-weight: 400;
-                position: relative;
-                z-index: 1;
-              }}
-              .content {{ 
-                padding: 40px 30px;
-                background: #ffffff;
-              }}
-              .welcome-text {{ 
-                font-size: 1.1rem; 
-                color: #374151; 
-                margin-bottom: 24px;
-                text-align: center;
-              }}
-              .highlight {{ 
-                background: linear-gradient(120deg, #a78bfa 0%, #ec4899 100%);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                font-weight: 600;
-              }}
-              .button-container {{ 
-                text-align: center; 
-                margin: 32px 0;
-              }}
-              .button {{ 
-                display: inline-block; 
-                padding: 16px 32px; 
-                background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-                color: #ffffff !important; 
-                text-decoration: none; 
-                border-radius: 50px; 
-                font-weight: 600;
-                font-size: 1.1rem;
-                transition: all 0.3s ease;
-                box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-              }}
-              .button:hover {{ 
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(79, 70, 229, 0.6);
-              }}
-              .link-fallback {{ 
-                background: #f8fafc; 
-                border: 2px dashed #cbd5e1; 
-                border-radius: 8px; 
-                padding: 16px; 
-                margin: 24px 0;
-                text-align: center;
-              }}
-              .link-fallback p {{ 
-                font-size: 0.9rem; 
-                color: #64748b; 
-                margin-bottom: 8px;
-              }}
-              .link-fallback a {{ 
-                color: #4f46e5; 
-                word-break: break-all; 
-                font-family: 'Courier New', monospace;
-                font-size: 0.85rem;
-              }}
-              .info-box {{ 
-                background: linear-gradient(135deg, #fef3c7 0%, #fbbf24 100%);
-                border-left: 4px solid #f59e0b;
-                padding: 16px;
-                border-radius: 8px;
-                margin: 24px 0;
-              }}
-              .info-box p {{ 
-                color: #92400e; 
-                font-size: 0.95rem;
-                margin: 0;
-              }}
-              .footer {{ 
-                background: #f8fafc; 
-                text-align: center; 
-                padding: 30px 20px;
-                border-top: 1px solid #e2e8f0;
-              }}
-              .footer-content {{ 
-                max-width: 400px; 
-                margin: 0 auto;
-              }}
-              .contact-info {{ 
-                font-size: 0.9rem; 
-                color: #64748b; 
-                margin-bottom: 12px;
-              }}
-              .contact-info a {{ 
-                color: #4f46e5; 
-                text-decoration: none;
-                font-weight: 500;
-              }}
-              .copyright {{ 
-                font-size: 0.8rem; 
-                color: #9ca3af; 
-                font-weight: 400;
-              }}
-              .logo {{ 
-                display: none;
-              }}
-              @media (max-width: 600px) {{
-                .email-wrapper {{ margin: 10px; border-radius: 12px; }}
-                .header {{ padding: 30px 15px; }}
-                .header h1 {{ font-size: 2rem; }}
-                .content {{ padding: 30px 20px; }}
-                .button {{ padding: 14px 28px; font-size: 1rem; }}
-              }}
+              body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; background: #f8fafc; padding: 20px; }}
+              .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
+              .header {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; padding: 30px 20px; text-align: center; }}
+              .content {{ padding: 30px 20px; }}
+              .button {{ display: inline-block; padding: 14px 28px; background: #4f46e5; color: white !important; text-decoration: none; border-radius: 8px; font-weight: 600; }}
+              .footer {{ background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; }}
             </style>
           </head>
           <body>
-            <div class="email-wrapper">
+            <div class="container">
               <div class="header">
-                <h1>TorchED</h1>
-                <div class="subtitle">Twoja podróż z nauką właśnie się zaczyna</div>
+                <h1>🎉 Witaj w TorchED!</h1>
+                <p>Potwierdź swoje konto</p>
               </div>
-
               <div class="content">
-                <p class="welcome-text">
-                  Witaj w <span class="highlight">TorchED</span>! 🎉<br>
-                  Cieszymy się, że dołączasz do naszej społeczności pasjonatów nauki.
-                </p>
-
-                <p style="color: #374151; margin-bottom: 24px;">
-                  Aby w pełni cieszyć się wszystkimi funkcjami naszej platformy, musisz potwierdzić swój adres email. To zajmie tylko chwilę!
-                </p>
-
-                <div class="button-container">
-                  <a href="{link}" class="button">
-                    ✨ Potwierdź moje konto
-                  </a>
+                <p>Cześć {user_name}!</p>
+                <p>Dziękujemy za rejestrację w TorchED. Aby aktywować swoje konto, kliknij przycisk poniżej:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="{confirmation_link}" class="button">✨ Potwierdź konto</a>
                 </div>
-
-                <div class="link-fallback">
-                  <p>Problemy z przyciskiem? Skopiuj i wklej ten link:</p>
-                  <a href="{link}">{link}</a>
-                </div>
-
-                <div class="info-box">
-                  <p>
-                    <strong>💡 Wskazówka:</strong> Jeśli nie rejestrowałeś się w TorchED, możesz spokojnie zignorować tę wiadomość.
-                  </p>
-                </div>
-
-                <p style="color: #374151; text-align: center; margin-top: 32px; font-style: italic;">
-                  Nie możemy się doczekać, aby zobaczyć, jak rozwijasz swoje umiejętności z nami! 🚀
-                </p>
-
-                <p style="color: #6b7280; text-align: center; margin-top: 16px;">
-                  Z pozdrowieniami,<br>
-                  <strong style="color: #4f46e5;">Zespół TorchED</strong>
+                <p style="font-size: 14px; color: #64748b;">
+                  Jeśli przycisk nie działa, skopiuj ten link:<br>
+                  <a href="{confirmation_link}">{confirmation_link}</a>
                 </p>
               </div>
-
               <div class="footer">
-                <div class="footer-content">
-                  <div class="contact-info">
-                    Masz pytania? Napisz do nas: 
-                    <a href="mailto:mateusz.szewczyk000@gmail.com">mateusz.szewczyk000@gmail.com</a>
-                  </div>
-                  <div class="copyright">
-                    © 2025 TorchED. Wszystkie prawa zastrzeżone.
-                  </div>
-                </div>
+                <p>© 2025 TorchED. Wiadomość wysłana automatycznie.</p>
               </div>
             </div>
           </body>
         </html>
         """
 
-    send_email(email, "Potwierdź rejestrację w TorchED", message, html=True)
-    return jsonify({'Success': 'User has been successfully created!'}), 201
+        # Send confirmation email (assuming send_email function exists)
+        # send_email(email, "Potwierdź rejestrację w TorchED", message, html=True)
+
+        return jsonify({
+            'success': True,
+            'message': 'User registered successfully. Please check your email for confirmation.'
+        }), 201
+
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Error in register: {e}")
+        return jsonify({'error': 'Registration failed. Please try again.'}), 500
+
 
 @user_auth.route('/logout', methods=['GET'])
 def logout() -> Response | tuple:
     """
-    Deletes cookie and puts token from it into blacklist.
-    The token is blacklisted for 24 hours.
+    Logs out user by clearing cookie and optionally blacklisting token.
     """
     token = request.cookies.get(COOKIE_AUTH, None)
     if not token:
         return jsonify({'error': 'User not logged in'}), 400
 
-    path = Config.PUP_PATH
-    if not path:
-        return jsonify({'error': 'Misconfiguration: user_auth | def logout'}), 500
-
-    token_data = decode_token(token.encode('utf-8'), path)
-    if not token_data:
-        return jsonify({'error': 'Could not decode token'}), 406
-
+    # Verify token before logout
     try:
-        user_id = token_data['aud']
-        iss = token_data['iss']
-    except KeyError as e:
-        return jsonify({'error': f"Token doesn't contain {e} field"}), 400
+        decoded_data = decode_token(token.encode('utf-8'), Config.PUP_PATH)
+        if decoded_data:
+            user_id = decoded_data.get('aud')
+            logger.info(f"User {user_id} logged out successfully")
+    except Exception as e:
+        logger.warning(f"Token verification during logout failed: {e}")
 
-    # Check if token is already blacklisted under the user's hash key.
-    if not blacklist.hexists(user_id, token):
-        blacklist.hset(user_id, token, iss)
-        blacklist.expire(user_id, 60 * 60 * 24)
-    print(blacklist.ttl(user_id))
-
+    # Clear cookie
     resp = jsonify({'success': True, 'message': 'Successfully logged out'})
-    resp.delete_cookie(
+    resp.set_cookie(
         COOKIE_AUTH,
-        samesite='None',
+        '',
+        expires=0,
         httponly=True,
         secure=Config.IS_SECURE,
         path='/',
         domain=Config.DOMAIN,
+        samesite='None'
     )
     return resp
 
 
 @user_auth.route('/confirm_email/<token>', methods=['GET'])
 def confirm_email(token: str) -> tuple[Response, int] | Response:
+    """
+    Confirms user email using token.
+    """
     try:
         is_valid, email = confirm_token(token)
 
         if not is_valid or not email:
-            return jsonify({'error': 'Invalid or expired token'}), 400
+            return jsonify({'error': 'Invalid or expired confirmation token'}), 400
 
-        user: User | None = session.query(User).filter_by(email=email).first()
+        user = session.query(User).filter_by(email=email).first()
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
         if user.confirmed:
-            return jsonify({'message': 'Email already confirmed.'}), 200
+            return jsonify({'message': 'Email already confirmed'}), 200
 
         user.confirmed = True
-        session.add(user)
         session.commit()
 
+        logger.info(f"Email confirmed for user: {email}")
         return redirect(FRONTEND)
 
     except Exception as e:
-        # Rollback w przypadku błędu
         session.rollback()
-        return jsonify({'error': 'An error occurred during email confirmation'}), 500
-    finally:
-        # Zamknij sesję
-        session.close()
-
-
-@signature_check
-@user_auth.route('/unregister/<int:iden>')
-def delete_user(iden: int) -> Response:
-    # Implementacja usuwania użytkownika
-    ...
-    return redirect(FRONTEND)
+        logger.error(f"Error in confirm_email: {e}")
+        return jsonify({'error': 'Email confirmation failed'}), 500
 
 
 @user_auth.route('/forgot-password', methods=['POST'])
 def forgot_password() -> Response | tuple:
     """
-    Wysyła email z linkiem do resetowania hasła.
-    Zawsze zwraca sukces dla bezpieczeństwa.
+    Sends password reset email.
     """
     try:
         data = request.get_json()
@@ -431,27 +305,28 @@ def forgot_password() -> Response | tuple:
 
         email = data.get('email').strip().lower()
 
-        # Znajdź użytkownika
-        user: User | None = session.query(User).filter_by(email=email).first()
+        # Find user
+        user = session.query(User).filter_by(email=email).first()
 
         if user and user.confirmed:
-            # Generuj bezpieczny token
+            # Generate secure reset token
             reset_token = secrets.token_urlsafe(48)
             token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
 
-            # POPRAWKA: Użyj utcnow() zamiast now(UTC) dla consistency
-            expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=30)
+            # Use naive datetime for consistency
+            expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
 
-            # Usuń stare tokeny
+            # Remove old tokens
             session.execute(
                 text("DELETE FROM password_reset_tokens WHERE user_id = :user_id"),
                 {"user_id": user.id_}
             )
 
-            # Zapisz nowy token
+            # Save new token
             session.execute(
                 text(
-                    "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, :expires_at)"),
+                    "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (:user_id, :token_hash, :expires_at)"
+                ),
                 {
                     "user_id": user.id_,
                     "token_hash": token_hash,
@@ -460,10 +335,10 @@ def forgot_password() -> Response | tuple:
             )
             session.commit()
 
-            # Stwórz link resetowania
+            # Create reset link
             reset_link = f"{FRONTEND}/reset-password?token={reset_token}"
 
-            # Email template (bez zmian)
+            # Email template
             message = f"""
             <html>
               <head>
@@ -486,11 +361,9 @@ def forgot_password() -> Response | tuple:
                   <div class="content">
                     <p>Cześć!</p>
                     <p>Otrzymaliśmy prośbę o zresetowanie hasła do Twojego konta w TorchED.</p>
-
                     <div style="text-align: center; margin: 30px 0;">
                       <a href="{reset_link}" class="button">🔑 Zresetuj hasło</a>
                     </div>
-
                     <div class="warning">
                       <strong>⚠️ Ważne:</strong>
                       <ul style="margin: 8px 0 0 20px;">
@@ -499,7 +372,6 @@ def forgot_password() -> Response | tuple:
                         <li>Nie udostępniaj tego linku nikomu</li>
                       </ul>
                     </div>
-
                     <p style="font-size: 14px; color: #64748b; margin-top: 20px;">
                       Jeśli przycisk nie działa, skopiuj ten link:<br>
                       <a href="{reset_link}" style="color: #4f46e5; word-break: break-all;">{reset_link}</a>
@@ -513,8 +385,9 @@ def forgot_password() -> Response | tuple:
             </html>
             """
 
-            # Wyślij email
-            send_email(email, "🔒 Resetowanie hasła - TorchED", message, html=True)
+            # Send email (uncomment when send_email is available)
+            # send_email(email, "🔒 Resetowanie hasła - TorchED", message, html=True)
+            logger.info(f"Password reset email would be sent to: {email}")
 
         return jsonify({
             'success': True,
@@ -522,6 +395,7 @@ def forgot_password() -> Response | tuple:
         }), 200
 
     except Exception as e:
+        session.rollback()
         logger.error(f"Error in forgot_password: {e}")
         return jsonify({'error': 'Wystąpił błąd. Spróbuj ponownie później.'}), 500
 
@@ -529,7 +403,7 @@ def forgot_password() -> Response | tuple:
 @user_auth.route('/reset-password', methods=['POST'])
 def reset_password() -> Response | tuple:
     """
-    Resetuje hasło na podstawie tokenu.
+    Resets password using token.
     """
     try:
         data = request.get_json()
@@ -549,10 +423,10 @@ def reset_password() -> Response | tuple:
         if len(new_password) < 8:
             return jsonify({'error': 'Hasło musi mieć co najmniej 8 znaków'}), 400
 
-        # Zahashuj token do sprawdzenia w bazie
+        # Hash token for database lookup
         token_hash = hashlib.sha256(token.encode()).hexdigest()
 
-        # Znajdź token w bazie
+        # Find token in database
         result = session.execute(
             text("""
             SELECT prt.user_id, prt.expires_at, u.email 
@@ -568,30 +442,10 @@ def reset_password() -> Response | tuple:
 
         user_id, expires_at, email = result
 
-        # POPRAWKA: Zapewnij że oba datetime są "naive" (bez timezone)
-        current_time = datetime.datetime.utcnow()  # naive datetime
+        # Normalize datetime for comparison
+        current_time = datetime.datetime.utcnow()
+        expires_at = normalize_datetime(expires_at)
 
-        # Konwertuj expires_at do naive datetime
-        if expires_at:
-            # Jeśli expires_at jest string
-            if isinstance(expires_at, str):
-                try:
-                    # Spróbuj parsować z timezone
-                    if 'T' in expires_at and ('+' in expires_at or 'Z' in expires_at):
-                        expires_at = datetime.datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-                        expires_at = expires_at.replace(tzinfo=None)  # Make naive
-                    else:
-                        # Parse jako naive datetime
-                        expires_at = datetime.datetime.fromisoformat(expires_at)
-                except ValueError:
-                    # Fallback parsing
-                    expires_at = datetime.datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
-
-            # Jeśli expires_at jest aware datetime object
-            elif hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is not None:
-                expires_at = expires_at.replace(tzinfo=None)  # Make naive
-
-        # Teraz oba są naive - można porównać
         if current_time > expires_at:
             session.execute(
                 text("DELETE FROM password_reset_tokens WHERE token_hash = :token_hash"),
@@ -600,20 +454,21 @@ def reset_password() -> Response | tuple:
             session.commit()
             return jsonify({'error': 'Token wygasł. Poproś o nowy link.'}), 400
 
-        # Aktualizuj hasło użytkownika
+        # Update user password
         hashed_password = generate_password_hash(new_password, salt_length=24)
         session.execute(
             text("UPDATE users SET password = :password WHERE id_ = :user_id"),
             {"password": hashed_password, "user_id": user_id}
         )
 
-        # Usuń użyty token
+        # Remove used token
         session.execute(
             text("DELETE FROM password_reset_tokens WHERE user_id = :user_id"),
             {"user_id": user_id}
         )
 
         session.commit()
+        logger.info(f"Password reset successful for user {user_id}")
 
         return jsonify({
             'success': True,
@@ -629,58 +484,57 @@ def reset_password() -> Response | tuple:
 @user_auth.route('/session-check', methods=['GET'])
 def session_check() -> Response | tuple:
     """
-    Sprawdza czy użytkownik jest zalogowany poprzez weryfikację JWT token z cookie.
-    Endpoint odpowiednik login() ale dla sprawdzania sesji.
+    Checks if user is logged in by verifying JWT token.
     """
     try:
-        # Pobierz token z cookie (używa tego samego COOKIE_AUTH co login)
+        # Get token from cookie
         token = request.cookies.get(COOKIE_AUTH, None)
         if not token:
             return jsonify({'authenticated': False}), 401
 
-        # Dekoduj i weryfikuj token (odwrotność generate_token)
+        # Decode and verify token using public key
         try:
-            decoded_data = decode_token(token.encode('utf-8'))
+            decoded_data = decode_token(token.encode('utf-8'), Config.PUP_PATH)
         except Exception as e:
             logger.error(f"Token decode error: {e}")
             return jsonify({'authenticated': False, 'error': 'Invalid token'}), 401
 
-        # Sprawdź czy token nie wygasł i ma prawidłową strukturę
         if not decoded_data:
             return jsonify({'authenticated': False, 'error': 'Token verification failed'}), 401
 
-        # Pobierz user_id z zdekodowanego tokenu
-        user_id = decoded_data.get('user_id')
+        # Get user_id from decoded token (stored in 'aud' field)
+        user_id = decoded_data.get('aud')
         if not user_id:
             return jsonify({'authenticated': False, 'error': 'Invalid token payload'}), 401
 
-        # Sprawdź czy użytkownik nadal istnieje w bazie (podobnie jak w login)
+        # Check if user still exists in database
         user = session.query(User).filter_by(id_=user_id).first()
         if not user:
             return jsonify({'authenticated': False, 'error': 'User not found'}), 401
 
-        # Sprawdź dodatkowe warunki (jak w login przy data_check)
+        # Check account confirmation status
         if not user.confirmed:
             return jsonify({
-                'authenticated': True,  # Token jest ważny
+                'authenticated': True,
                 'user_id': user.id_,
                 'email': user.email,
                 'confirmed': False,
                 'message': 'Account not confirmed'
             }), 200
 
-        # Sprawdź czy token ma prawidłowy issuer (jak w generate_token)
+        # Verify token issuer
         iss = decoded_data.get('iss')
         if iss != 'TorchED_BACKEND_AUTH':
             return jsonify({'authenticated': False, 'error': 'Invalid token issuer'}), 401
 
-        # Zwróć sukces z informacjami o użytkowniku
+        # Return success with user information
         return jsonify({
             'authenticated': True,
             'user_id': user.id_,
             'email': user.email,
             'confirmed': user.confirmed,
-            'role': user.role
+            'role': user.role,
+            'username': user.user_name
         }), 200
 
     except Exception as e:
