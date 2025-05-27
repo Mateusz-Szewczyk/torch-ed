@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import re
 import secrets
 import os
 
@@ -148,9 +149,17 @@ def register() -> Response | tuple:
         if password != password2:
             return jsonify({'error': 'Passwords do not match'}), 400
 
-        # Validate password strength
+        # Password validation regexes (zgodne z frontendem)
         if len(password) < 8:
-            return jsonify({'error': 'Password must be at least 8 characters long'}), 400
+            return jsonify({'error': 'Hasło musi mieć co najmniej 8 znaków.'}), 400
+        if not re.search(r'[a-z]', password):
+            return jsonify({'error': 'Hasło musi zawierać co najmniej jedną małą literę (a-z).'}), 400
+        if not re.search(r'[A-Z]', password):
+            return jsonify({'error': 'Hasło musi zawierać co najmniej jedną dużą literę (A-Z).'}), 400
+        if not re.search(r'[0-9]', password):
+            return jsonify({'error': 'Hasło musi zawierać co najmniej jedną cyfrę (0-9).'}), 400
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+            return jsonify({'error': 'Hasło musi zawierać co najmniej jeden znak specjalny (!@#$%^&*(),.?":{}|<>).'}), 400
 
         # Check if user already exists
         existing_user = session.query(User).filter_by(email=email).first()
@@ -178,7 +187,7 @@ def register() -> Response | tuple:
         # Create confirmation link
         confirmation_link = url_for('auth.confirm_email', token=token, _external=True)
 
-        # Enhanced email template
+        # Enhanced email template (jak poprzednio)
         message = f"""
         <html>
           <head>
