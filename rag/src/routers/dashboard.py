@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime, date
-from sqlalchemy import func
+from datetime import datetime, date, timedelta
+from sqlalchemy import func, and_
 
 from ..dependencies import get_db
 from ..auth import get_current_user
@@ -12,9 +12,13 @@ from ..models import (
     StudySession as StudySessionModel,
     ExamResultAnswer as ExamResultAnswerModel,
     ExamResult as ExamResultModel,
+    UserDeckAccess,
+    UserExamAccess,
     Deck,
     Exam,
     User,
+    Flashcard,
+    ExamQuestion,
 )
 
 router = APIRouter()
@@ -29,9 +33,12 @@ async def get_dashboard_data(
     """
     Pobiera dane dashboardu dla uwierzytelnionego użytkownika jako surowy JSON.
     Zwraca średnie wyniki dziennie oraz nazwy decków i egzaminów.
+    Rozszerzone o udostępnione materiały zachowując wsteczną kompatybilność.
     """
     user_id = current_user.id_
     try:
+        # === ORYGINALNE ZAPYTANIA (zachowane dla kompatybilności) ===
+
         # Pobierz dane studiów
         study_records_result = (
             db.query(StudyRecordModel)
@@ -71,12 +78,107 @@ async def get_dashboard_data(
             db.query(ExamResultAnswerModel)
             .filter(ExamResultAnswerModel.exam_result_id.in_(exam_result_ids))
             .all()
-        )
+        ) if exam_result_ids else []
 
-        # Pobierz nazwy decków
-        deck_ids = {session.deck_id for session in study_sessions_result}
-        decks = db.query(Deck).filter(Deck.id.in_(deck_ids)).all()
-        deck_id_to_name = {deck.id: deck.name for deck in decks}
+        # === ROZSZERZONE ZAPYTANIA (nowe dane) ===
+
+        # Pobierz wszystkie decki użytkownika (własne + udostępnione)
+        # Własne decki
+        own_deck_ids = set()
+        own_decks = db.query(Deck).filter(
+            Deck.user_id == user_id,
+            Deck.template_id.is_(None)  # Wyklucz kopie z udostępnionych
+        ).all()
+        own_deck_ids = {deck.id for deck in own_decks}
+
+        # Udostępnione decki (kopie użytkownika)
+        shared_deck_access = db.query(UserDeckAccess).filter(
+            UserDeckAccess.user_id == user_id,
+            UserDeckAccess.is_active == True
+        ).all()
+
+        shared_deck_ids = set()
+        shared_decks_info = {}
+        for access in shared_deck_access:
+            shared_deck_ids.add(access.user_deck_id)
+            shared_decks_info[access.user_deck_id] = {
+                'original_deck_id': access.original_deck_id,
+                'code_used': access.accessed_via_code,
+                'added_at': access.added_at
+            }
+
+        # Pobierz wszystkie egzaminy użytkownika (własne + udostępnione)
+        # Własne egzaminy
+        own_exam_ids = set()
+        own_exams = db.query(Exam).filter(
+            Exam.user_id == user_id,
+            Exam.template_id.is_(None)  # Wyklucz kopie z udostępnionych
+        ).all()
+        own_exam_ids = {exam.id for exam in own_exams}
+
+        # Udostępnione egzaminy (kopie użytkownika)
+        shared_exam_access = db.query(UserExamAccess).filter(
+            UserExamAccess.user_id == user_id,
+            UserExamAccess.is_active == True
+        ).all()
+
+        shared_exam_ids = set()
+        shared_exams_info = {}
+        for access in shared_exam_access:
+            shared_exam_ids.add(access.user_exam_id)
+            shared_exams_info[access.user_exam_id] = {
+                'original_exam_id': access.original_exam_id,
+                'code_used': access.accessed_via_code,
+                'added_at': access.added_at
+            }
+
+        # Pobierz nazwy wszystkich decków (własne + udostępnione)
+        all_deck_ids = own_deck_ids.union(shared_deck_ids)
+        all_decks = db.query(Deck).filter(Deck.id.in_(all_deck_ids)).all() if all_deck_ids else []
+
+        # Rozszerzone mapowanie nazw decków z informacją o typie dostępu
+        deck_id_to_name = {}
+        deck_id_to_info = {}
+
+        for deck in all_decks:
+            deck_id_to_name[deck.id] = deck.name  # Zachowane dla kompatybilności
+            deck_id_to_info[deck.id] = {
+                'name': deck.name,
+                'access_type': 'shared' if deck.id in shared_deck_ids else 'own',
+                'user_id': deck.user_id,
+                'created_at': deck.created_at.isoformat() if deck.created_at else None
+            }
+
+            # Dodaj informacje o udostępnieniu jeśli to kopia
+            if deck.id in shared_decks_info:
+                deck_id_to_info[deck.id].update(shared_decks_info[deck.id])
+                if 'added_at' in deck_id_to_info[deck.id] and deck_id_to_info[deck.id]['added_at']:
+                    deck_id_to_info[deck.id]['added_at'] = deck_id_to_info[deck.id]['added_at'].isoformat()
+
+        # Pobierz nazwy wszystkich egzaminów (własne + udostępnione)
+        all_exam_ids = own_exam_ids.union(shared_exam_ids)
+        all_exams = db.query(Exam).filter(Exam.id.in_(all_exam_ids)).all() if all_exam_ids else []
+
+        # Mapowanie nazw egzaminów z informacją o typie dostępu
+        exam_id_to_name = {}
+        exam_id_to_info = {}
+
+        for exam in all_exams:
+            exam_id_to_name[exam.id] = exam.name
+            exam_id_to_info[exam.id] = {
+                'name': exam.name,
+                'access_type': 'shared' if exam.id in shared_exam_ids else 'own',
+                'user_id': exam.user_id,
+                'created_at': exam.created_at.isoformat() if exam.created_at else None
+            }
+
+            # Dodaj informacje o udostępnieniu jeśli to kopia
+            if exam.id in shared_exams_info:
+                exam_id_to_info[exam.id].update(shared_exams_info[exam.id])
+                if 'added_at' in exam_id_to_info[exam.id] and exam_id_to_info[exam.id]['added_at']:
+                    exam_id_to_info[exam.id]['added_at'] = exam_id_to_info[exam.id]['added_at'].isoformat()
+
+        # === ORYGINALNE OBLICZENIA (zachowane) ===
 
         # Oblicz średnie wyniki egzaminów dziennie
         exam_daily_average = (
@@ -127,7 +229,8 @@ async def get_dashboard_data(
             for session in study_sessions_result
         ]
 
-        # Funkcja serializująca obiekt ORM do słownika
+        # === FUNKCJA SERIALIZUJĄCA (oryginalna) ===
+
         def serialize(obj):
             """Konwertuje obiekt ORM na słownik, obsługując pola datetime."""
             result = {}
@@ -139,7 +242,7 @@ async def get_dashboard_data(
                     result[col.name] = value
             return result
 
-        # Serializacja wszystkich danych
+        # Serializacja wszystkich danych (oryginalna struktura)
         serialized_study_records = [serialize(record) for record in study_records_result]
         serialized_user_flashcards = [serialize(card) for card in user_flashcards_result]
         serialized_study_sessions = [serialize(session) for session in study_sessions_result]
@@ -152,7 +255,36 @@ async def get_dashboard_data(
             for result in exam_results_result
         ]
 
-        return {
+        # === DODATKOWE STATYSTYKI (nowe, ale opcjonalne) ===
+
+        # Liczniki materiałów
+        material_counts = {
+            'decks': {
+                'total': len(all_deck_ids),
+                'own': len(own_deck_ids),
+                'shared': len(shared_deck_ids)
+            },
+            'exams': {
+                'total': len(all_exam_ids),
+                'own': len(own_exam_ids),
+                'shared': len(shared_exam_ids)
+            }
+        }
+
+        # Aktywność z ostatniego tygodnia
+        week_ago = datetime.now() - timedelta(days=7)
+        recent_activity = {
+            'study_sessions_this_week': len([s for s in study_sessions_result if s.started_at >= week_ago]),
+            'exam_attempts_this_week': len([r[0] for r in exam_results_result if r[0].started_at >= week_ago]),
+            'total_study_sessions': len(study_sessions_result),
+            'total_exam_attempts': len(exam_results_result),
+            'total_cards_studied': len(serialized_study_records)
+        }
+
+        # === ODPOWIEDŹ (zachowana oryginalna struktura + rozszerzenia) ===
+
+        response = {
+            # ORYGINALNE POLA (zachowane dla kompatybilności wstecznej)
             "study_records": serialized_study_records,
             "user_flashcards": serialized_user_flashcards,
             "study_sessions": serialized_study_sessions,
@@ -161,8 +293,23 @@ async def get_dashboard_data(
             "session_durations": session_durations,
             "exam_daily_average": exam_daily_average_serialized,
             "flashcard_daily_average": flashcard_daily_average_serialized,
-            "deck_names": deck_id_to_name
+            "deck_names": deck_id_to_name,  # Zachowane dla kompatybilności
+
+            # NOWE POLA (rozszerzenia, które nie wpływają na istniejący frontend)
+            "deck_info": deck_id_to_info,
+            "exam_info": exam_id_to_info,
+            "exam_names": exam_id_to_name,
+            "material_counts": material_counts,
+            "recent_activity": recent_activity,
+
+            # Dodatkowe mapowania pomocnicze
+            "access_info": {
+                "shared_decks": shared_decks_info,
+                "shared_exams": shared_exams_info
+            }
         }
+
+        return response
 
     except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

@@ -7,6 +7,7 @@ import RootClient from '@/components/RootClient'
 import { ConversationProvider } from "@/contexts/ConversationContext"
 import { AuthProvider } from "@/contexts/AuthContext"
 import Script from 'next/script'
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -48,7 +49,10 @@ export default function RootLayout({
             enableSystem={true}
             defaultTheme="light"
             >
-              <RootClient>{children}</RootClient>
+              <RootClient>
+                <Toaster />
+                {children}
+              </RootClient>
             </ThemeProvider>
           </ConversationProvider>
         </AuthProvider>

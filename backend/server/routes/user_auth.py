@@ -19,7 +19,7 @@ from ..jwt import generate_token, decode_token, generate_confirmation_token, con
 from ..models import User
 from .. import session
 from ..config import Config
-from ..utils import send_email
+from ..utils import send_email, FRONTEND
 import logging
 
 # Enhanced logging configuration
@@ -48,7 +48,6 @@ limiter = Limiter(
 user_auth: Blueprint = Blueprint('auth', __name__)
 
 # Configuration
-FRONTEND = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 COOKIE_AUTH = 'TorchED_auth'
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = 300  # 5 minutes
@@ -402,8 +401,8 @@ def register() -> Response | tuple:
         session.add(user)
         session.commit()
 
-        # Create confirmation link
-        confirmation_link = url_for('auth.confirm_email', token=token, _external=True)
+        # NAPRAWIONY LINK - używa FRONTEND zamiast url_for
+        confirmation_link = f"{FRONTEND}/confirm-email?token={token}"
 
         # Enhanced email template
         message = f"""
@@ -525,14 +524,14 @@ def confirm_email(token: str) -> tuple[Response, int] | Response:
 
         if user.confirmed:
             log_auth_attempt('email_confirm', email, client_ip, True, 'Already confirmed')
-            return redirect(FRONTEND)
+            return redirect(f"{FRONTEND}?confirmed=already")
 
         user.confirmed = True
         session.commit()
 
         logger.info(f"Email confirmed for user: {email}")
         log_auth_attempt('email_confirm', email, client_ip, True, 'Success')
-        return redirect(FRONTEND)
+        return redirect(f"{FRONTEND}?confirmed=success")
 
     except Exception as e:
         session.rollback()
@@ -593,7 +592,7 @@ def forgot_password() -> Response | tuple:
             )
             session.commit()
 
-            # Create reset link
+            # NAPRAWIONY LINK - używa FRONTEND (już było prawidłowe)
             reset_link = f"{FRONTEND}/reset-password?token={reset_token}"
 
             # Email template
@@ -643,9 +642,9 @@ def forgot_password() -> Response | tuple:
             </html>
             """
 
-            # Send email (uncomment when send_email is available)
+            # Send email
             send_email(email, "🔒 Resetowanie hasła - TorchED", message, html=True)
-            logger.info(f"Password reset email would be sent to: {email}")
+            logger.info(f"Password reset email sent to: {email}")
             log_auth_attempt('password_reset_request', email, client_ip, True, 'Reset email sent')
 
         # Always return success to prevent email enumeration

@@ -52,6 +52,69 @@ class ORMFile(Base):
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC), nullable=False)
 
 
+class ShareableContent(Base):
+    """Bazowa klasa dla udostępnialnej zawartości"""
+    __tablename__ = 'shareable_content'
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    share_code = Column(String(12), unique=True, nullable=False, index=True)
+    content_type = Column(String, nullable=False)  # 'deck' lub 'exam'
+    content_id = Column(Integer, nullable=False)  # ID oryginalnego deck/exam
+    creator_id = Column(Integer, ForeignKey('users.id_'), nullable=False)
+    is_public = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC))
+    access_count = Column(Integer, default=0)
+
+    # Indeks złożony dla szybkiego wyszukiwania
+    __table_args__ = (
+        UniqueConstraint('content_type', 'content_id', name='uix_content'),
+    )
+
+
+class UserDeckAccess(Base):
+    """Mapowanie dostępu użytkowników do udostępnionych decków"""
+    __tablename__ = 'user_deck_access'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id_'), nullable=False)
+    original_deck_id = Column(Integer, ForeignKey('decks.id'), nullable=False)
+    user_deck_id = Column(Integer, ForeignKey('decks.id'), nullable=False)
+    accessed_via_code = Column(String(12), nullable=False)
+    added_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC))
+    is_active = Column(Boolean, default=True)
+
+    # Relacje
+    user = relationship("User")
+    original_deck = relationship("Deck", foreign_keys=[original_deck_id])
+    user_deck = relationship("Deck", foreign_keys=[user_deck_id])
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'original_deck_id', name='uix_user_original_deck'),
+    )
+
+
+class UserExamAccess(Base):
+    """Mapowanie dostępu użytkowników do udostępnionych egzaminów"""
+    __tablename__ = 'user_exam_access'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey('users.id_'), nullable=False)
+    original_exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
+    user_exam_id = Column(Integer, ForeignKey('exams.id'), nullable=False)
+    accessed_via_code = Column(String(12), nullable=False)
+    added_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC))
+    is_active = Column(Boolean, default=True)
+
+    # Relacje
+    user = relationship("User")
+    original_exam = relationship("Exam", foreign_keys=[original_exam_id])
+    user_exam = relationship("Exam", foreign_keys=[user_exam_id])
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'original_exam_id', name='uix_user_original_exam'),
+    )
+
+
 class Deck(Base):
     __tablename__ = 'decks'
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -63,7 +126,15 @@ class Deck(Base):
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC), nullable=False)
     flashcards = relationship("Flashcard", back_populates="deck", cascade="all, delete-orphan")
     study_sessions = relationship("StudySession", back_populates="deck", cascade="all, delete-orphan")
+    is_template = Column(Boolean, default=False)  # Czy to szablon do udostępniania
+    template_id = Column(Integer, ForeignKey('decks.id'), nullable=True)  # Referencja do szablonu
 
+    # Nowe relacje
+    template = relationship("Deck", remote_side=[id], backref="copies")
+    shared_content = relationship("ShareableContent",
+                                  primaryjoin="and_(Deck.id == foreign(ShareableContent.content_id), "
+                                              "ShareableContent.content_type == 'deck')",
+                                  viewonly=True)
 
 
 class Flashcard(Base):
@@ -175,13 +246,23 @@ class Exam(Base):
     description = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id_'), index=True, nullable=False)
-    conversation_id = Column(Integer, nullable=True)  # Pole na conversation_id
+    conversation_id = Column(Integer, nullable=True)
 
     questions = relationship(
         "ExamQuestion",
         back_populates="exam",
         cascade="all, delete-orphan"
     )
+    is_template = Column(Boolean, default=False)  # Czy to szablon do udostępniania
+    template_id = Column(Integer, ForeignKey('exams.id'), nullable=True)  # Referencja do szablonu
+
+    # Nowe relacje
+    template = relationship("Exam", remote_side=[id], backref="copies")
+    shared_content = relationship("ShareableContent",
+                                  primaryjoin="and_(Exam.id == foreign(ShareableContent.content_id), "
+                                              "ShareableContent.content_type == 'exam')",
+                                  viewonly=True)
+    
 
 class ExamQuestion(Base):
     __tablename__ = 'exam_questions'
