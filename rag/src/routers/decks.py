@@ -470,7 +470,7 @@ def get_decks(
         raise HTTPException(status_code=500, detail="Failed to fetch decks")
 
 
-@router.get("/{deck_id}")
+@router.get("/get_deck/{deck_id}")
 def get_deck(
         deck_id: int,
         current_user: User = Depends(get_current_user),

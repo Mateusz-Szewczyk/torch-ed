@@ -614,5 +614,13 @@
   "imported": "Zaimportowane",
   "imported_exams": "Zaimportowane egzaminy",
   "manage_share_codes_and_statistics": "Zarządzaj kodami udostępniania i statystykami",
-  "imported_decks": "Zaimportowane talie"
+  "imported_decks": "Zaimportowane talie",
+  "keep_practicing": "Kontynuuj ćwiczenie",
+  "exam_complete": "Egzamin ukończony",
+  "correct": "Poprawne",
+  "correct_answers": "Poprawne odpowiedzi",
+  "incorrect_answers": "Niepoprawne odpowiedzi",
+  "time_taken": "Czas trwania",
+  "results_saved_successfully": "Wyniki zostały pomyślnie zapisane.",
+  "back_to_exams": "Powrót do egzaminów"
 }

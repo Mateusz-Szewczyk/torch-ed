@@ -456,7 +456,7 @@ export default function FlashcardsPage() {
 
   const fetchDeck = useCallback(async (deckId: number): Promise<Deck | null> => {
     try {
-      const response = await fetch(`${API_BASE_URL}${deckId}/`, {
+      const response = await fetch(`${API_BASE_URL}get_deck/${deckId}/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
