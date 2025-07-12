@@ -19,7 +19,7 @@ import {debounce} from "lodash";
 
 type Message = {
   id: string
-  conversation_id: number
+  conversation_id: number | undefined
   text: string
   sender: "user" | "bot"
   created_at: string
@@ -27,7 +27,7 @@ type Message = {
 }
 
 interface ChatProps {
-  conversationId: number
+  conversationId: number | undefined
 }
 
 const availableTools = ["Wiedza z plików", "Generowanie fiszek", "Generowanie egzaminu", "Wyszukaj w internecie"]
