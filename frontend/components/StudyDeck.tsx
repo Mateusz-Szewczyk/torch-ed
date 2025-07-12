@@ -55,7 +55,7 @@ interface StudyDeckProps {
   study_session_id: number | null;
   available_cards: Flashcard[];
   next_session_date: string | null;
-  conversation_id: number;
+  conversation_id: number | undefined;
   onExit: () => void;
 }
 

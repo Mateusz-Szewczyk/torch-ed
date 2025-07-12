@@ -19,7 +19,7 @@ import {debounce} from "lodash";
 
 type Message = {
   id: string
-  conversation_id: number
+  conversation_id: number | undefined
   text: string
   sender: "user" | "bot"
   created_at: string
@@ -27,7 +27,7 @@ type Message = {
 }
 
 interface ChatProps {
-  conversationId: number
+  conversationId: number | undefined
 }
 
 const availableTools = ["Wiedza z plików", "Generowanie fiszek", "Generowanie egzaminu", "Wyszukaj w internecie"]
@@ -216,6 +216,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
 
   // Debounced fetch messages
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchMessages = useCallback(
     debounce(async () => {
       try {

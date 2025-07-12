@@ -129,7 +129,7 @@ export default function FlashcardsPage() {
     study_session_id: number | null
     available_cards: Flashcard[]
     next_session_date: string | null
-    conversation_id: number
+    conversation_id: number | undefined
   } | null>(null)
 
   const { t } = useTranslation()
@@ -403,7 +403,7 @@ export default function FlashcardsPage() {
     } else {
       setShareCodeInfo(null)
     }
-  }, [shareCodeInput])
+  }, [handleGetShareCodeInfo, shareCodeInput])
 
   // Load shared data when manage modal opens
   useEffect(() => {
