@@ -149,7 +149,7 @@ const StatusAlert = ({ status, onDismiss }: { status: StatusMessage; onDismiss: 
   )
 }
 
-export const ProfileDialog: React.FC<ProfileDialogProps> = ({
+const ProfileDialog: React.FC<ProfileDialogProps> = ({
   isOpen,
   onClose,
   onLogout,
@@ -161,7 +161,6 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
 
-  // Status message state
   const [statusMessage, setStatusMessage] = useState<StatusMessage>({
     type: 'info',
     message: '',
@@ -216,7 +215,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
     if (isOpen && !userData) {
       loadUserProfile()
     }
-  })
+  }, [isOpen])
 
   // Hide status when tab changes
   useEffect(() => {
@@ -233,7 +232,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
 
     setPasswordRequirements(updatedRequirements)
     setIsPasswordValid(updatedRequirements.every(req => req.met) && newPassword.length >= 8)
-  }, [passwordData, passwordData.newPassword, passwordRequirements])
+  }, [passwordData.newPassword])
 
   // Update username when userData changes
   useEffect(() => {
@@ -887,3 +886,5 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
     </Dialog>
   )
 }
+
+export { ProfileDialog };

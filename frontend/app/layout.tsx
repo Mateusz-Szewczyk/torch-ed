@@ -8,6 +8,7 @@ import { ConversationProvider } from "@/contexts/ConversationContext"
 import { AuthProvider } from "@/contexts/AuthContext"
 import Script from 'next/script'
 import { Toaster } from 'sonner'
+import React from "react";
 
 const inter = Inter({ subsets: ['latin'] })
 

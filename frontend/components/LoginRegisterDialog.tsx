@@ -93,7 +93,7 @@ const PasswordRequirements = ({
     // Check if all requirements are met
     const allMet = updatedRequirements.every(req => req.met)
     onValidityChange(allMet)
-  }, [password, onValidityChange, requirements])
+  }, [password, onValidityChange])
 
   if (!show) return null
 

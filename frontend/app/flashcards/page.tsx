@@ -403,7 +403,7 @@ export default function FlashcardsPage() {
     } else {
       setShareCodeInfo(null)
     }
-  }, [handleGetShareCodeInfo, shareCodeInput])
+  }, [shareCodeInput])
 
   // Load shared data when manage modal opens
   useEffect(() => {
