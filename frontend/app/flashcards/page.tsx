@@ -563,7 +563,8 @@ export default function FlashcardsPage() {
         throw new Error(t("error_fetch_deck"))
       }
 
-      let convId = deckInfo.conversation_id
+      let convId = deck.conversation_id
+      console.log(deck)
       if (!convId || convId === 0) {
         const convResponse = await fetch(CONVERSATIONS_URL, {
           method: "POST",
@@ -577,7 +578,6 @@ export default function FlashcardsPage() {
         const newConv = await convResponse.json()
         convId = newConv.id
 
-        // POPRAWKA: Aktualizuj tylko conversation_id, nie flashcards
         const updateResponse = await fetch(`${API_BASE_URL}${deck.id}/conversation`, {
           method: "PATCH",
           credentials: "include",
