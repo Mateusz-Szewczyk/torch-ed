@@ -91,7 +91,10 @@ class ChatAgent:
             print(f"[DEBUG] No or short history, returning original query")
             return query
 
-        system_prompt = "Given a chat history and a follow-up question, rephrase the follow-up question to be a standalone question that can be understood without the history. If the question is already standalone, return it unchanged."
+        system_prompt = ("Given a chat history and a follow-up question, rephrase the follow-up question to be a "
+                         "standalone question that can be understood without the history. "
+                         "If the question is already standalone, return it unchanged. "
+                         f"If applicable add information about date at the end of the standalone query. Today is: {datetime.now()}")
         user_prompt = f"""
 Chat History:
 ---
@@ -390,7 +393,6 @@ Based on the history and retrieved information, answer the user's latest query.
                         if len(combined_content) > 50:
                             print(f"[DEBUG] Tavily execution successful - storing content")
                             tavily_content = combined_content
-                            # Update context only if no RAG content exists
                             if not context:
                                 context = combined_content
                                 context_source = "a web search"

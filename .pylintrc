@@ -1,0 +1,28 @@
+[MASTER]
+init-hook='import sys; sys.path.append(".")'
+
+ignore=frontend
+
+good-names=i,j,k,ex,Run,_,app
+
+max-line-length=120
+
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    too-many-arguments,
+    broad-except,
+    unused-argument,
+
+enable=
+    useless-suppression,
+    use-implicit-booleaness-not-comparison
+
+[TYPECHECK]
+ignored-modules=flask,werkzeug,uvicorn,fastapi
+
+[REPORTS]
+output-format=colorized
+score=yes

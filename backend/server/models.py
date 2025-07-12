@@ -6,8 +6,8 @@ from sqlalchemy import (
     Column, Integer, String, DateTime, ForeignKey, Boolean,
     func, Float, UniqueConstraint
 )
-from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session, declarative_base, backref
-
+from sqlalchemy.orm import relationship, Mapped, mapped_column, scoped_session, backref
+from sqlalchemy.ext.declarative import declarative_base
 Base = declarative_base()
 
 
