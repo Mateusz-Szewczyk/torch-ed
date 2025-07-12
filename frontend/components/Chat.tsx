@@ -216,6 +216,7 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_RAG_URL || "http://localhost:8043/api"
 
   // Debounced fetch messages
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchMessages = useCallback(
     debounce(async () => {
       try {

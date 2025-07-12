@@ -216,7 +216,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
     if (isOpen && !userData) {
       loadUserProfile()
     }
-  }, [isOpen])
+  })
 
   // Hide status when tab changes
   useEffect(() => {
@@ -233,7 +233,7 @@ export const ProfileDialog: React.FC<ProfileDialogProps> = ({
 
     setPasswordRequirements(updatedRequirements)
     setIsPasswordValid(updatedRequirements.every(req => req.met) && newPassword.length >= 8)
-  }, [passwordData.newPassword])
+  }, [passwordData, passwordData.newPassword, passwordRequirements])
 
   // Update username when userData changes
   useEffect(() => {
