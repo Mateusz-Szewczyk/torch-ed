@@ -36,6 +36,7 @@ import {
   Info
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {router} from "next/client";
 
 interface ProfileDialogProps {
   isOpen: boolean

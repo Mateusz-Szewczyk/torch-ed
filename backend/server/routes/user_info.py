@@ -280,26 +280,20 @@ def delete_account() -> Union[Response, Tuple[Response, int]]:
         confirmation = data.get('confirmation') if data else None
 
         # Require deletion confirmation
-        if confirmation != 'USUŃ KONTO':
+        if confirmation not in ['USUŃ KONTO', 'DELETE ACCOUNT']:
             return jsonify({'error': 'Account deletion not confirmed properly'}), 400
 
         user_id = user.id_
         user_email = user.email
 
         try:
-            # Delete associated data in proper order
-
-            # 1. Delete password reset tokens
             session.execute(
                 text("DELETE FROM password_reset_tokens WHERE user_id = :user_id"),
                 {"user_id": user_id}
             )
-
-            # 2. Delete main user record
-            session.execute(
-                text("DELETE FROM users WHERE id_ = :user_id"),
-                {"user_id": user_id}
-            )
+            user_to_delete = session.query(User).filter_by(id_=user_id).first()
+            if user_to_delete:
+                session.delete(user_to_delete)
 
             session.commit()
 

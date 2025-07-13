@@ -2,14 +2,19 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+} from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useTranslation } from "react-i18next"
 import { useRouter } from "next/navigation"
-import { Eye, EyeOff, X, AlertCircle, CheckCircle, Info, ArrowLeft, Mail, Check } from "lucide-react"
+import {
+  Eye, EyeOff, X, AlertCircle, CheckCircle, Info,
+  ArrowLeft, Mail, Check
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface LoginRegisterDialogProps {
@@ -36,41 +41,16 @@ interface PasswordRequirement {
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-// Enhanced password validation with individual requirements
+// ---- PASSWORD REQUIREMENTS --------------------------------------------------
+
 const createPasswordRequirements = (): PasswordRequirement[] => [
-  {
-    id: 'length',
-    label: 'Co najmniej 8 znaków',
-    regex: /.{8,}/,
-    met: false
-  },
-  {
-    id: 'lowercase',
-    label: 'Jedna mała litera (a-z)',
-    regex: /[a-z]/,
-    met: false
-  },
-  {
-    id: 'uppercase',
-    label: 'Jedna duża litera (A-Z)',
-    regex: /[A-Z]/,
-    met: false
-  },
-  {
-    id: 'number',
-    label: 'Jedna cyfra (0-9)',
-    regex: /[0-9]/,
-    met: false
-  },
-  {
-    id: 'special',
-    label: 'Jeden znak specjalny (!@#$%^&*)',
-    regex: /[!@#$%^&*(),.?":{}|<>]/,
-    met: false
-  }
+  { id: "length",     label: "Co najmniej 8 znaków",                regex: /.{8,}/,                     met: false },
+  { id: "lowercase",  label: "Jedna mała litera (a-z)",             regex: /[a-z]/,                     met: false },
+  { id: "uppercase",  label: "Jedna duża litera (A-Z)",             regex: /[A-Z]/,                     met: false },
+  { id: "number",     label: "Jedna cyfra (0-9)",                   regex: /[0-9]/,                     met: false },
+  { id: "special",    label: "Jeden znak specjalny (!@#$%^&*)",     regex: /[!@#$%^&*(),.?":{}|<>]/,    met: false }
 ]
 
-// Password Requirements Component
 const PasswordRequirements = ({
   password,
   onValidityChange,
@@ -80,20 +60,15 @@ const PasswordRequirements = ({
   onValidityChange: (isValid: boolean) => void
   show?: boolean
 }) => {
-  const [requirements, setRequirements] = useState<PasswordRequirement[]>(createPasswordRequirements())
+  const [requirements, setRequirements] =
+    useState<PasswordRequirement[]>(createPasswordRequirements())
 
   useEffect(() => {
-    const updatedRequirements = requirements.map(req => ({
-      ...req,
-      met: req.regex.test(password)
-    }))
-
-    setRequirements(updatedRequirements)
-
-    // Check if all requirements are met
-    const allMet = updatedRequirements.every(req => req.met)
-    onValidityChange(allMet)
-  }, [password, onValidityChange])
+    const updated = requirements.map(r => ({ ...r, met: r.regex.test(password) }))
+    setRequirements(updated)
+    onValidityChange(updated.every(r => r.met))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [password])
 
   if (!show) return null
 
@@ -101,21 +76,23 @@ const PasswordRequirements = ({
     <div className="mt-3 p-3 border border-border/50 rounded-lg bg-muted/30">
       <p className="text-sm font-medium text-muted-foreground mb-2">Wymagania hasła:</p>
       <ul className="space-y-1">
-        {requirements.map((req) => (
+        {requirements.map(r => (
           <li
-            key={req.id}
+            key={r.id}
             className={cn(
-              "flex items-center text-xs transition-colors duration-200",
-              req.met ? "text-green-600" : "text-muted-foreground"
+              "flex items-center text-xs transition-colors",
+              r.met ? "text-green-600" : "text-muted-foreground"
             )}
           >
-            <div className={cn(
-              "w-4 h-4 rounded-full mr-2 flex items-center justify-center transition-colors duration-200",
-              req.met ? "bg-green-500" : "bg-muted-foreground/20"
-            )}>
-              {req.met && <Check className="w-2.5 h-2.5 text-white" />}
+            <div
+              className={cn(
+                "w-4 h-4 rounded-full mr-2 flex items-center justify-center transition-colors",
+                r.met ? "bg-green-500" : "bg-muted-foreground/20"
+              )}
+            >
+              {r.met && <Check className="w-2.5 h-2.5 text-white" />}
             </div>
-            {req.label}
+            {r.label}
           </li>
         ))}
       </ul>
@@ -123,7 +100,8 @@ const PasswordRequirements = ({
   )
 }
 
-// Email validation component
+// ---- EMAIL VALIDATION -------------------------------------------------------
+
 const EmailValidation = ({
   email,
   onValidityChange
@@ -139,19 +117,20 @@ const EmailValidation = ({
       onValidityChange(false)
       return
     }
-
-    const valid = EMAIL_REGEX.test(email)
-    setIsValid(valid)
-    onValidityChange(valid)
+    const ok = EMAIL_REGEX.test(email)
+    setIsValid(ok)
+    onValidityChange(ok)
   }, [email, onValidityChange])
 
   if (!email || isValid === null) return null
 
   return (
-    <div className={cn(
-      "flex items-center text-xs mt-1 transition-colors duration-200",
-      isValid ? "text-green-600" : "text-orange-600"
-    )}>
+    <div
+      className={cn(
+        "flex items-center text-xs mt-1 transition-colors",
+        isValid ? "text-green-600" : "text-orange-600"
+      )}
+    >
       {isValid ? (
         <>
           <CheckCircle className="h-3 w-3 mr-1" />
@@ -167,6 +146,8 @@ const EmailValidation = ({
   )
 }
 
+// ============================================================================
+
 export function LoginRegisterDialog({
   children,
   setIsAuthenticated,
@@ -181,26 +162,28 @@ export function LoginRegisterDialog({
   const { t } = useTranslation()
   const router = useRouter()
 
-  // Toast notification state
+  // ---- toast / confirmation -------------------------------------------------
   const [toast, setToast] = useState<Toast | null>(null)
+  const [confirmationStatus, setConfirmationStatus] =
+    useState<"success" | "already" | "error" | null>(null)
 
-  // Login fields
+  // ---- LOGIN ----------------------------------------------------------------
   const [loginEmail, setLoginEmail] = useState("")
   const [loginPassword, setLoginPassword] = useState("")
   const [showLoginPassword, setShowLoginPassword] = useState(false)
 
-  // Register fields
+  // ---- REGISTER -------------------------------------------------------------
   const [registerEmail, setRegisterEmail] = useState("")
   const [registerPassword, setRegisterPassword] = useState("")
   const [registerPassword2, setRegisterPassword2] = useState("")
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
   const [showRegisterPassword2, setShowRegisterPassword2] = useState(false)
 
-  // Forgot password fields
+  // ---- FORGOT ---------------------------------------------------------------
   const [forgotEmail, setForgotEmail] = useState("")
   const [isLoadingForgot, setIsLoadingForgot] = useState(false)
 
-  // Reset password fields
+  // ---- RESET PW -------------------------------------------------------------
   const [resetToken, setResetToken] = useState("")
   const [resetPassword, setResetPassword] = useState("")
   const [resetConfirmPassword, setResetConfirmPassword] = useState("")
@@ -208,7 +191,7 @@ export function LoginRegisterDialog({
   const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false)
   const [isLoadingReset, setIsLoadingReset] = useState(false)
 
-  // Enhanced validation states
+  // ---- VALIDATION FLAGS -----------------------------------------------------
   const [registerEmailValid, setRegisterEmailValid] = useState(false)
   const [registerPasswordValid, setRegisterPasswordValid] = useState(false)
   const [registerPasswordsMatch, setRegisterPasswordsMatch] = useState(false)
@@ -216,9 +199,10 @@ export function LoginRegisterDialog({
   const [resetPasswordValid, setResetPasswordValid] = useState(false)
   const [resetPasswordsMatch, setResetPasswordsMatch] = useState(false)
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_FLASK_URL || "http://localhost:14440/api/v1"
+  const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_FLASK_URL || "http://localhost:14440/api/v1"
 
-  // Stabilizacja po mount
+  // ---- STABILIZACJA ---------------------------------------------------------
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsStable(true)
@@ -230,51 +214,88 @@ export function LoginRegisterDialog({
     return () => clearTimeout(timer)
   }, [autoOpen, initialView])
 
-  // Handle token from URL for reset password
+  // ---- RESET-PASSWORD TOKEN z URL ------------------------------------------
   useEffect(() => {
-    if (isStable && typeof window !== 'undefined') {
-      const urlParams = new URLSearchParams(window.location.search)
-      const token = urlParams.get('token')
+    if (!isStable || typeof window === "undefined") return
 
-      if (token && !resetToken) {
-        setResetToken(token)
-        setCurrentView("reset-password")
-        setIsOpen(true)
-        setForceOpen(true)
-        const newUrl = window.location.pathname
-        window.history.replaceState({}, document.title, newUrl)
-      }
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get("reset_token")
+
+    if (token && !resetToken) {
+      setResetToken(token)
+      setCurrentView("reset-password")
+      setIsOpen(true)
+      setForceOpen(true)
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [isStable, resetToken])
 
-  // Password confirmation validation
+  // ---- CONFIRMATION QUERY PARAM --------------------------------------------
   useEffect(() => {
-    if (registerPassword && registerPassword2) {
-      setRegisterPasswordsMatch(registerPassword === registerPassword2)
-    } else {
-      setRegisterPasswordsMatch(false)
+    if (!isStable || typeof window === "undefined") return
+
+    const params = new URLSearchParams(window.location.search)
+    const conf = params.get("confirmed")  // success | already | error
+
+    if (conf && !confirmationStatus) {
+      // zapamiętaj wynik
+      setConfirmationStatus(
+        conf === "success" || conf === "already" ? (conf as never) : "error"
+      )
+      // pokaż modal w trybie logowania
+      setCurrentView("auth")
+      setIsOpen(true)
+      setForceOpen(false)
+      // oczyść URL
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
+  }, [isStable, confirmationStatus])
+
+  // ---- REAKCJA NA CONFIRMATION ---------------------------------------------
+  useEffect(() => {
+    if (!confirmationStatus) return
+    if (confirmationStatus === "success")
+      showToast("Konto zostało pomyślnie potwierdzone 🎉", "success")
+    else if (confirmationStatus === "already")
+      showToast("Konto było już wcześniej potwierdzone", "info")
+    else
+      showToast("Token potwierdzający jest nieprawidłowy lub wygasł", "error")
+  }, [confirmationStatus])
+
+  // ---- PASSWORD MATCH FLAGS -------------------------------------------------
+  useEffect(() => {
+    setRegisterPasswordsMatch(
+      !!registerPassword && registerPassword === registerPassword2
+    )
   }, [registerPassword, registerPassword2])
 
   useEffect(() => {
-    if (resetPassword && resetConfirmPassword) {
-      setResetPasswordsMatch(resetPassword === resetConfirmPassword)
-    } else {
-      setResetPasswordsMatch(false)
-    }
+    setResetPasswordsMatch(
+      !!resetPassword && resetPassword === resetConfirmPassword
+    )
   }, [resetPassword, resetConfirmPassword])
 
-  // Controlled dialog handler
-  const handleOpenChange = useCallback((open: boolean) => {
-    if (!isStable) return
-    if (!open && forceOpen && currentView === "reset-password") return
-    if (!open && currentView === "reset-password") return
+  // ---- AUTO-CLOSE TOAST -----------------------------------------------------
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 8_000)
+    return () => clearTimeout(t)
+  }, [toast])
 
-    setIsOpen(open)
-    if (!open) {
-      setForceOpen(false)
-    }
-  }, [isStable, forceOpen, currentView])
+  // ---- HELPERS --------------------------------------------------------------
+  const showToast = useCallback(
+    (message: string, type: ToastType = "info") => setToast({ message, type }),
+    []
+  )
+
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!isStable) return
+      if (!open && forceOpen && currentView === "reset-password") return
+      setIsOpen(open)
+    },
+    [isStable, forceOpen, currentView]
+  )
 
   // Reset form when view changes
   useEffect(() => {
@@ -294,11 +315,7 @@ export function LoginRegisterDialog({
       return () => clearTimeout(timer)
     }
   }, [toast])
-
-  const showToast = useCallback((message: string, type: ToastType = "info") => {
-    setToast({ message, type })
-  }, [])
-
+  
   // Handle login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -489,6 +506,8 @@ export function LoginRegisterDialog({
     }
   }
 
+  if (!isStable) return null
+
   const renderDialogTitle = () => {
     switch (currentView) {
       case "forgot-password":
@@ -500,35 +519,22 @@ export function LoginRegisterDialog({
     }
   }
 
-  if (!isStable) {
-    return null
-  }
-
   return (
     <>
-      <Dialog
-        open={isOpen}
-        onOpenChange={handleOpenChange}
-        modal={true}
-      >
+      <Dialog open={isOpen} onOpenChange={handleOpenChange} modal>
         <DialogTrigger asChild>{children}</DialogTrigger>
+
         <DialogContent
           className="sm:max-w-2xl bg-background text-foreground max-h-[90vh] overflow-y-auto"
           aria-labelledby="auth-dialog-title"
-          onPointerDownOutside={(e) => {
-            if (forceOpen && currentView === "reset-password") {
-              e.preventDefault()
-            }
+          onPointerDownOutside={e => {
+            if (forceOpen && currentView === "reset-password") e.preventDefault()
           }}
-          onEscapeKeyDown={(e) => {
-            if (forceOpen && currentView === "reset-password") {
-              e.preventDefault()
-            }
+          onEscapeKeyDown={e => {
+            if (forceOpen && currentView === "reset-password") e.preventDefault()
           }}
-          onInteractOutside={(e) => {
-            if (forceOpen && currentView === "reset-password") {
-              e.preventDefault()
-            }
+          onInteractOutside={e => {
+            if (forceOpen && currentView === "reset-password") e.preventDefault()
           }}
         >
           <DialogHeader>
@@ -550,21 +556,21 @@ export function LoginRegisterDialog({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Toast notification */}
+          {/* TOAST ---------------------------------------------------------------- */}
           {toast && (
             <div
               className={cn(
-                "mb-4 px-4 py-3 rounded-md shadow-md flex items-center gap-2 animate-in fade-in duration-300",
-                toast.type === "error" && "bg-destructive text-destructive-foreground",
+                "mb-4 px-4 py-3 rounded-md shadow-md flex items-center gap-2 animate-in fade-in",
+                toast.type === "error"   && "bg-destructive text-destructive-foreground",
                 toast.type === "success" && "bg-green-600 text-white",
-                toast.type === "info" && "bg-blue-600 text-white",
+                toast.type === "info"    && "bg-blue-600 text-white"
               )}
               role="alert"
             >
               <div className="flex-shrink-0">
-                {toast.type === "error" && <AlertCircle className="h-5 w-5" />}
-                {toast.type === "success" && <CheckCircle className="h-5 w-5" />}
-                {toast.type === "info" && <Info className="h-5 w-5" />}
+                {toast.type === "error"   && <AlertCircle className="h-5 w-5" />}
+                {toast.type === "success" && <CheckCircle  className="h-5 w-5" />}
+                {toast.type === "info"    && <Info         className="h-5 w-5" />}
               </div>
               <div className="flex-1">{toast.message}</div>
               <button

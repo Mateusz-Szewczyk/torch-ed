@@ -1,4 +1,3 @@
-// app/reset-password/page.tsx - POPRAWIONA WERSJA BEZ BŁĘDU REVALIDATE
 "use client"
 
 import { useEffect, useState, Suspense } from "react"
@@ -7,8 +6,6 @@ import { LoginRegisterDialog } from "@/components/LoginRegisterDialog"
 import { Button } from "@/components/ui/button"
 import { unstable_noStore as noStore } from 'next/cache'
 
-// POPRAWKA: Usuń export const revalidate - powoduje konflikt
-// POPRAWKA: Użyj tylko dynamic dla force-dynamic
 export const dynamic = 'force-dynamic'
 
 function ResetPasswordContent() {
@@ -27,7 +24,7 @@ function ResetPasswordContent() {
   // Token validation and dialog setup
   useEffect(() => {
     if (mounted) {
-      const token = searchParams.get('token')
+      const token = searchParams.get('reset_token')
 
       if (!token || token.length < 20) {
         console.log("No valid token found, redirecting to home")

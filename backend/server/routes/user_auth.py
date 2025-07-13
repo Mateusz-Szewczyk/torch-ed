@@ -401,7 +401,6 @@ def register() -> Response | tuple:
         session.add(user)
         session.commit()
 
-        # NAPRAWIONY LINK - używa FRONTEND zamiast url_for
         confirmation_link = f"{FRONTEND}/confirm-email?token={token}"
 
         # Enhanced email template
@@ -593,7 +592,7 @@ def forgot_password() -> Response | tuple:
             session.commit()
 
             # NAPRAWIONY LINK - używa FRONTEND (już było prawidłowe)
-            reset_link = f"{FRONTEND}/reset-password?token={reset_token}"
+            reset_link = f"{FRONTEND}/reset-password?reset_token={reset_token}"
 
             # Email template
             message = f"""
@@ -676,7 +675,7 @@ def reset_password() -> Response | tuple:
             log_auth_attempt('password_reset', 'unknown', client_ip, False, 'No data provided')
             return add_security_headers(jsonify({'error': 'Brak danych'})), 400
 
-        token = sanitize_input(data.get('token'))
+        token = sanitize_input(data.get('reset_token'))
         new_password = sanitize_input(data.get('new_password'))
         confirm_password = sanitize_input(data.get('confirm_password'))
 
