@@ -273,7 +273,7 @@ def login() -> Response | tuple:
         try:
             token_bytes = generate_token(
                 user_id=user.id_,
-                role=user.role,
+                role='user',
                 iss='TorchED_BACKEND_AUTH',
                 path=Config.PRP_PATH
             )
@@ -387,7 +387,7 @@ def register() -> Response | tuple:
             user_name=user_name,
             password=generate_password_hash(password, salt_length=24),
             email=email,
-            role=data.get('role', 'user'),
+            role='user',
             age=int(data.get('age', 0)) if data.get('age') else 0,
             confirmed=False
         )

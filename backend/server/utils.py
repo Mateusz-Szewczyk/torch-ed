@@ -129,9 +129,10 @@ def send_email(to: str, subject: str, message: str, html: bool = False) -> None:
 
         # Połączenie z serwerem SMTP
         with smtplib.SMTP('smtp.gmail.com', 587) as connection:
-            connection.starttls()  # Rozpoczęcie szyfrowanego połączenia
-            connection.login(EMAIL, EMAIL_PASSWORD)  # Logowanie do konta
-            connection.send_message(msg)  # Wysłanie wiadomości
+            connection.set_debuglevel(1)
+            connection.starttls()
+            connection.login(EMAIL, EMAIL_PASSWORD)
+            connection.send_message(msg)
 
         print(f"Email sent successfully to {to}")
 

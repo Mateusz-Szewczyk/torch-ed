@@ -39,7 +39,7 @@ def update_conversation_title(conversation_id: int, title: str) -> None:
     """
     Updates the title of an existing conversation in the database.
     """
-    from ..models import Conversation  # Adjust the import path as needed.
+    from ..models import Conversation
     session = SessionLocal()
     try:
         conversation = session.query(Conversation).filter_by(id=conversation_id).first()

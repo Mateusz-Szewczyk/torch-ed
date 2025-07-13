@@ -1,8 +1,8 @@
 # agent_memory.py
 
-from typing import List, Optional
+from typing import List, Optional, Type, Any
 from sqlalchemy import create_engine, desc
-from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm import sessionmaker, scoped_session, InstrumentedAttribute
 from sqlalchemy.exc import SQLAlchemyError
 
 from ..models import Base, Conversation, Message
@@ -15,7 +15,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
 Base.metadata.create_all(bind=engine)
 
-def create_memory(user_id: str, title: Optional[str] = None) -> Conversation:
+def create_memory(user_id: str, title: Optional[str] = None) -> Type[Conversation] | Conversation:
     session = SessionLocal()
     try:
         conversation = session.query(Conversation).filter_by(user_id=user_id).order_by(
@@ -37,7 +37,7 @@ def create_memory(user_id: str, title: Optional[str] = None) -> Conversation:
     finally:
         session.close()
 
-def get_latest_checkpoint(user_id: str, conversation_id: int) -> Optional[Conversation]:
+def get_latest_checkpoint(user_id: str, conversation_id: int) -> Type[Conversation] | None:
     session = SessionLocal()
     try:
         conversation = session.query(Conversation).filter_by(
@@ -57,7 +57,7 @@ def get_latest_checkpoint(user_id: str, conversation_id: int) -> Optional[Conver
     finally:
         session.close()
 
-def get_conversation_history(conversation_id: int, max_history_length: int) -> List[str]:
+def get_conversation_history(conversation_id: int, max_history_length: int) -> list[Any] | list[InstrumentedAttribute]:
     session = SessionLocal()
     try:
         messages = session.query(Message).filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
