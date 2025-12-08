@@ -21,10 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     ca-certificates \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libglib2.0-0 \
+    libxrender1 \
+    libgomp1 \
     pandoc \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && . $HOME/.cargo/env \
