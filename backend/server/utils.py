@@ -128,7 +128,7 @@ def send_email(to: str, subject: str, message: str, html: bool = False) -> None:
         msg.attach(MIMEText(message, 'html' if html else 'plain'))
 
         # Połączenie z serwerem SMTP
-        with smtplib.SMTP('smtp.gmail.com', port=587) as connection:
+        with smtplib.SMTP('smtp.gmail.com') as connection:
             connection.set_debuglevel(1)
             connection.starttls()
             connection.login(EMAIL, EMAIL_PASSWORD)
