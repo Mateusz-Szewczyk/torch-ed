@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import {motion, AnimatePresence, Variants} from "framer-motion"
 import { EditExamDialog } from "@/components/EditExamDialog"
 import { CustomTooltip } from "@/components/CustomTooltip"
 import { Button } from "@/components/ui/button"
@@ -99,9 +99,9 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
+    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
   },
-}
+} satisfies Variants;
 
 // Sort options for exams
 type SortOption = "name" | "questions" | "recent"

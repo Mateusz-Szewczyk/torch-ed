@@ -591,7 +591,6 @@ def forgot_password() -> Response | tuple:
             )
             session.commit()
 
-            # NAPRAWIONY LINK - używa FRONTEND (już było prawidłowe)
             reset_link = f"{FRONTEND}/reset-password?reset_token={reset_token}"
 
             # Email template
@@ -675,7 +674,7 @@ def reset_password() -> Response | tuple:
             log_auth_attempt('password_reset', 'unknown', client_ip, False, 'No data provided')
             return add_security_headers(jsonify({'error': 'Brak danych'})), 400
 
-        token = sanitize_input(data.get('reset_token'))
+        token = sanitize_input(data.get('token'))
         new_password = sanitize_input(data.get('new_password'))
         confirm_password = sanitize_input(data.get('confirm_password'))
 

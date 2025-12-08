@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, HTTPException, Depends, Form, File, UploadFile
 from fastapi_cache.decorator import cache
-from pix2text.utils import overlap
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -96,7 +95,7 @@ async def upload_file(
             logger.error("Failed to extract text from the document.")
             raise HTTPException(status_code=400, detail="Failed to extract text from the document.")
 
-        chunks = await asyncio.to_thread(create_chunks, text_content, chunk_size=400, overlap=100)
+        chunks = await asyncio.to_thread(create_chunks, text_content, chunk_size=8, overlap=2)
         if not chunks:
             logger.error("Failed to create text chunks from the document.")
             raise HTTPException(status_code=500, detail="Failed to create text chunks from the document.")
@@ -112,7 +111,7 @@ async def upload_file(
         logger.info(f"Vector store updated for user_id: {user_id}")
 
         new_file = ORMFile(
-            user_id=user_id,
+            user_id=int(user_id),
             name=safe_filename,
             category=category if category else "Uncategorized",
             description=file_description

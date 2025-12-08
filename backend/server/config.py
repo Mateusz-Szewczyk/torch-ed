@@ -13,7 +13,7 @@ class Config:
     PUP_PATH: str = "pup_key.pem"
     SALT: str = os.getenv('SALT', '')
     DOMAIN: str = os.getenv('DOMAIN', '.torched.pl')
-    IS_SECURE: bool = True
+    IS_SECURE: bool = os.getenv('IS_SECURE', True)
 
 
 
@@ -28,16 +28,17 @@ def load_private_keys():
     pup_key_base64 = os.getenv("PUP_KEY")
 
     if prp_key_base64:
-        prp_key = base64.b64decode(prp_key_base64).decode('utf-8')
-        with open(Config.PRP_PATH, "w") as f:
-            f.write(prp_key)
+        # Decode to BYTES, write bytes directly
+        prp_key_bytes = base64.b64decode(prp_key_base64)
+        with open(Config.PRP_PATH, "wb") as f:
+            f.write(prp_key_bytes)
     else:
         raise ValueError("PRP_KEY environment variable is missing!")
 
     if pup_key_base64:
-        pup_key = base64.b64decode(pup_key_base64).decode('utf-8')
-        with open(Config.PUP_PATH, "w") as f:
-            f.write(pup_key)
+        pup_key_bytes = base64.b64decode(pup_key_base64)
+        with open(Config.PUP_PATH, "wb") as f:
+            f.write(pup_key_bytes)
     else:
         raise ValueError("PUP_KEY environment variable is missing!")
 

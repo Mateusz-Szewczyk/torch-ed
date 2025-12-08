@@ -1,4 +1,6 @@
 import logging
+
+from langchain_openai import ChatOpenAI
 from sqlalchemy.exc import SQLAlchemyError
 from langchain_anthropic import ChatAnthropic
 from langchain.prompts import ChatPromptTemplate
@@ -8,7 +10,7 @@ from ..models import Conversation
 
 logger = logging.getLogger(__name__)
 
-def produce_conversation_name(query: str, model: ChatAnthropic) -> str:
+def produce_conversation_name(query: str, model: ChatOpenAI) -> str:
     """
     Produces a concise conversation title based on the user's first query.
     The title is a short phrase (up to 5 words) that summarizes the topic.
@@ -55,9 +57,9 @@ def update_conversation_title(conversation_id: int, title: str) -> None:
     finally:
         session.close()
 
-def set_conversation_title(conversation: Conversation, query: str, model: ChatAnthropic) -> None:
+def set_conversation_title(conversation_id: int, query: str, model: ChatOpenAI) -> None:
     """
     If the conversation has a default title (e.g. "New Conversation"), produce a new title using the model and update it.
     """
     title = produce_conversation_name(query, model)
-    update_conversation_title(conversation.id, title)
+    update_conversation_title(conversation_id, title)

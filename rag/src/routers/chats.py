@@ -19,12 +19,13 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
 @router.post("/", response_model=ConversationRead, status_code=201)
 async def create_conversation(
-    deck_id: Optional[int] = Body(None),
-    exam_id: Optional[int] = Body(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        deck_id: Optional[int] = Body(None),
+        exam_id: Optional[int] = Body(None),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Utwórz nową konwersację dla zalogowanego użytkownika.
@@ -64,10 +65,11 @@ async def create_conversation(
             detail=f"Error creating conversation: {str(e)}"
         )
 
+
 @router.get("/", response_model=List[ConversationRead])
 async def get_conversations(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Pobierz wszystkie konwersacje dla zalogowanego użytkownika,
@@ -149,10 +151,10 @@ async def delete_conversation(
 
 @router.post("/{conversation_id}/messages/", response_model=MessageRead, status_code=201)
 async def create_message(
-    conversation_id: int,
-    message: MessageCreate = Body(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        conversation_id: int,
+        message: MessageCreate = Body(...),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Dodaj nową wiadomość w konwersacji, o ile konwersacja należy do zalogowanego użytkownika.
@@ -195,11 +197,12 @@ async def create_message(
             detail=f"Internal server error: {str(e)}"
         )
 
+
 @router.get("/{conversation_id}/messages/", response_model=List[MessageRead])
 async def get_messages(
-    conversation_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        conversation_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Pobierz wiadomości dla konwersacji, o ile należy do zalogowanego użytkownika.
@@ -230,12 +233,13 @@ async def get_messages(
             detail=f"Error fetching messages: {str(e)}"
         )
 
+
 @router.patch("/{conversation_id}", response_model=ConversationRead)
 async def update_conversation(
-    conversation_id: int,
-    conversation_update: ConversationUpdate = Body(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        conversation_id: int,
+        conversation_update: ConversationUpdate = Body(...),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Zmień tytuł konwersacji, o ile należy do zalogowanego użytkownika.
@@ -246,7 +250,7 @@ async def update_conversation(
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        if str(conversation.user_id) != current_user.id_:
+        if str(conversation.user_id) != str(current_user.id_):
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: You cannot update a conversation that isn't yours."

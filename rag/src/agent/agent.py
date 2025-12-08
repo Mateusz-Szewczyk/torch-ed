@@ -1,7 +1,9 @@
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+import asyncio
 
 from langchain_community.tools.tavily_search.tool import TavilySearchResults
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -9,9 +11,19 @@ from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
 from .agent_memory import get_conversation_history
+from .utils import set_conversation_title
 from .tools import FlashcardGenerator, RAGTool, ExamGenerator, DirectAnswer
 
 logger = logging.getLogger(__name__)
+
+# Debug flag - set via environment variable
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+
+def debug_log(msg: str):
+    """Conditional debug logging"""
+    if DEBUG:
+        logger.debug(msg)
 
 
 class ToolResult:
@@ -23,124 +35,129 @@ class ToolResult:
         self.success = success
         self.error = error
         self.timestamp = datetime.now()
-        print(
-            f"[DEBUG] ToolResult created - Tool: {tool_name}, Success: {success}, Content length: {len(content) if content else 0}, Error: {error}")
+        debug_log(
+            f"ToolResult created - Tool: {tool_name}, Success: {success}, Content length: {len(content) if content else 0}, Error: {error}")
 
 
 class ChatAgent:
     """The main agent responsible for orchestrating tool use and generating final responses."""
-    MAX_HISTORY_LENGTH = 5
+    MAX_HISTORY_LENGTH = 3  # Reduced from 5 for token optimization
+    MAX_HISTORY_CHARS = 1500  # Character limit for history
 
     def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, **kwargs):
-        print(f"[DEBUG] ChatAgent initialization - User ID: {user_id}, Conversation ID: {conversation_id}")
+        debug_log(f"ChatAgent initialization - User ID: {user_id}, Conversation ID: {conversation_id}")
         self.user_id = user_id
         self.conversation_id = conversation_id
         self.openai_api_key = openai_api_key
         self.tavily_api_key = tavily_api_key
-        self.synthesis_model = ChatOpenAI(model_name="gpt-4o-mini-2024-07-18", temperature=0.1,
-                                          openai_api_key=self.openai_api_key)
+        self.synthesis_model = ChatOpenAI(
+            model_name="gpt-4o-mini-2024-07-18",
+            temperature=0.1,
+            openai_api_key=self.openai_api_key
+        )
         self.tool_instances: Dict[str, BaseTool] = {}
-        print(f"[DEBUG] ChatAgent initialized successfully")
+        debug_log("ChatAgent initialized successfully")
 
     def _initialize_tool(self, tool_name: str) -> BaseTool:
         """Lazy initialization of tools to save resources."""
-        print(f"[DEBUG] Initializing tool: {tool_name}")
+        debug_log(f"Initializing tool: {tool_name}")
 
         if tool_name in self.tool_instances:
-            print(f"[DEBUG] Tool {tool_name} already exists in cache")
+            debug_log(f"Tool {tool_name} already exists in cache")
             return self.tool_instances[tool_name]
 
         user_id_str = str(self.user_id)
-        print(f"[DEBUG] User ID for tool initialization: {user_id_str}")
 
         try:
             if tool_name == "TavilySearchResults":
-                print(f"[DEBUG] Creating TavilySearchResults with API key: {self.tavily_api_key[:10]}...")
                 tool = TavilySearchResults(tavily_api_key=self.tavily_api_key, max_results=3)
             elif tool_name == "RAGTool":
-                print(f"[DEBUG] Creating RAGTool with user_id: {user_id_str}")
                 tool = RAGTool(user_id=user_id_str, api_key=self.openai_api_key)
             elif tool_name == "FlashcardGenerator":
-                print(f"[DEBUG] Creating FlashcardGenerator with user_id: {user_id_str}")
                 tool = FlashcardGenerator(user_id=user_id_str, api_key=self.openai_api_key)
             elif tool_name == "ExamGenerator":
-                print(f"[DEBUG] Creating ExamGenerator with user_id: {user_id_str}")
                 tool = ExamGenerator(user_id=user_id_str, openai_api_key=self.openai_api_key)
             elif tool_name == "DirectAnswer":
-                print(f"[DEBUG] Creating DirectAnswer tool")
                 tool = DirectAnswer(model=self.synthesis_model)
             else:
-                print(f"[ERROR] Unknown tool requested: {tool_name}")
+                logger.error(f"Unknown tool requested: {tool_name}")
                 raise ValueError(f"Unknown tool: {tool_name}")
 
             self.tool_instances[tool_name] = tool
-            print(f"[DEBUG] Tool {tool_name} initialized and cached successfully")
+            debug_log(f"Tool {tool_name} initialized and cached successfully")
             return tool
 
         except Exception as e:
-            print(f"[ERROR] Failed to initialize tool {tool_name}: {str(e)}")
+            logger.error(f"Failed to initialize tool {tool_name}: {str(e)}")
             raise
+
+    def _truncate_history(self, history: str) -> str:
+        """Smart truncation - keep recent context only"""
+        if len(history) <= self.MAX_HISTORY_CHARS:
+            return history
+
+        # Keep last N characters
+        truncated = "...(earlier messages omitted)...\n" + history[-self.MAX_HISTORY_CHARS:]
+        debug_log(f"History truncated: {len(history)} → {len(truncated)} chars")
+        return truncated
 
     async def _create_standalone_query(self, query: str, history: str) -> str:
         """Uses an LLM to rephrase a follow-up query into a standalone question."""
-        print(f"[DEBUG] Creating standalone query from: '{query}'")
-        print(f"[DEBUG] History length: {len(history) if history else 0}")
+        debug_log(f"Creating standalone query from: '{query}'")
 
-        # If history is short or empty, return query directly
+        # OPTIMIZATION: Skip LLM call if no meaningful history
         if not history or len(history.strip()) < 200:
-            print(f"[DEBUG] No or short history, returning original query")
+            debug_log("No or short history, returning original query")
             return query
 
-        system_prompt = ("Given a chat history and a follow-up question, rephrase the follow-up question to be a "
-                         "standalone question that can be understood without the history. "
-                         "If the question is already standalone, return it unchanged. "
-                         f"If applicable add information about date at the end of the standalone query. Today is: {datetime.now()}")
-        user_prompt = f"""
-Chat History:
----
-{history}
----
-Follow-up Question: "{query}"
+        # OPTIMIZATION: Count actual conversation turns
+        history_turns = history.count("User:") + history.count("Assistant:")
+        if history_turns < 2:  # Less than 1 full conversation
+            debug_log("Less than 2 turns in history, returning original query")
+            return query
 
-Standalone Question:
-"""
+        # OPTIMIZATION: Shorter, more focused prompt
+        system_prompt = (
+            f"Rephrase as standalone question. Today: {datetime.now().strftime('%Y-%m-%d')}. "
+            "If already standalone, return unchanged."
+        )
+        # Use only last 1000 chars of history
+        user_prompt = f"History:\n{history[-1000:]}\n\nQuestion: {query}\n\nStandalone:"
+
         try:
-            print(f"[DEBUG] Sending query to synthesis model for standalone conversion")
+            debug_log("Sending query to synthesis model for standalone conversion")
             messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
             response = await self.synthesis_model.ainvoke(messages)
             standalone_query = response.content.strip().strip('"')
-            print(f"[DEBUG] Original query: '{query}' -> Standalone query: '{standalone_query}'")
-            logger.info(f"Original query: '{query}'. Standalone query: '{standalone_query}'")
+            debug_log(f"Original query: '{query}' -> Standalone query: '{standalone_query}'")
+            logger.info(f"Standalone query: '{standalone_query}'")
             return standalone_query
         except Exception as e:
-            print(f"[ERROR] Failed to create standalone query: {str(e)}")
-            print(f"[DEBUG] Returning original query due to error")
+            logger.error(f"Failed to create standalone query: {str(e)}")
+            debug_log("Returning original query due to error")
             return query
 
     def _build_generator_context(self, query: str, rag_content: Optional[str], tavily_content: Optional[str]) -> str:
         """Builds context for generator tools by combining query with available content."""
-        print(f"[DEBUG] Building generator context")
-        print(f"[DEBUG] - Query: '{query}'")
-        print(f"[DEBUG] - RAG content length: {len(rag_content) if rag_content else 0}")
-        print(f"[DEBUG] - Tavily content length: {len(tavily_content) if tavily_content else 0}")
+        debug_log("Building generator context")
 
         context_parts = [f"User Request: {query}"]
 
         if rag_content and len(rag_content) > 50:
             context_parts.append(f"Information from your documents:\n{rag_content}")
-            print(f"[DEBUG] Added RAG content to context")
+            debug_log("Added RAG content to context")
 
         if tavily_content and len(tavily_content) > 50:
             context_parts.append(f"Additional information from web search:\n{tavily_content}")
-            print(f"[DEBUG] Added Tavily content to context")
+            debug_log("Added Tavily content to context")
 
         combined_context = "\n\n".join(context_parts)
-        print(f"[DEBUG] Final combined context length: {len(combined_context)}")
+        debug_log(f"Final combined context length: {len(combined_context)}")
         return combined_context
 
     def _format_generator_messages(self, tool_results: Dict[str, ToolResult]) -> str:
         """Formats messages for successful generator tools, combining them if both are present."""
-        print(f"[DEBUG] Formatting generator messages")
+        debug_log("Formatting generator messages")
 
         flashcard_success = 'FlashcardGenerator' in tool_results and tool_results['FlashcardGenerator'].success
         exam_success = 'ExamGenerator' in tool_results and tool_results['ExamGenerator'].success
@@ -152,7 +169,7 @@ Standalone Question:
             try:
                 flashcard_data = json.loads(tool_results['FlashcardGenerator'].content)
                 if 'error' in flashcard_data:
-                    print(f"[DEBUG] FlashcardGenerator JSON contains error: {flashcard_data['error']}")
+                    debug_log(f"FlashcardGenerator JSON contains error: {flashcard_data['error']}")
                     return f"❌ **Problem z tworzeniem fiszek:**\n{flashcard_data['error']}"
 
                 topic = flashcard_data.get('topic', 'Twoje fiszki')
@@ -174,7 +191,7 @@ Twoje nowe fiszki czekają na Ciebie! Możesz teraz:
                 messages.append(flashcard_msg)
 
             except (json.JSONDecodeError, KeyError) as e:
-                print(f"[DEBUG] FlashcardGenerator JSON parsing failed: {str(e)}")
+                debug_log(f"FlashcardGenerator JSON parsing failed: {str(e)}")
                 fallback_msg = """## ✅ Fiszki zostały pomyślnie utworzone!
 
 ### 🎯 Co dalej?
@@ -191,7 +208,7 @@ Twoje nowe fiszki są gotowe do nauki!
             try:
                 exam_data = json.loads(tool_results['ExamGenerator'].content)
                 if 'error' in exam_data:
-                    print(f"[DEBUG] ExamGenerator JSON contains error: {exam_data['error']}")
+                    debug_log(f"ExamGenerator JSON contains error: {exam_data['error']}")
                     return f"❌ **Problem z tworzeniem egzaminu:**\n{exam_data['error']}"
 
                 topic = exam_data.get('topic', 'Twój egzamin')
@@ -216,7 +233,7 @@ Pamiętaj, że możesz rozwiązywać egzamin wielokrotnie, aby poprawić swoje w
                 messages.append(exam_msg)
 
             except (json.JSONDecodeError, KeyError) as e:
-                print(f"[DEBUG] ExamGenerator JSON parsing failed: {str(e)}")
+                debug_log(f"ExamGenerator JSON parsing failed: {str(e)}")
                 fallback_msg = """## ✅ Egzamin został pomyślnie utworzony!
 
 ### 🎯 Co dalej?
@@ -231,84 +248,125 @@ Twój nowy egzamin czeka na rozwiązanie!
 Możesz rozwiązywać egzamin wielokrotnie, aby doskonalić swoją wiedzę!"""
                 messages.append(fallback_msg)
 
-        # POPRAWKA: Właściwe zwracanie wiadomości
+        # Return combined or single message
         if len(messages) > 1:
-            print(f"[DEBUG] Combining {len(messages)} generator messages")
+            debug_log(f"Combining {len(messages)} generator messages")
             return "\n\n---\n\n".join(messages)
         elif len(messages) == 1:
-            print(f"[DEBUG] Returning single generator message")
-            return messages[0]  # NAPRAWIONE: messages[0] zamiast messages
+            debug_log("Returning single generator message")
+            return messages[0]
         else:
-            print(f"[DEBUG] No successful generator tools found")
+            debug_log("No successful generator tools found")
             return ""
 
-    async def final_synthesis(self, original_query: str, history: str, context: Optional[str], context_source: str,
-                              tool_results: Dict[str, ToolResult]) -> str:
-        """Generates the final, user-facing response, including navigational guidance and conversation history."""
-        print(f"[DEBUG] Starting final synthesis")
-        print(f"[DEBUG] Original query: '{original_query}'")
-        print(f"[DEBUG] Context source: {context_source}")
-        print(f"[DEBUG] Context length: {len(context) if context else 0}")
-        print(f"[DEBUG] Tool results: {list(tool_results.keys())}")
-
-        # Check for successful generator tools
-        flashcard_success = 'FlashcardGenerator' in tool_results and tool_results['FlashcardGenerator'].success
-        exam_success = 'ExamGenerator' in tool_results and tool_results['ExamGenerator'].success
-
-        if flashcard_success or exam_success:
-            print(f"[DEBUG] Generator tool(s) succeeded, formatting messages")
-            return self._format_generator_messages(tool_results)
-
-        # If a DirectAnswer tool was explicitly used and successful, return its content
-        if 'DirectAnswer' in tool_results and tool_results['DirectAnswer'].success:
-            print(f"[DEBUG] Returning DirectAnswer result")
-            return tool_results['DirectAnswer'].content
-
-        # If no specific generator or direct answer tool was primarily invoked,
-        # create a conversational answer based on retrieved context.
-        print(f"[DEBUG] Creating conversational answer using synthesis model")
-        system_prompt = """
-You are TorchED, a helpful AI learning assistant. Your goal is to provide a clear, accurate, and helpful final answer.
-- Continue the conversation naturally, using the provided history for context.
-- Use the 'Retrieved Information' to form the basis of your answer.
-- Be honest about your sources. If no information was retrieved, say so.
-- Format your response using Markdown for readability.
-"""
-        prompt_context = f"""
-**Conversation History:**
-{history if history else "This is the beginning of the conversation."}
-
-**Retrieved Information (Source: {context_source}):**
----
-{context or "No specific information was retrieved."}
----
-
-Based on the history and retrieved information, answer the user's latest query.
-
-**User's Latest Query:** "{original_query}"
-
-**Your Answer:**
-"""
+    async def _execute_rag(self, tool: BaseTool, query: str) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Execute RAG tool and return (success, content, error)"""
         try:
-            print(f"[DEBUG] Sending final synthesis request to model")
-            messages = [SystemMessage(content=system_prompt), HumanMessage(content=prompt_context)]
-            response = await self.synthesis_model.ainvoke(messages)
-            print(f"[DEBUG] Final synthesis completed, response length: {len(response.content)}")
-            return response.content
+            debug_log(f"Executing RAGTool with query: '{query}'")
+            output = await tool._arun(query)
+
+            if output and "error" not in output.lower() and len(output) > 50:
+                debug_log(f"RAGTool successful: {len(output)} chars")
+                return True, output, None
+            else:
+                debug_log("RAGTool returned insufficient content")
+                return False, output or "", "Insufficient content from RAGTool"
         except Exception as e:
-            print(f"[ERROR] Final synthesis failed: {str(e)}")
-            return f"I apologize, but I encountered an error while generating the final response: {str(e)}"
+            logger.error(f"RAGTool exception: {e}")
+            return False, "", str(e)
 
-    async def invoke(self, query: str, selected_tool_names: List[str]) -> str:
-        """Main execution logic for the agent, with smarter tool routing."""
-        print(f"[DEBUG] ========== AGENT INVOKE START ==========")
-        print(f"[DEBUG] Query: '{query}'")
-        print(f"[DEBUG] Selected tool names: {selected_tool_names}")
+    async def _execute_tavily(self, tool: BaseTool, query: str) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Execute Tavily tool and return (success, content, error)"""
+        try:
+            logger.info(f"[TAVILY] ========== STARTING TAVILY SEARCH ==========")
+            logger.info(f"[TAVILY] Query: '{query}'")
 
+            results = await tool.ainvoke({"query": query})
+
+            logger.info(f"[TAVILY] Raw results type: {type(results)}")
+            logger.info(f"[TAVILY] Raw results: {results[:500] if isinstance(results, str) else results}")
+
+            if results and isinstance(results, list):
+                logger.info(f"[TAVILY] Processing {len(results)} search results")
+
+                # Log each result
+                for idx, result in enumerate(results):
+                    logger.info(
+                        f"[TAVILY] Result {idx + 1}: {result.get('title', 'No title')} - {result.get('url', 'No URL')}")
+
+                combined_content = "\n\n".join([r.get('content', '') for r in results if 'content' in r])
+
+                if len(combined_content) > 50:
+                    logger.info(f"[TAVILY] ✅ Success: {len(combined_content)} chars retrieved")
+                    logger.info(f"[TAVILY] Content preview: {combined_content[:200]}...")
+                    return (True, combined_content, None)
+                else:
+                    logger.warning(f"[TAVILY] ❌ Insufficient content: {len(combined_content)} chars")
+                    return (False, combined_content or "", "Insufficient content from Tavily")
+            else:
+                logger.warning(f"[TAVILY] ❌ Unexpected format: {type(results)}")
+                return (False, "", "Unexpected format from Tavily")
+
+        except Exception as e:
+            logger.error(f"[TAVILY] ❌ Exception during Tavily execution: {e}", exc_info=True)
+            return (False, "", str(e))
+
+
+    async def _final_synthesis_stream(self, original_query: str, history: str, context: Optional[str],
+                                      context_source: str, tool_results: Dict[str, ToolResult]):
+        """Streaming version of final synthesis that yields chunks as they're generated"""
+        debug_log("Starting streaming final synthesis")
+
+        # Check for DirectAnswer
+        if 'DirectAnswer' in tool_results and tool_results['DirectAnswer'].success:
+            debug_log("Returning DirectAnswer result (streaming)")
+            yield tool_results['DirectAnswer'].content
+            return
+
+        # OPTIMIZATION: Truncate history before sending to LLM
+        truncated_history = self._truncate_history(history)
+
+        # OPTIMIZATION: Shorter system prompt
+        system_prompt = """You are TorchED AI assistant. Answer clearly using the retrieved information.
+Format: Markdown. Be honest about sources."""
+
+        # OPTIMIZATION: More concise prompt structure
+        prompt_context = f"""History: {truncated_history if truncated_history else "New conversation."}
+
+Info ({context_source}): {context or "No specific information retrieved."}
+
+Query: "{original_query}"
+
+Answer:"""
+
+        try:
+            debug_log("Starting LLM streaming")
+            messages = [SystemMessage(content=system_prompt), HumanMessage(content=prompt_context)]
+
+            # Stream from OpenAI using astream()
+            async for chunk in self.synthesis_model.astream(messages):
+                if chunk.content:
+                    debug_log(f"Yielding chunk: {chunk.content[:50]}...")
+                    yield chunk.content
+
+        except Exception as e:
+            logger.error(f"Streaming synthesis failed: {e}")
+            yield f"Error: {str(e)}"
+
+    async def invoke(self, query: str, selected_tool_names: List[str]):
+        """Main execution logic with streaming support - yields chunks as they're generated"""
+        logger.info("========== AGENT INVOKE START (STREAMING) ==========")
+        logger.info(f"Query: '{query}'")
+        logger.info(f"Selected tool names: {selected_tool_names}")
+
+        # Get conversation history
         history_list = get_conversation_history(self.conversation_id, self.MAX_HISTORY_LENGTH)
+        if len(history_list) == 1:
+            set_conversation_title(self.conversation_id, query, self.synthesis_model)
         history_str = "\n".join(history_list)
-        print(f"[DEBUG] Conversation history length: {len(history_list)} messages")
+        logger.info(f"Conversation history length: {len(history_list)} messages")
 
+        # Map user-friendly tool names to internal names
         internal_tool_map = {
             "Wiedza z plików": "RAGTool",
             "Generowanie fiszek": "FlashcardGenerator",
@@ -316,154 +374,152 @@ Based on the history and retrieved information, answer the user's latest query.
             "Wyszukaj w internecie": "TavilySearchResults"
         }
 
-        # Convert user-friendly names to internal tool names, maintaining order
         ordered_tools_to_execute = [
             internal_tool_map[name] for name in selected_tool_names if name in internal_tool_map
         ]
-        print(f"[DEBUG] Mapped tools to execute: {ordered_tools_to_execute}")
+        logger.info(f"Mapped tools to execute: {ordered_tools_to_execute}")
 
+        # Create standalone query
         standalone_query = await self._create_standalone_query(query, history_str)
-        context, context_source = None, "user query"
-        print(f"[DEBUG] Standalone query created: '{standalone_query}'")
+        logger.info(f"Standalone query: '{standalone_query}'")
 
+        context, context_source = None, "user query"
         tool_results: Dict[str, ToolResult] = {}
 
-        # Variables to track content from different sources
-        rag_content = None
-        tavily_content = None
+        # Separate tools into retrieval and generator categories
+        retrieval_tools = [t for t in ordered_tools_to_execute if t in ["RAGTool", "TavilySearchResults"]]
+        generator_tools = [t for t in ordered_tools_to_execute if t in ["FlashcardGenerator", "ExamGenerator"]]
 
-        # --- Tool Execution Loop ---
-        print(f"[DEBUG] ========== TOOL EXECUTION LOOP START ==========")
-        for tool_name in ordered_tools_to_execute:
-            print(f"[DEBUG] ========== EXECUTING TOOL: {tool_name} ==========")
-            logger.info(f"Attempting to execute tool: {tool_name}")
+        logger.info(f"Retrieval tools: {retrieval_tools}")
+        logger.info(f"Generator tools: {generator_tools}")
 
-            try:
-                tool = self._initialize_tool(tool_name)
-                print(f"[DEBUG] Tool {tool_name} initialized successfully")
-            except Exception as e:
-                print(f"[ERROR] Failed to initialize tool {tool_name}: {str(e)}")
-                tool_results[tool_name] = ToolResult(tool_name, "", success=False,
-                                                     error=f"Initialization failed: {str(e)}")
-                continue
+        rag_content, tavily_content = None, None
 
-            tool_execution_successful = False
-            tool_output = None
-            tool_error = None
+        # ========== PHASE 1: RETRIEVAL TOOLS (PARALLEL) ==========
+        if retrieval_tools:
+            logger.info("========== PHASE 1: RETRIEVAL (PARALLEL) ==========")
+            logger.info(f"Running {len(retrieval_tools)} retrieval tools in parallel: {retrieval_tools}")
 
-            try:
-                if tool_name == "RAGTool":
-                    print(f"[DEBUG] Executing RAGTool with standalone query: '{standalone_query}'")
-                    rag_output = await tool._arun(standalone_query)
-                    print(f"[DEBUG] RAGTool raw output length: {len(rag_output) if rag_output else 0}")
-                    print(f"[DEBUG] RAGTool output preview: {rag_output[:300] if rag_output else 'None'}...")
+            # Create async tasks for parallel execution
+            retrieval_tasks = []
+            task_tool_names = []
 
-                    if rag_output and "error" not in rag_output.lower() and len(rag_output) > 50:
-                        print(f"[DEBUG] RAGTool execution successful - storing content")
-                        rag_content = rag_output
-                        context = rag_output
-                        context_source = "your documents"
-                        tool_execution_successful = True
+            for tool_name in retrieval_tools:
+                logger.info(f"[PARALLEL] Preparing task for: {tool_name}")
+                try:
+                    tool = self._initialize_tool(tool_name)
+                    task_tool_names.append(tool_name)
+
+                    if tool_name == "RAGTool":
+                        logger.info("[PARALLEL] Adding RAGTool task to parallel execution")
+                        retrieval_tasks.append(self._execute_rag(tool, standalone_query))
+                    elif tool_name == "TavilySearchResults":
+                        logger.info("[PARALLEL] Adding TavilySearchResults task to parallel execution")
+                        retrieval_tasks.append(self._execute_tavily(tool, standalone_query))
+
+                except Exception as e:
+                    logger.error(f"[PARALLEL] Failed to initialize {tool_name}: {e}", exc_info=True)
+
+                    # Add error placeholder task
+                    async def error_task():
+                        return (False, "", str(e))
+
+                    retrieval_tasks.append(error_task())
+
+            # Execute all retrieval tools simultaneously
+            if retrieval_tasks:
+                logger.info(f"[PARALLEL] Executing {len(retrieval_tasks)} parallel tasks for: {task_tool_names}")
+                retrieval_results = await asyncio.gather(*retrieval_tasks, return_exceptions=True)
+                logger.info(f"[PARALLEL] Received {len(retrieval_results)} results from parallel execution")
+
+                # Process results
+                for tool_name, result in zip(task_tool_names, retrieval_results):
+                    logger.info(f"[PARALLEL] Processing result for {tool_name}: {type(result)}")
+
+                    if isinstance(result, Exception):
+                        logger.error(f"[PARALLEL] {tool_name} failed with exception: {result}")
+                        tool_results[tool_name] = ToolResult(tool_name, "", False, str(result))
+
+                    elif result and isinstance(result, tuple) and len(result) == 3:
+                        success, content, error = result
+                        logger.info(
+                            f"[PARALLEL] {tool_name} result - Success: {success}, Content length: {len(content) if content else 0}")
+                        tool_results[tool_name] = ToolResult(tool_name, content or "", success, error)
+
+                        if success and content:
+                            if tool_name == "RAGTool":
+                                rag_content = content
+                                context = content
+                                context_source = "your documents"
+                                logger.info(f"[PARALLEL] RAG content retrieved: {len(content)} chars")
+                            elif tool_name == "TavilySearchResults":
+                                tavily_content = content
+                                if not context:
+                                    context = content
+                                    context_source = "a web search"
+                                else:
+                                    context_source = "your documents and web search"
+                                logger.info(f"[PARALLEL] Tavily content retrieved: {len(content)} chars")
                     else:
-                        print(f"[DEBUG] RAGTool returned insufficient context")
-                        print(f"[DEBUG] - Output exists: {rag_output is not None}")
-                        print(f"[DEBUG] - Contains 'error': {'error' in rag_output.lower() if rag_output else False}")
-                        print(f"[DEBUG] - Length > 50: {len(rag_output) > 50 if rag_output else False}")
-                        logger.info("RAGTool returned insufficient context.")
-                        tool_error = rag_output if rag_output else "No content from RAGTool"
+                        logger.warning(f"[PARALLEL] {tool_name} returned unexpected result format: {result}")
+                        tool_results[tool_name] = ToolResult(tool_name, "", False, "Unexpected result format")
 
-                    tool_results[tool_name] = ToolResult(tool_name, rag_output, success=tool_execution_successful,
-                                                         error=tool_error)
+            logger.info(f"[PARALLEL] Phase 1 complete. Context source: {context_source}")
 
-                elif tool_name == "TavilySearchResults":
-                    print(f"[DEBUG] Executing TavilySearchResults")
-                    print(f"[DEBUG] Current context length: {len(context) if context else 0}")
+        # ========== PHASE 2: GENERATOR TOOLS (SEQUENTIAL) ==========
+        if generator_tools:
+            logger.info("========== PHASE 2: GENERATORS (AFTER RETRIEVAL) ==========")
+            logger.info(f"Running {len(generator_tools)} generators: {generator_tools}")
 
-                    print(f"[DEBUG] Proceeding with Tavily search")
-                    tavily_output_raw = await tool.ainvoke({"query": standalone_query})
-                    print(f"[DEBUG] Tavily raw output type: {type(tavily_output_raw)}")
-                    print(f"[DEBUG] Tavily raw output: {tavily_output_raw}")
+            # Build context once for all generators
+            generator_context = self._build_generator_context(query, rag_content, tavily_content)
 
-                    if tavily_output_raw and isinstance(tavily_output_raw, list):
-                        print(f"[DEBUG] Processing {len(tavily_output_raw)} Tavily results")
-                        combined_content = "\n\n".join(
-                            [r.get('content', '') for r in tavily_output_raw if 'content' in r])
-                        print(f"[DEBUG] Combined Tavily content length: {len(combined_content)}")
-
-                        if len(combined_content) > 50:
-                            print(f"[DEBUG] Tavily execution successful - storing content")
-                            tavily_content = combined_content
-                            if not context:
-                                context = combined_content
-                                context_source = "a web search"
-                            else:
-                                context_source = "your documents and web search"
-                            tool_execution_successful = True
-                        else:
-                            print(f"[DEBUG] Tavily returned insufficient content")
-                            logger.info("TavilySearchResults returned insufficient context.")
-                            tool_error = "No substantial content from TavilySearchResults"
-                    else:
-                        print(f"[DEBUG] Tavily returned unexpected format")
-                        tool_error = "TavilySearchResults returned unexpected format"
-
-                    tool_results[tool_name] = ToolResult(tool_name,
-                                                         combined_content if 'combined_content' in locals() else "",
-                                                         success=tool_execution_successful, error=tool_error)
-
-                elif tool_name in ["FlashcardGenerator", "ExamGenerator"]:
-                    print(f"[DEBUG] Executing {tool_name}")
-                    print(f"[DEBUG] Available RAG content: {len(rag_content) if rag_content else 0} chars")
-                    print(f"[DEBUG] Available Tavily content: {len(tavily_content) if tavily_content else 0} chars")
-
-                    # Build context for generator - will always have at least the user query
-                    generator_context = self._build_generator_context(query, rag_content, tavily_content)
-
+            # Execute generators sequentially
+            for tool_name in generator_tools:
+                try:
+                    tool = self._initialize_tool(tool_name)
                     generator_input = json.dumps({
                         "description": generator_context,
                         "query": query
                     })
-                    print(f"[DEBUG] Generator input prepared, length: {len(generator_input)}")
 
+                    logger.info(f"Executing {tool_name} with context length: {len(generator_context)}")
                     tool_output = await tool._arun(generator_input)
-                    print(f"[DEBUG] {tool_name} output length: {len(tool_output) if tool_output else 0}")
-                    print(f"[DEBUG] {tool_name} output preview: {tool_output[:300] if tool_output else 'None'}...")
 
+                    # Check for errors in output
                     tool_execution_successful = True
-
-                    # Check for error in JSON output
+                    tool_error = None
                     try:
                         parsed_output = json.loads(tool_output)
                         if 'error' in parsed_output:
-                            print(f"[DEBUG] {tool_name} returned error in JSON: {parsed_output['error']}")
                             tool_execution_successful = False
                             tool_error = parsed_output['error']
-                        else:
-                            print(f"[DEBUG] {tool_name} executed successfully")
                     except json.JSONDecodeError:
-                        print(f"[DEBUG] {tool_name} output is not valid JSON, checking for error keywords")
-                        if "error" in tool_output.lower() or "failed" in tool_output.lower():
-                            print(f"[DEBUG] {tool_name} output contains error keywords")
+                        if "error" in tool_output.lower():
                             tool_execution_successful = False
                             tool_error = tool_output
 
-                    tool_results[tool_name] = ToolResult(tool_name, tool_output, success=tool_execution_successful,
-                                                         error=tool_error)
+                    tool_results[tool_name] = ToolResult(tool_name, tool_output, tool_execution_successful, tool_error)
+                    logger.info(f"{tool_name} completed - Success: {tool_execution_successful}")
 
-                else:
-                    print(f"[WARNING] Tool {tool_name} not explicitly handled in routing logic")
-                    logger.warning(
-                        f"Tool {tool_name} is in selected_tools but not explicitly handled in routing logic.")
-                    tool_results[tool_name] = ToolResult(tool_name, "Tool not handled by router logic.", success=False,
-                                                         error="Unhandled tool")
+                except Exception as e:
+                    logger.error(f"{tool_name} execution failed: {e}")
+                    tool_results[tool_name] = ToolResult(tool_name, str(e), False, str(e))
 
-            except Exception as e:
-                print(f"[ERROR] Exception during {tool_name} execution: {str(e)}")
-                logger.error(f"Error during execution of {tool_name}: {e}", exc_info=True)
-                tool_results[tool_name] = ToolResult(tool_name, str(e), success=False, error=str(e))
+            # For generators, return formatted message immediately (no streaming for structured JSON)
+            flashcard_success = 'FlashcardGenerator' in tool_results and tool_results['FlashcardGenerator'].success
+            exam_success = 'ExamGenerator' in tool_results and tool_results['ExamGenerator'].success
 
-        print(f"[DEBUG] ========== TOOL EXECUTION LOOP END ==========")
-        print(f"[DEBUG] Proceeding to final synthesis with all tool results")
-        result = await self.final_synthesis(query, history_str, context, context_source, tool_results)
-        print(f"[DEBUG] ========== AGENT INVOKE END ==========")
-        return result
+            if flashcard_success or exam_success:
+                logger.info("Generator tools succeeded, yielding formatted message")
+                result = self._format_generator_messages(tool_results)
+                yield result
+                logger.info("========== AGENT INVOKE END (GENERATORS) ==========")
+                return
+
+        # ========== PHASE 3: STREAM FINAL SYNTHESIS ==========
+        logger.info("========== PHASE 3: STREAMING FINAL SYNTHESIS ==========")
+        async for chunk in self._final_synthesis_stream(query, history_str, context, context_source, tool_results):
+            yield chunk
+
+        logger.info("========== AGENT INVOKE END (STREAMING) ==========")

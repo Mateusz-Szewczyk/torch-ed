@@ -82,6 +82,8 @@ def get_conversation_history(conversation_id: int, max_history_length: int) -> l
             conversation_history.extend(pair)
 
         logger.debug(f"Retrieved conversation history for conversation ID={conversation_id}: {conversation_history}")
+        logger.info("conv history: %s", conversation_history)
+        logger.info("conv history len %s", len(conversation_history))
         return conversation_history
     except SQLAlchemyError as e:
         logger.error(f"Error podczas pobierania historii rozmowy: {e}", exc_info=True)

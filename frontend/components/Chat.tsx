@@ -15,7 +15,7 @@ import { v4 as uuidv4 } from "uuid"
 import { useTheme } from "next-themes"
 import ToolSelectionDialog from "@/components/ToolSelectionDialog"
 import { cn } from "@/lib/utils"
-import {debounce} from "lodash";
+import { debounce } from "lodash"
 
 type Message = {
   id: string
@@ -24,6 +24,7 @@ type Message = {
   sender: "user" | "bot"
   created_at: string
   isError?: boolean
+  isStreaming?: boolean
 }
 
 interface ChatProps {
@@ -56,7 +57,7 @@ const TypingIndicator = React.memo(() => (
         />
       ))}
     </div>
-    <span className="text-sm text-muted-foreground ml-2">AI is typing...</span>
+    <span className="text-sm text-muted-foreground ml-2">Thinking...</span>
   </motion.div>
 ))
 TypingIndicator.displayName = 'TypingIndicator'
@@ -64,7 +65,7 @@ TypingIndicator.displayName = 'TypingIndicator'
 const MessageBubble = React.memo<{
   message: Message
   isLast: boolean
-}>(({ message }) => {
+}>(({ message, isLast }) => {
   const { theme } = useTheme()
   const [showTimestamp, setShowTimestamp] = useState(false)
   const isUser = message.sender === "user"
@@ -224,20 +225,20 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           method: "GET",
-        });
+        })
         if (res.ok) {
-          const data: Message[] = await res.json();
-          setMessages(data.map((msg) => ({ ...msg, isError: false })));
+          const data: Message[] = await res.json()
+          setMessages(data.map((msg) => ({ ...msg, isError: false, isStreaming: false })))
         } else {
-          setError(`Failed to fetch messages: ${res.statusText}`);
+          setError(`Failed to fetch messages: ${res.statusText}`)
         }
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        setError(`Error fetching messages: ${errorMessage}`);
+        const errorMessage = err instanceof Error ? err.message : "Unknown error"
+        setError(`Error fetching messages: ${errorMessage}`)
       }
     }, 300),
     [API_BASE_URL, conversationId]
-  );
+  )
 
   useEffect(() => {
     if (conversationId) {
@@ -260,17 +261,133 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [messages, isLoading])
 
-  // Retry logic with exponential backoff
-  const retryWithBackoff = useCallback(async (fn: () => Promise<void>, maxRetries = 3) => {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (err: unknown) {
-        if (attempt === maxRetries) throw err;
-        await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 1000));
-      }
+  const handleStreamingResponse = useCallback(async (userInput: string) => {
+    // Save user message to database first
+    try {
+      await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender: "user", text: userInput }),
+      })
+    } catch (err) {
+      console.error("Failed to save user message:", err)
     }
-  }, []);
+
+    // Create initial bot message (empty, streaming)
+    const botMsgId = uuidv4()
+    const botMsg: Message = {
+      id: botMsgId,
+      conversation_id: conversationId,
+      text: "",
+      sender: "bot",
+      created_at: new Date().toISOString(),
+      isStreaming: true,
+    }
+    setMessages((prev) => [...prev, botMsg])
+
+    try {
+      // Start streaming request
+      const response = await fetch(`${API_BASE_URL}/query/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          query: userInput,
+          selected_tools: selectedTools,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+      let accumulatedText = ""
+
+      if (!reader) {
+        throw new Error("No reader available")
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) break
+
+        // Decode chunk
+        const chunk = decoder.decode(value, { stream: true })
+
+        // Parse SSE format (data: {...}\n\n)
+        const lines = chunk.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonData = JSON.parse(line.slice(6))
+
+              if (jsonData.error) {
+                throw new Error(jsonData.error)
+              }
+
+              // Handle chunks (including empty final chunk)
+              if (jsonData.chunk !== undefined) {
+                accumulatedText += jsonData.chunk
+
+                // Update message with accumulated text
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === botMsgId
+                      ? { ...msg, text: accumulatedText, isStreaming: !jsonData.done }
+                      : msg
+                  )
+                )
+              }
+
+              // Handle completion
+              if (jsonData.done) {
+                // Ensure cursor is removed even if chunk was empty
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === botMsgId
+                      ? { ...msg, text: accumulatedText, isStreaming: false }
+                      : msg
+                  )
+                )
+
+                // Save final bot message to database
+                if (accumulatedText) {
+                  await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sender: "bot", text: accumulatedText }),
+                  })
+                }
+                break
+              }
+            } catch (parseErr) {
+              console.error("Failed to parse SSE chunk:", parseErr)
+            }
+          }
+        }
+      }
+
+      setSelectedTools([])
+    } catch (err) {
+      const errorText = err instanceof Error ? err.message : String(err)
+
+      // Update message with error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMsgId
+            ? { ...msg, text: errorText, isError: true, isStreaming: false }
+            : msg
+        )
+      )
+      setError(errorText)
+    }
+  }, [conversationId, selectedTools, API_BASE_URL])
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || isLoading) return
@@ -288,84 +405,31 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
     }
     setMessages((prev) => [...prev, userMsg])
 
+    setIsLoading(true)
+
     try {
-      setIsLoading(true)
-
-      await retryWithBackoff(async () => {
-        const userMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sender: "user", text: userInput }),
-        })
-        if (!userMessageResponse.ok) {
-          const errData = await userMessageResponse.json()
-          throw new Error(errData.detail || "Error sending user message.")
-        }
-
-        const response = await fetch(`${API_BASE_URL}/query/`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversation_id: conversationId,
-            query: userInput,
-            selected_tools: selectedTools,
-          }),
-        })
-
-        if (!response.ok) {
-          const errData = await response.json()
-          throw new Error(errData.detail || `Error: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        const botMsg: Message = {
-          id: uuidv4(),
-          conversation_id: conversationId,
-          text: data.answer,
-          sender: "bot",
-          created_at: new Date().toISOString(),
-        }
-
-        const botMessageResponse = await fetch(`${API_BASE_URL}/chats/${conversationId}/messages/`, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sender: "bot", text: data.answer }),
-        })
-
-        if (!botMessageResponse.ok) {
-          const errData = await botMessageResponse.json()
-          throw new Error(errData.detail || "Error sending bot message.")
-        }
-
-        setMessages((prev) => [...prev, botMsg])
-        setSelectedTools([])
-      })
-    } catch (err) {
-      const errorText = err instanceof Error ? err.message : String(err)
-      const errorMessage: Message = {
-        id: uuidv4(),
-        conversation_id: conversationId,
-        text: errorText,
-        sender: "bot",
-        created_at: new Date().toISOString(),
-        isError: true,
-      }
-      setMessages((prev) => [...prev, errorMessage])
-      setError(errorText)
+      await handleStreamingResponse(userInput)
     } finally {
       setIsLoading(false)
     }
-  }, [input, isLoading, conversationId, selectedTools, API_BASE_URL, retryWithBackoff])
+  }, [input, isLoading, conversationId, handleStreamingResponse])
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }, [handleSend])
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault()
+        handleSend()
+      }
+    },
+    [handleSend]
+  )
+
+  // Check if we should show "Thinking" indicator
+  const shouldShowThinking = isLoading && (
+    messages.length === 0 ||
+    messages[messages.length - 1]?.sender !== 'bot' ||
+    (messages[messages.length - 1]?.sender === 'bot' && !messages[messages.length - 1]?.text)
+  )
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-background via-background to-muted/20">
@@ -376,7 +440,9 @@ const Chat: React.FC<ChatProps> = ({ conversationId }) => {
               <MessageBubble key={message.id} message={message} isLast={index === messages.length - 1} />
             ))}
           </AnimatePresence>
-          <AnimatePresence>{isLoading && <TypingIndicator />}</AnimatePresence>
+          <AnimatePresence>
+            {shouldShowThinking && <TypingIndicator />}
+          </AnimatePresence>
           <div ref={endRef} />
         </div>
       </div>

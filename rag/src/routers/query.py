@@ -1,11 +1,13 @@
 import os
 import logging
+import json
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ..schemas import QueryResponse, QueryRequest
+from ..schemas import QueryRequest
 from ..dependencies import get_db
-from ..auth import get_current_user  # Dekodowanie tokenu, zwraca obiekt User
+from ..auth import get_current_user
 from ..models import User
 from ..agent.agent import ChatAgent
 
@@ -30,47 +32,65 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 if not OPENAI_API_KEY:
     raise ValueError("OpenAI API key is not set. Please set the OPENAI_API_KEY environment variable.")
 
-@router.post("/", response_model=QueryResponse)
+
+@router.post("/")
 async def query_knowledge(
-    request: QueryRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        request: QueryRequest,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
-    Odpowiada na zapytania użytkownika. Jeśli w request dodatkowo przesłano listę
-    wybranych narzędzi (selected_tools), to zapytanie będzie przetwarzane przez nie w zadanej kolejności.
-    Jeśli lista jest pusta, zostanie wywołana funkcja direct_response.
+    Streaming endpoint that responds to user queries with Server-Sent Events (SSE).
+
+    If selected_tools are provided, they will be executed in the specified order.
+    Returns chunks of the answer as they are generated for a real-time typing effect.
+
+    Each event is formatted as:
+    data: {"chunk": "text content", "done": false}
+
+    Final event:
+    data: {"chunk": "", "done": true}
     """
-    user_id = current_user.id_  # Dekodowane z tokenu
+    user_id = current_user.id_
     query = request.query
     conversation_id = request.conversation_id
     selected_tools = request.selected_tools
 
-    logger.info(f"Received query from user_id: {user_id} - '{query}', selected_tools: {selected_tools}")
+    logger.info(f"[STREAM] Received query from user_id: {user_id} - '{query}', selected_tools: {selected_tools}")
 
-    try:
-        agent = ChatAgent(
-            user_id=user_id,
-            conversation_id=conversation_id,
-            anthropic_api_key=ANTHROPIC_API_KEY,
-            tavily_api_key=TAVILY_API_KEY,
-            openai_api_key=OPENAI_API_KEY,
-        )
-        answer = await agent.invoke(
-            selected_tool_names=selected_tools,
-            query=query,
-        )
-        if not isinstance(answer, str):
-            logger.error(f"agent_response returned non-string: {type(answer)}")
-            raise ValueError(f"Expected string from agent_response, got {type(answer)}")
-        logger.info(f"Generated answer for user_id: {user_id} with query: '{query}'")
+    async def generate_stream():
+        """Generator function that yields SSE-formatted chunks"""
+        try:
+            agent = ChatAgent(
+                user_id=str(user_id),
+                conversation_id=conversation_id,
+                openai_api_key=OPENAI_API_KEY,
+                tavily_api_key=TAVILY_API_KEY,
+            )
 
-        return QueryResponse(
-            user_id=user_id,
-            query=query,
-            answer=answer
-        )
+            logger.info(f"[STREAM] Starting stream for user_id: {user_id}")
 
-    except Exception as e:
-        logger.error(f"Error generating answer for user_id: {user_id}, query '{query}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error generating answer: {str(e)}")
+            # Stream chunks from agent
+            async for chunk in agent.invoke(query=query, selected_tool_names=selected_tools):
+                # Send each chunk as SSE
+                yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+
+            # Send completion signal
+            logger.info(f"[STREAM] Stream completed for user_id: {user_id}")
+            yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+
+        except Exception as e:
+            logger.error(f"[STREAM] Error during streaming for user_id: {user_id}, query '{query}': {e}", exc_info=True)
+            # Send error as final event
+            error_msg = f"Error generating answer: {str(e)}"
+            yield f"data: {json.dumps({'error': error_msg, 'done': True})}\n\n"
+
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )

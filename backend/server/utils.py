@@ -95,7 +95,7 @@ def signature_check(func: Callable) -> Callable | tuple:
         messege_bytes: bytes = messege.encode('utf-8')
         signature: str = request.headers.get('TorchED-S', '')
         expected_signature: str = hmac.new(key_bytes, messege_bytes, hashlib.sha256).hexdigest()
-        # print(expected_signature)
+
         if not hmac.compare_digest(signature, expected_signature):
             return jsonify({'error': 'Unauthorized'}), 401
         
@@ -128,7 +128,7 @@ def send_email(to: str, subject: str, message: str, html: bool = False) -> None:
         msg.attach(MIMEText(message, 'html' if html else 'plain'))
 
         # Połączenie z serwerem SMTP
-        with smtplib.SMTP('smtp.gmail.com') as connection:
+        with smtplib.SMTP('smtp.gmail.com', port=587) as connection:
             connection.set_debuglevel(1)
             connection.starttls()
             connection.login(EMAIL, EMAIL_PASSWORD)

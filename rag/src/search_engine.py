@@ -5,7 +5,7 @@ import numpy as np
 import uuid
 from langchain_openai import OpenAIEmbeddings
 from sklearn.metrics.pairwise import cosine_similarity
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_community.retrievers import BM25Retriever
 
 from .vector_store import search_vector_store  # Import z pliku vector_store.py

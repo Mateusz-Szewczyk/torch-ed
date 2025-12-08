@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import {motion, AnimatePresence, Variants} from "framer-motion"
 import { EditDeckDialog } from "@/components/EditDeckDialog"
 import { ImportFlashcardsModal } from "@/components/ImportFlashcardsModal"
 import { CustomTooltip } from "@/components/CustomTooltip"
@@ -68,9 +68,9 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 300, damping: 24 },
+    transition: { type: "spring" as const, stiffness: 300, damping: 24 },
   },
-}
+} satisfies Variants;
 
 // Sort options for decks
 type SortOption = "name" | "cards" | "recent" | "last_session"
