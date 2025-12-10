@@ -14,7 +14,6 @@ from werkzeug.security import check_password_hash
 from functools import wraps
 from typing import Callable
 from .models import User
-from . import session
 from .config import Config
 
 
@@ -36,6 +35,7 @@ class Misconfiguration(Exception):
 
 
 def data_check(request: Request, method: str) -> tuple | dict:
+    from . import session
     if method not in ['login', 'register']:
         return jsonify({'error': 'Wrong configuration (method)'}), 500
     

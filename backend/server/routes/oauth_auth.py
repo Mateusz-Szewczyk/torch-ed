@@ -1,13 +1,12 @@
 import os
 import logging
-from flask import Blueprint, redirect, request, jsonify, url_for
+from flask import Blueprint, redirect, url_for
 from authlib.integrations.flask_client import OAuth
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
 import secrets
 
 from ..models import User
-from .. import session
 from ..config import Config
 from ..jwt import generate_token
 from ..utils import FRONTEND, add_security_headers
@@ -52,6 +51,9 @@ def handle_oauth_user(provider, user_info):
     Create or get OAuth user and return JWT token.
     This keeps your existing JWT session system.
     """
+    # Import session here to avoid circular import
+    from .. import session
+
     try:
         email = user_info.get('email')
 
