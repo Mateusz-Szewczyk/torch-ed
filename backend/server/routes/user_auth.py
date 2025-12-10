@@ -5,6 +5,7 @@ import secrets
 import os
 import hmac
 import time
+import logging
 
 from dotenv import load_dotenv
 from flask import request, redirect, Blueprint, jsonify, url_for
@@ -19,8 +20,7 @@ from ..jwt import generate_token, decode_token, generate_confirmation_token, con
 from ..models import User
 from .. import session
 from ..config import Config
-from ..utils import send_email, FRONTEND
-import logging
+from ..utils import send_email, FRONTEND, add_security_headers, log_auth_attempt
 
 # Enhanced logging configuration
 logging.basicConfig(
@@ -53,16 +53,6 @@ MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = 300  # 5 minutes
 
 
-def add_security_headers(response):
-    """Add security headers to response"""
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    return response
-
-
 def secure_compare(a, b):
     """Timing-safe string comparison"""
     return hmac.compare_digest(str(a), str(b))
@@ -86,19 +76,6 @@ def sanitize_input(data):
     if isinstance(data, str):
         return data.strip()[:255]  # Limit length and remove whitespace
     return data
-
-
-def log_auth_attempt(action, email, ip, success, reason=None):
-    """Log authentication attempt for audit purposes"""
-    log_data = {
-        'action': action,
-        'email': email,
-        'ip': ip,
-        'success': success,
-        'reason': reason,
-        'timestamp': datetime.datetime.utcnow().isoformat()
-    }
-    logger.info(f"AUTH_AUDIT: {log_data}")
 
 
 def blacklist_token(token, exp_time):

@@ -8,7 +8,7 @@ from flask_cors import CORS
 
 from .config import Config, TestConfig
 from .models import *
-
+from .routes.oauth_auth import oauth_blueprint, init_oauth
 
 load_dotenv()
 
@@ -33,7 +33,7 @@ def create_app(testing: bool = False) -> Flask:
     else:
         app.config.from_object(Config)
 
-
+    init_oauth(app)
 
     engine: Engine = get_engine(testing=testing)
     session_local: sessionmaker = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -48,6 +48,7 @@ def create_app(testing: bool = False) -> Flask:
     app.register_blueprint(user_info, url_prefix='/api/v1/user')
     app.register_blueprint(api_auth, url_prefix='/api/v1/auth')
     app.register_blueprint(user_auth, url_prefix='/api/v1/auth')
+    app.register_blueprint(oauth_blueprint, url_prefix='/api/v1')
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'None'

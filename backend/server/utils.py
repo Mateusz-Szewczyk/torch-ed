@@ -1,3 +1,5 @@
+import datetime
+import logging
 import os
 import hmac
 import hashlib
@@ -15,6 +17,12 @@ from .models import User
 from . import session
 from .config import Config
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 load_dotenv()
 
 FRONTEND: str = os.getenv('FRONTEND', 'https://torched.pl')
@@ -144,3 +152,26 @@ def send_email(to: str, subject: str, message: str, html: bool = False) -> None:
         print(f"Configuration error: {ve}")
     except Exception as e:
         print(f"An unexpected error occurred while sending email to {to}: {e}")
+
+
+def log_auth_attempt(action, email, ip, success, reason=None):
+    """Log authentication attempt for audit purposes"""
+    log_data = {
+        'action': action,
+        'email': email,
+        'ip': ip,
+        'success': success,
+        'reason': reason,
+        'timestamp': datetime.datetime.utcnow().isoformat()
+    }
+    logger.info(f"AUTH_AUDIT: {log_data}")
+
+
+def add_security_headers(response):
+    """Add security headers to response"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
