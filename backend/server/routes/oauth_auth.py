@@ -5,6 +5,7 @@ from authlib.integrations.flask_client import OAuth
 from werkzeug.security import generate_password_hash
 from sqlalchemy.exc import IntegrityError
 import secrets
+import dotenv
 
 from ..models import User
 from ..config import Config
@@ -12,6 +13,7 @@ from ..jwt import generate_token
 from ..utils import FRONTEND, add_security_headers
 
 logger = logging.getLogger(__name__)
+dotenv.load_dotenv()
 
 oauth_blueprint = Blueprint('oauth', __name__)
 
