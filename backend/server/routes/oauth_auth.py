@@ -151,7 +151,7 @@ def google_callback():
         response.set_cookie(
             'TorchED_auth',
             jwt_token,
-            samesite='None',
+            samesite='None' if Config.IS_SECURE else 'Lax',
             max_age=60 * 60 * 24 * 5,  # 5 days
             httponly=True,
             secure=Config.IS_SECURE,
@@ -208,7 +208,7 @@ def github_callback():
         response.set_cookie(
             'TorchED_auth',
             jwt_token,
-            samesite='None',
+            samesite='None' if Config.IS_SECURE else 'Lax',
             max_age=60 * 60 * 24 * 5,  # 5 days
             httponly=True,
             secure=Config.IS_SECURE,

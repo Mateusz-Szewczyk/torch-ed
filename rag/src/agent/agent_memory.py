@@ -1,92 +1,107 @@
-# agent_memory.py
-
-from typing import List, Optional, Type, Any
+import logging
+import os
+from typing import List, Optional, Any, Type
 from sqlalchemy import create_engine, desc
-from sqlalchemy.orm import sessionmaker, scoped_session, InstrumentedAttribute
+from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.exc import SQLAlchemyError
+
+# Importy LangChain - kluczowe dla "prawidłowego" zarządzania pamięcią
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from ..models import Base, Conversation, Message
 from ..database import DATABASE_URL
-import logging
 
 logger = logging.getLogger(__name__)
 
+# Konfiguracja silnika i sesji
 engine = create_engine(DATABASE_URL)
 SessionLocal = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
+
+# Inicjalizacja tabel (jeśli nie istnieją)
 Base.metadata.create_all(bind=engine)
 
+
 def create_memory(user_id: str, title: Optional[str] = None) -> Type[Conversation] | Conversation:
+    """
+    Pobiera najnowszą rozmowę użytkownika lub tworzy nową, jeśli żadna nie istnieje.
+    Zwraca obiekt modelu Conversation.
+    """
     session = SessionLocal()
     try:
+        # Próba pobrania ostatniej aktywnej rozmowy
         conversation = session.query(Conversation).filter_by(user_id=user_id).order_by(
             desc(Conversation.created_at)).first()
+
         if conversation:
-            logger.debug(f"Znaleziono istniejącą rozmowę dla użytkownika {user_id}.")
+            logger.debug(f"Pobrano istniejącą rozmowę: ID={conversation.id} dla użytkownika {user_id}")
             return conversation
         else:
-            new_conversation = Conversation(user_id=user_id, title=title)
+            # Tworzenie nowej rozmowy, jeśli baza jest pusta dla tego usera
+            new_conversation = Conversation(user_id=user_id, title=title or "Nowa rozmowa")
             session.add(new_conversation)
             session.commit()
             session.refresh(new_conversation)
-            logger.info(f"Utworzono nową rozmowę dla użytkownika {user_id}.")
+            logger.info(f"Utworzono nową rozmowę dla użytkownika {user_id}: ID={new_conversation.id}")
             return new_conversation
     except SQLAlchemyError as e:
         session.rollback()
-        logger.error(f"Error podczas tworzenia lub pobierania rozmowy: {e}", exc_info=True)
+        logger.error(f"Błąd SQLAlchemy w create_memory: {e}", exc_info=True)
         raise
     finally:
         session.close()
 
-def get_latest_checkpoint(user_id: str, conversation_id: int) -> Type[Conversation] | None:
+
+def get_latest_checkpoint(user_id: str, conversation_id: int) -> Optional[Conversation]:
+    """
+    Pobiera konkretną rozmowę po ID dla danego użytkownika.
+    """
     session = SessionLocal()
     try:
         conversation = session.query(Conversation).filter_by(
             user_id=user_id,
             id=conversation_id
         ).first()
-
-        if conversation:
-            logger.debug(f"Znaleziono rozmowę: ID={conversation.id} dla użytkownika {user_id}.")
-            return conversation
-        else:
-            logger.debug(f"Nie znaleziono rozmowy o ID {conversation_id} dla użytkownika {user_id}.")
-            return None
+        return conversation
     except SQLAlchemyError as e:
-        logger.error(f"Error podczas pobierania rozmowy: {e}", exc_info=True)
+        logger.error(f"Błąd podczas pobierania checkpointu: {e}", exc_info=True)
         return None
     finally:
         session.close()
 
-def get_conversation_history(conversation_id: int, max_history_length: int) -> list[Any] | list[InstrumentedAttribute]:
+
+def get_conversation_history(conversation_id: int, max_history_length: int) -> List[BaseMessage]:
+    """
+    Pobiera historię wiadomości i konwertuje ją na format LangChain (HumanMessage/AIMessage).
+    Zapewnia poprawność ról, nawet jeśli sekwencja w bazie jest niestandardowa.
+    """
     session = SessionLocal()
     try:
-        messages = session.query(Message).filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
-        if not messages:
-            logger.debug(f"Brak wiadomości w rozmowie ID={conversation_id}.")
+        # Pobieramy wiadomości posortowane chronologicznie
+        db_messages = session.query(Message).filter_by(
+            conversation_id=conversation_id
+        ).order_by(Message.created_at).all()
+
+        if not db_messages:
             return []
 
-        pairs = []
-        temp_pair = []
-        for msg in messages:
-            temp_pair.append(msg.text)
-            if len(temp_pair) == 2:
-                pairs.append(temp_pair)
-                temp_pair = []
-        if temp_pair:
-            pairs.append(temp_pair)
+        langchain_messages = []
+        for msg in db_messages:
+            # Mapowanie roli z bazy danych na klasy LangChain
+            # Przyjmujemy, że 'user' to Human, a 'bot'/'assistant' to AI
+            if msg.sender.lower() in ['user', 'human']:
+                langchain_messages.append(HumanMessage(content=msg.text))
+            else:
+                langchain_messages.append(AIMessage(content=msg.text))
 
-        limited_pairs = pairs[-max_history_length:]
+        # Zwracamy tylko ostatnie N wiadomości (max_history_length)
+        # Slicing od tyłu, aby zachować chronologię
+        limited_history = langchain_messages[-max_history_length:]
 
-        conversation_history = []
-        for pair in limited_pairs:
-            conversation_history.extend(pair)
+        logger.info(f"Pobrano {len(limited_history)} wiadomości historii dla konwersacji {conversation_id}")
+        return limited_history
 
-        logger.debug(f"Retrieved conversation history for conversation ID={conversation_id}: {conversation_history}")
-        logger.info("conv history: %s", conversation_history)
-        logger.info("conv history len %s", len(conversation_history))
-        return conversation_history
     except SQLAlchemyError as e:
-        logger.error(f"Error podczas pobierania historii rozmowy: {e}", exc_info=True)
+        logger.error(f"Błąd podczas pobierania historii: {e}", exc_info=True)
         return []
     finally:
         session.close()

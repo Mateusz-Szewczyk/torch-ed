@@ -1,5 +1,5 @@
 # vector_store.py
-
+from datetime import datetime
 import logging
 import uuid
 from typing import List, Dict, Any
@@ -13,9 +13,17 @@ logging.basicConfig(level=logging.INFO)
 
 # Inicjalizacja embeddings i Chroma
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+
 collection_name = 'torched-rag'
 client = Chroma(
     collection_name=collection_name,
+    embedding_function=embeddings,
+    persist_directory=PERSIST_DIRECTORY
+)
+
+memory_collection_name = 'user-memories'
+memory_client = Chroma(
+    collection_name=memory_collection_name,
     embedding_function=embeddings,
     persist_directory=PERSIST_DIRECTORY
 )
@@ -126,4 +134,67 @@ def delete_file_from_vector_store(user_id: str, file_name: str) -> bool:
     except Exception as e:
         # Ten błąd może wystąpić, jeśli składnia filtra jest nieprawidłowa lub ChromaDB ma problem.
         logger.error(f"Error deleting documents from ChromaDB: {e}", exc_info=True)
+        return False
+
+
+def add_user_memory(user_id: str, text: str, importance: float = 0.5) -> str:
+    """
+    Dodaje pojedynczy fakt do pamięci długoterminowej użytkownika.
+    """
+    try:
+        doc_id = f"mem_{user_id}_{uuid.uuid4()}"
+        meta = {
+            "user_id": user_id,
+            "type": "memory",
+            "importance": importance,
+            "created_at": datetime.now().isoformat(),
+            "last_accessed": datetime.now().isoformat()
+        }
+
+        memory_client.add_texts(
+            texts=[text],
+            metadatas=[meta],
+            ids=[doc_id]
+        )
+        logger.info(f"Memory added for user {user_id}: '{text[:30]}...'")
+        return doc_id
+    except Exception as e:
+        logger.error(f"Error adding memory: {e}", exc_info=True)
+        return ""
+
+
+def search_user_memories(query: str, user_id: str, n_results: int = 5, min_importance: float = 0.0) -> List[str]:
+    """
+    Wyszukuje semantycznie pasujące wspomnienia użytkownika.
+    Zwraca listę samych tekstów (faktów).
+    """
+    try:
+        # Filtrujemy po user_id i opcjonalnie po ważności
+        results = memory_client.similarity_search_with_score(
+            query=query,
+            k=n_results,
+            filter={"user_id": user_id}
+        )
+
+        memories = []
+        for doc, score in results:
+            # Próg podobieństwa (OpenAI Large: dystans cosinusowy, im mniejszy tym lepiej)
+            if doc.metadata.get("importance", 0) >= min_importance:
+                memories.append(doc.page_content)
+
+        logger.info(f"Retrieved {len(memories)} relevant memories for user {user_id}")
+        return memories
+    except Exception as e:
+        logger.error(f"Error searching memories: {e}", exc_info=True)
+        return []
+
+
+def delete_all_user_memories(user_id: str) -> bool:
+    """Czyści całą pamięć danego użytkownika (np. na jego prośbę)."""
+    try:
+        memory_client.delete(where={"user_id": user_id})
+        logger.info(f"All memories deleted for user_id={user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting memories: {e}", exc_info=True)
         return False

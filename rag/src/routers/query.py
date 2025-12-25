@@ -1,7 +1,7 @@
 import os
 import logging
 import json
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -71,13 +71,21 @@ async def query_knowledge(
             logger.info(f"[STREAM] Starting stream for user_id: {user_id}")
 
             # Stream chunks from agent
-            async for chunk in agent.invoke(query=query, selected_tool_names=selected_tools):
+            async for msg in agent.invoke(query=query, selected_tool_names=selected_tools):
                 # Send each chunk as SSE
-                yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+
+                # Standaryzacja danych dla frontendu
+                data = {
+                    "type": msg.get("type", "chunk"),
+                    "content": msg.get("content", ""),
+                    "status": msg.get("status", "complete"),  # loading, complete, error
+                    "done": False
+                }
+                yield f"data: {json.dumps(data)}\n\n"
 
             # Send completion signal
             logger.info(f"[STREAM] Stream completed for user_id: {user_id}")
-            yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'content': '', 'done': True})}\n\n"
 
         except Exception as e:
             logger.error(f"[STREAM] Error during streaming for user_id: {user_id}, query '{query}': {e}", exc_info=True)

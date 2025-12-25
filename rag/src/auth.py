@@ -26,16 +26,23 @@ def get_current_user(
         db: Session = Depends(get_db)
 ) -> User:
     """
-    Dekoduje token JWT (RSA) z cookie `TorchED_auth` (POPRAWKA: mała litera 'a').
+    Dekoduje token JWT (RSA) z cookie `TorchED_auth` lub nagłówka Authorization (Bearer token).
     Jeśli token nieprawidłowy, rzuca 401.
     Pełna kompatybilność z systemem auth z Flask.
     """
-    # POPRAWKA: Użyj tej samej nazwy cookie co w Flask
-    token = request.cookies.get("TorchED_auth")  # była "TorchED_AUTH"
+    # Try cookie first, then Authorization header (for web clients)
+    token = request.cookies.get("TorchED_auth")
+
+    if not token:
+        # Try Authorization header (Bearer token) for web clients
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove 'Bearer ' prefix
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No auth cookie provided.",
+            detail="No auth cookie or Bearer token provided.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

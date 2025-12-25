@@ -1,4 +1,5 @@
 import os
+import re
 import redis
 from flask import Flask
 from sqlalchemy import Engine, create_engine
@@ -57,13 +58,7 @@ def create_app(testing: bool = False) -> Flask:
         app,
         resources={
             r"/api/*": {
-                "origins": ["http://localhost:3000",
-                            "http://127.0.0.1:3000",
-                            "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
-                            "https://torch-ed.vercel.app",
-                            "https://torched.pl"
-                            ],
-
+                "origins": re.compile(r"^(http://localhost:\d+|http://127\.0\.0\.1:\d+|https://torch-9vlkoolu7-mateusz-szewczyks-projects\.vercel\.app|https://torch-ed\.vercel\.app|https://torched\.pl|https://www\.torched\.pl)$"),
                 "supports_credentials": True,
                 "allow_headers": ["Content-Type", "Authorization"],
                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]

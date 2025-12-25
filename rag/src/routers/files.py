@@ -95,7 +95,12 @@ async def upload_file(
             logger.error("Failed to extract text from the document.")
             raise HTTPException(status_code=400, detail="Failed to extract text from the document.")
 
-        chunks = await asyncio.to_thread(create_chunks, text_content, chunk_size=8, overlap=2)
+        chunks = await asyncio.to_thread(
+            create_chunks,
+            text_content,
+            chunk_size=1000,   # ~250-300 tokens - semantycznie spójne fragmenty
+            overlap=200        # overlap dla zachowania kontekstu między chunkami
+        )
         if not chunks:
             logger.error("Failed to create text chunks from the document.")
             raise HTTPException(status_code=500, detail="Failed to create text chunks from the document.")

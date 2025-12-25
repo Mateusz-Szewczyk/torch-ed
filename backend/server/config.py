@@ -12,8 +12,9 @@ class Config:
     PRP_PATH: str = "prp_key.pem"
     PUP_PATH: str = "pup_key.pem"
     SALT: str = os.getenv('SALT', '')
-    DOMAIN: str = os.getenv('DOMAIN', '.torched.pl')
-    IS_SECURE: bool = os.getenv('IS_SECURE', True)
+    _domain_env = os.getenv('DOMAIN')
+    DOMAIN: str | None = None if _domain_env == 'localhost' else _domain_env
+    IS_SECURE: bool = os.getenv('IS_SECURE', 'true').lower() == 'true'
 
 
 

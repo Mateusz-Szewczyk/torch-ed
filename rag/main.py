@@ -12,7 +12,7 @@ import base64
 
 from src.routers import (
     files, decks, flashcards, query, chats, exams,
-    study_sessions, user_flashcards, dashboard
+    study_sessions, user_flashcards, dashboard, memories
 )
 from src.config import Config
 
@@ -81,16 +81,16 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
         "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
         "https://torch-ed.vercel.app",
         "https://torched.pl",
-        "localhost:3000"
     ],
+    # Allow all localhost origins with any port (for development)
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # GZip middleware (last middleware to be applied first in processing)
@@ -153,6 +153,7 @@ app.include_router(exams.router, prefix="/api/exams", tags=["Exams"])
 app.include_router(study_sessions.router, prefix="/api/study_sessions", tags=["Study Sessions"])
 app.include_router(user_flashcards.router, prefix="/api/user_flashcards", tags=["User Flashcards"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(memories.router, prefix="/api/memories", tags=["Memories"])
 
 if __name__ == "__main__":
     uvicorn.run(

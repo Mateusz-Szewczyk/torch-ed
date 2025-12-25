@@ -83,7 +83,7 @@ def create_deck(
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """Tworzy nowy deck"""
+    """Tworzy nowy deck wraz z flashcardami"""
     try:
         deck = Deck(
             name=deck_data.get('name'),
@@ -96,13 +96,32 @@ def create_deck(
         db.commit()
         db.refresh(deck)
 
-        logger.info(f"Deck created successfully: {deck.id} by user {current_user.id_}")
+        # Create flashcards if provided
+        flashcards_data = deck_data.get('flashcards', [])
+        created_flashcards = []
+        if flashcards_data:
+            for fc_data in flashcards_data:
+                flashcard = Flashcard(
+                    question=fc_data.get('question', ''),
+                    answer=fc_data.get('answer', ''),
+                    deck_id=deck.id,
+                    media_url=fc_data.get('media_url')
+                )
+                db.add(flashcard)
+                created_flashcards.append(flashcard)
+
+            db.commit()
+            for fc in created_flashcards:
+                db.refresh(fc)
+
+        logger.info(f"Deck created successfully: {deck.id} by user {current_user.id_} with {len(created_flashcards)} flashcards")
 
         return {
             'id': deck.id,
             'name': deck.name,
             'description': deck.description,
             'created_at': deck.created_at.isoformat(),
+            'flashcard_count': len(created_flashcards),
             'message': 'Deck created successfully'
         }
 

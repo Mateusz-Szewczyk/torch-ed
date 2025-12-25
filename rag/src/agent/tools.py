@@ -226,6 +226,36 @@ class RAGTool(BaseTool):
             raise ValueError("OpenAI API key is required.")
         self._model = ChatOpenAI(model_name=model_name, openai_api_key=api_key, temperature=0.1)
 
+    async def generate_multi_queries(self, query: str, k: int = 3) -> List[str]:
+        """
+        Generates multiple reformulations of the user's question to improve document retrieval.
+        This technique increases recall by covering different phrasings and aspects of the query.
+        """
+        print(f"[DEBUG] RAGTool.generate_multi_queries - Generating {k} query variations for: '{query}'")
+
+        system_prompt = f"""Generate {k} different reformulations of the user's question to improve document retrieval.
+Each reformulation should approach the question from a slightly different angle or use different key phrases.
+Return one question per line, without enumeration or prefixes.
+Use the same language as the original question."""
+
+        user_prompt = f"Original question: {query}"
+        messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+
+        try:
+            response = await self._model.ainvoke(messages)
+            lines = [l.strip() for l in response.content.splitlines() if l.strip()]
+            queries = lines[:k] if lines else [query]
+
+            # Always include the original query
+            if query not in queries:
+                queries.insert(0, query)
+
+            print(f"[DEBUG] RAGTool.generate_multi_queries - Generated queries: {queries}")
+            return queries[:k+1]  # Original + k variations
+        except Exception as e:
+            logger.warning(f"Multi-query generation failed: {e}, using original query only")
+            return [query]
+
     async def _run(self, query: str) -> str:
         print(f"[DEBUG] RAGTool._run - Starting with query: '{query}'")
 
@@ -237,17 +267,44 @@ class RAGTool(BaseTool):
             print(f"[DEBUG] RAGTool._run - Found cached result, length: {len(cached_result.decode())}")
             return cached_result.decode()
 
-        print(f"[DEBUG] RAGTool._run - Generating HyDE answer")
-        hyde_answer = await self.generate_hyde_answer(query)
-        print(f"[DEBUG] RAGTool._run - HyDE answer: '{hyde_answer}'")
+        # Multi-Query RAG: generuj wiele reformulacji zapytania
+        print(f"[DEBUG] RAGTool._run - Generating multiple query variations")
+        queries = await self.generate_multi_queries(query, k=3)
 
         try:
-            print(f"[DEBUG] RAGTool._run - Calling search_and_rerank with user_id: {self.user_id}")
-            results = await asyncio.to_thread(search_and_rerank, hyde_answer, user_id=self.user_id, n_results=5)
-            print(f"[DEBUG] RAGTool._run - Search results count: {len(results) if results else 0}")
-            print(f"[DEBUG] RAGTool._run - Search results preview: {results[:2] if results else 'None'}")
+            # Wykonaj wyszukiwanie dla każdej wersji zapytania
+            all_results = []
+            for q in queries:
+                print(f"[DEBUG] RAGTool._run - Searching with query: '{q[:50]}...'")
+                results = await asyncio.to_thread(
+                    search_and_rerank,
+                    q,
+                    user_id=self.user_id,
+                    n_results=5
+                )
+                if results:
+                    all_results.extend(results)
 
-            external_passages = [doc.get('content', '') for doc in results if doc.get('content', '').strip()]
+            print(f"[DEBUG] RAGTool._run - Total results before dedup: {len(all_results)}")
+
+            # Deduplikacja po _id
+            seen = set()
+            dedup_results = []
+            for r in all_results:
+                rid = r.get("_id") or r.get("metadata", {}).get("_id")
+                if rid and rid not in seen:
+                    seen.add(rid)
+                    dedup_results.append(r)
+
+            print(f"[DEBUG] RAGTool._run - Results after dedup: {len(dedup_results)}")
+
+            # Sortuj po final_score (już obliczony w search_and_rerank)
+            dedup_results.sort(key=lambda x: x.get("final_score", 0), reverse=True)
+            top_docs = dedup_results[:5]
+
+            print(f"[DEBUG] RAGTool._run - Top docs count: {len(top_docs)}")
+
+            external_passages = [doc.get('content', '') for doc in top_docs if doc.get('content', '').strip()]
             print(f"[DEBUG] RAGTool._run - Valid passages count: {len(external_passages)}")
             print(f"[DEBUG] RAGTool._run - Passages lengths: {[len(p) for p in external_passages]}")
 
@@ -266,6 +323,7 @@ class RAGTool(BaseTool):
             return "Error: Could not retrieve an answer from your files."
 
     async def generate_hyde_answer(self, query: str) -> str:
+        """Legacy method - kept for backward compatibility. Multi-query is now preferred."""
         print(f"[DEBUG] RAGTool.generate_hyde_answer - Query: '{query}'")
         system_prompt = "Generate a concise, hypothetical answer containing key phrases relevant to the user's question."
         user_prompt = f"Question: {query}"
@@ -275,13 +333,47 @@ class RAGTool(BaseTool):
         return response.content.strip()
 
     async def finalize_answer(self, query: str, passages: List[str]) -> str:
+        """
+        Synthesizes the retrieved passages into a coherent answer.
+        Uses an improved prompt that:
+        - Forces the model to use ONLY the provided passages
+        - Minimizes hallucinations
+        - Implicitly cites relevant passages
+        - Handles cases where info is not in passages
+        """
         print(f"[DEBUG] RAGTool.finalize_answer - Query: '{query}'")
         print(f"[DEBUG] RAGTool.finalize_answer - Number of passages: {len(passages)}")
         print(
             f"[DEBUG] RAGTool.finalize_answer - Passages preview: {[p[:100] + '...' if len(p) > 100 else p for p in passages[:2]]}")
 
-        system_prompt = "You are a helpful assistant. Synthesize the provided passages into a single, cohesive, and concise answer to the user's question. Respond in the user's language."
-        user_prompt = f"Question: {query}\n\nPassages:\n{''.join([f'Passage: {p}\n---\n' for p in passages])}\n\nAnswer:"
+        # Improved RAG prompt v2
+        system_prompt = """You are a precise assistant that answers questions based ONLY on the provided passages.
+
+CRITICAL RULES:
+1. Answer ONLY using information from the provided passages. Do not use external knowledge.
+2. If the answer is not fully contained in the passages, explicitly say: "Based on the provided documents, I don't have complete information about this."
+3. When possible, implicitly reference which passage the information comes from (e.g., "According to the document...").
+4. Keep the answer concise but complete - aim for 2-4 paragraphs unless the question requires more detail.
+5. Respond in the same language as the user's question.
+6. If passages contain conflicting information, acknowledge this and present both perspectives.
+7. Do not make up facts or extrapolate beyond what's in the passages."""
+
+        # Format passages with numbers for better context
+        formatted_passages = "\n\n".join([
+            f"[Passage {i+1}]:\n{p}" for i, p in enumerate(passages)
+        ])
+
+        user_prompt = f"""**User Question:**
+{query}
+
+**Available Passages from User's Documents:**
+---
+{formatted_passages}
+---
+
+**Instructions:**
+Using ONLY the information from the passages above, provide a clear and accurate answer to the user's question. If the passages don't contain enough information to fully answer the question, acknowledge this limitation."""
+
         messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
         response = await self._model.ainvoke(messages)
 

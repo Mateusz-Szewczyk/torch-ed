@@ -28,10 +28,18 @@ def get_user_from_token() -> Tuple[Union[User, None], Dict[str, Union[str, int]]
     """
     Helper function to get user from JWT token.
     Returns tuple (User | None, error_response)
+    Accepts token from Cookie or Authorization header (Bearer token)
     """
     try:
-        # Get token from cookie
+        # Get token from cookie first, then fall back to Authorization header
         token = request.cookies.get(COOKIE_AUTH, None)
+
+        if not token:
+            # Try Authorization header (Bearer token) for web clients
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]  # Remove 'Bearer ' prefix
+
         if not token:
             return None, {'error': 'Not authenticated', 'code': 401}
 
@@ -314,7 +322,7 @@ def delete_account() -> Union[Response, Tuple[Response, int]]:
                 secure=Config.IS_SECURE,
                 path='/',
                 domain=Config.DOMAIN,
-                samesite='None'
+                samesite='None' if Config.IS_SECURE else 'Lax'
             )
 
             return resp, 200

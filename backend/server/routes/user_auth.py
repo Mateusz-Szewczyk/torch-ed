@@ -162,8 +162,13 @@ def login() -> Response | tuple:
     """Creates token and puts it in cookie with enhanced security"""
     client_ip = get_remote_address()
 
-    # Check if already logged in
+    # Check if already logged in (from cookie or Authorization header)
     is_logged = request.cookies.get(COOKIE_AUTH, None)
+    if not is_logged:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            is_logged = auth_header[7:]
+
     if is_logged:
         try:
             # Check if token is blacklisted
@@ -266,13 +271,14 @@ def login() -> Response | tuple:
         resp = jsonify({
             'success': True,
             'message': 'Logged in successfully',
-            'is_confirmed': user.confirmed
+            'is_confirmed': user.confirmed,
+            'token': token  # Include token in response body for web clients
         })
 
         resp.set_cookie(
             COOKIE_AUTH,
             token,
-            samesite='None',
+            samesite='None' if Config.IS_SECURE else 'Lax',
             max_age=60 * 60 * 24 * 5,  # 5 days
             httponly=True,
             secure=Config.IS_SECURE,
@@ -440,6 +446,12 @@ def logout() -> Response | tuple:
     """Logs out user by clearing cookie and blacklisting token"""
     client_ip = get_remote_address()
     token = request.cookies.get(COOKIE_AUTH, None)
+
+    # Also check Authorization header for web clients
+    if not token:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            token = auth_header[7:]
 
     if not token:
         add_response_delay()
@@ -756,8 +768,15 @@ def reset_password() -> Response | tuple:
 def session_check() -> Response | tuple:
     """Checks if user is logged in by verifying JWT token with enhanced security"""
     try:
-        # Get token from cookie
+        # Get token from cookie first, then fall back to Authorization header
         token = request.cookies.get(COOKIE_AUTH, None)
+
+        if not token:
+            # Try Authorization header (Bearer token) for web clients
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+
         if not token:
             return add_security_headers(jsonify({'authenticated': False})), 401
 
