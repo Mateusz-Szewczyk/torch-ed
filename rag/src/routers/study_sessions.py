@@ -254,7 +254,7 @@ class FlashcardResponse(BaseModel):
     repetitions: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StudySessionResponse(BaseModel):
@@ -264,7 +264,7 @@ class StudySessionResponse(BaseModel):
     next_session_date: Optional[str] = None  # Dodane dla informacji o następnej sesji
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 @router.post("/start", response_model=StudySessionResponse, status_code=201)

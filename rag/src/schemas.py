@@ -26,7 +26,7 @@ class FlashcardRead(FlashcardBase):
     media_url: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserFlashcardRead(BaseModel):
     id: int
@@ -37,7 +37,7 @@ class UserFlashcardRead(BaseModel):
     next_review: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StudySessionCreate(BaseModel):
@@ -51,7 +51,7 @@ class StudySessionRead(BaseModel):
     completed_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StudyRecordCreate(BaseModel):
     user_flashcard_id: int
@@ -65,7 +65,7 @@ class StudyRecordRead(BaseModel):
     reviewed_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StudySessionUpdate(BaseModel):
     completed_at: Optional[datetime] = None
@@ -94,7 +94,7 @@ class DeckRead(BaseModel):
     flashcards: List[FlashcardRead]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class DeckInfoRead(BaseModel):
     id: int
@@ -107,7 +107,7 @@ class DeckInfoRead(BaseModel):
     last_session: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UploadedFileRead(BaseModel):
     id: int
@@ -117,7 +117,7 @@ class UploadedFileRead(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UploadResponse(BaseModel):
     message: str
@@ -161,7 +161,7 @@ class ConversationRead(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class MessageCreate(BaseModel):
     sender: str
@@ -175,7 +175,7 @@ class MessageRead(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ConversationUpdate(BaseModel):
     title: Optional[str] = None
@@ -202,7 +202,7 @@ class ExamAnswerRead(BaseModel):
     is_correct: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ExamQuestionCreate(BaseModel):
     id: Optional[int] = None
@@ -224,7 +224,7 @@ class ExamQuestionRead(BaseModel):
     answers: List[ExamAnswerRead]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ExamCreate(ExamBase):
     questions: List[ExamQuestionCreate]
@@ -244,7 +244,7 @@ class ExamRead(BaseModel):
     conversation_id: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ExamUpdate(BaseModel):
     id: Optional[int] = None
@@ -277,7 +277,7 @@ class ExamResultAnswerRead(BaseModel):
     answer_time: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ExamResultRead(BaseModel):
     id: int
@@ -289,7 +289,7 @@ class ExamResultRead(BaseModel):
     answers: List[ExamResultAnswerRead]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StudyRecord(BaseModel):
     id: int
@@ -299,7 +299,7 @@ class StudyRecord(BaseModel):
     reviewed_at: Optional[datetime]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Schematy dla user_flashcards
 class UserFlashcard(BaseModel):
@@ -312,7 +312,7 @@ class UserFlashcard(BaseModel):
     next_review: Optional[datetime]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Schematy dla study_sessions
 class StudySession(BaseModel):
@@ -323,7 +323,7 @@ class StudySession(BaseModel):
     completed_at: Optional[datetime]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Schematy dla exam_result_answers
 class ExamResultAnswer(BaseModel):
@@ -335,7 +335,7 @@ class ExamResultAnswer(BaseModel):
     answer_time: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Schematy dla exam_results
 class ExamResult(BaseModel):
@@ -347,7 +347,7 @@ class ExamResult(BaseModel):
     score: float
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # Schemat dla Dashboard Data
 class DashboardData(BaseModel):
