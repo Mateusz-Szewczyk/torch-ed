@@ -51,6 +51,10 @@ class Message(Base):
     sender = Column(String, nullable=False)
     text = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # JSON field for storing steps and actions metadata
+    # Structure: {"steps": [...], "actions": [...]}
+    # Note: 'metadata' is reserved in SQLAlchemy, so we use 'meta_json'
+    meta_json = Column(String, nullable=True)
 
     conversation = relationship("Conversation", back_populates="messages")
 

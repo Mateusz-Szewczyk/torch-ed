@@ -163,9 +163,31 @@ class ConversationRead(BaseModel):
     class Config:
         from_attributes = True
 
+
+# Metadata schemas for message steps and actions
+class MessageStepSchema(BaseModel):
+    content: str
+    status: str  # "loading" or "complete"
+
+
+class MessageActionSchema(BaseModel):
+    type: str  # "flashcards" or "exam"
+    id: int
+    name: str
+    count: int
+
+
+class MessageMetadataSchema(BaseModel):
+    steps: Optional[List[MessageStepSchema]] = None
+    actions: Optional[List[MessageActionSchema]] = None
+
+
 class MessageCreate(BaseModel):
     sender: str
     text: str
+    # Accept 'metadata' from API request
+    metadata: Optional[str] = None
+
 
 class MessageRead(BaseModel):
     id: int
@@ -173,6 +195,8 @@ class MessageRead(BaseModel):
     sender: str
     text: str
     created_at: datetime = Field(default_factory=datetime.now)
+    # Metadata field containing steps and actions JSON
+    metadata: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -80,7 +80,6 @@ class ChatAgent:
 
         try:
             if tool_name == "TavilySearchResults":
-                # POPRAWKA: Używamy API Wrappera dla stabilności klucza
                 wrapper = TavilySearchAPIWrapper(tavily_api_key=self.tavily_api_key)
                 tool = TavilySearchResults(api_wrapper=wrapper, max_results=3)
             elif tool_name == "RAGTool":
@@ -111,59 +110,42 @@ class ChatAgent:
             return False, "", str(e)
 
     async def _execute_tavily(self, tool: BaseTool, query: str) -> Tuple[bool, str, Optional[str]]:
-        """Bardziej odporna obsługa wyników Tavily."""
         try:
             logger.info(f"[TAVILY] Szukam: {query}")
-            # Skracamy query jeśli model się rozgadał mimo promptu
             short_query = " ".join(query.split()[:15])
-
             results = await tool.ainvoke(short_query)
 
-            # Jeśli Tavily zwróciło string (np. błąd lub surowy tekst)
             if isinstance(results, str):
-                logger.info(f"[TAVILY] Otrzymano wynik tekstowy (str).")
-                if len(results) > 100:
-                    return True, results, None
-                return False, "", f"Zbyt krótki wynik tekstowy: {results}"
+                return (True, results, None) if len(results) > 100 else (False, "", "Zbyt krótki wynik")
 
-            # Jeśli Tavily zwróciło standardową listę słowników
             if isinstance(results, list):
                 combined = "\n\n".join([
                     f"Tytuł: {r.get('title', 'N/A')}\nTreść: {r.get('content', '')}"
                     for r in results if isinstance(r, dict) and 'content' in r
                 ])
                 if len(combined) > 50:
-                    logger.info(f"[TAVILY] Sukces: pobrano {len(combined)} znaków.")
                     return True, combined, None
 
-            logger.warning(f"[TAVILY] Nieoczekiwany format lub brak treści: {type(results)}")
             return False, "", "Brak wartościowych wyników z Tavily"
-
         except Exception as e:
-            logger.error(f"[TAVILY] Krytyczny błąd: {e}", exc_info=True)
+            logger.error(f"[TAVILY] Błąd: {e}")
             return False, "", str(e)
 
     async def _create_standalone_query(self, query: str, history: List[BaseMessage]) -> str:
-        """Wymusza na modelu stworzenie KRÓTKIEGO zapytania do wyszukiwarki."""
         if not history:
             return query
 
-        # BARDZO RESTRYKCYJNY PROMPT
         system_prompt = (
-            "Jesteś ekspertem od wyszukiwarek internetowych. "
-            "Twoim JEDYNYM zadaniem jest zamiana rozmowy w krótkie, techniczne zapytanie do wyszukiwarki (max 10 słów). "
-            "NIE ODPOWIADAJ NA PYTANIE. Nie pisz 'Oto zapytanie:'. Zwróć tylko słowa kluczowe do wyszukiwarki."
+            "Jesteś ekspertem od wyszukiwarek. Twoim zadaniem jest zamiana rozmowy w krótkie, "
+            "techniczne zapytanie (max 10 słów). Zwróć TYLKO słowa kluczowe."
         )
-
-        messages = [
-                       SystemMessage(content=system_prompt)
-                   ] + history[-2:] + [HumanMessage(content=f"Zamień to pytanie w zapytanie do wyszukiwarki: {query}")]
+        messages = [SystemMessage(content=system_prompt)] + history[-2:] + [
+            HumanMessage(content=f"Zamień to w zapytanie: {query}")
+        ]
 
         try:
             response = await self.synthesis_model.ainvoke(messages)
-            standalone = response.content.strip().strip('"').split('\n')[0]  # Bierzemy tylko pierwszą linię
-            logger.info(f"[AGENT] Skonstruowane zapytanie: {standalone}")
-            return standalone
+            return response.content.strip().strip('"').split('\n')[0]
         except Exception as e:
             logger.error(f"Błąd standalone query: {e}")
             return query
@@ -171,30 +153,23 @@ class ChatAgent:
     async def _final_synthesis_stream(self, original_query: str, history: List[BaseMessage], context: Optional[str],
                                       context_source: str, tool_results: Dict[str, ToolResult],
                                       memory_context: str = ""):
-        """Synteza z fallbackiem - jeśli RAG/Tavily zawiodło, model może użyć wiedzy ogólnej."""
-
-        # ... (trim_messages bez zmian) ...
         trimmed_history = trim_messages(
             history, max_tokens=self.MAX_HISTORY_TOKENS, strategy="last",
             token_counter=self.synthesis_model, start_on="human"
         )
-
-        has_context = context and len(context) > 100
 
         system_prompt = (
             "Jesteś pomocnym asystentem TorchED.\n"
             f"{memory_context}\n"
             "ZASADY:\n"
             "1. Jeśli sekcja 'Info' zawiera dane, traktuj ją jako PRIORYTET.\n"
-            "2. Jeśli sekcja 'Info' jest pusta lub niewystarczająca, odpowiedz na podstawie swojej wiedzy ogólnej, "
-            "ale zaznacz, że nie znalazłeś potwierdzenia w dokumentach/sieci.\n"
-            "3. Format: Markdown."
+            "2. Jeśli generowałeś materiały (fiszki/egzamin), potwierdź to użytkownikowi.\n"
+            "3. Odpowiadaj w formacie Markdown."
         )
 
-        info_block = f"INFO (Źródło: {context_source}):\n{context if has_context else 'Brak danych w bazach zewnętrznych.'}"
-
+        info_block = f"INFO (Źródło: {context_source}):\n{context if context else 'Brak danych w bazach.'}"
         messages = [SystemMessage(content=system_prompt)] + trimmed_history + [
-            HumanMessage(content=f"{info_block}\n\nPytanie użytkownika: {original_query}")
+            HumanMessage(content=f"{info_block}\n\nPytanie: {original_query}")
         ]
 
         try:
@@ -206,45 +181,47 @@ class ChatAgent:
 
     def _build_generator_context(self, query: str, rag: Optional[str], tavily: Optional[str]) -> str:
         parts = [f"User Request: {query}"]
-        if rag: parts.append(f"Docs:\n{rag}")
-        if tavily: parts.append(f"Web:\n{tavily}")
+        if rag: parts.append(f"Docs Content:\n{rag}")
+        if tavily: parts.append(f"Web Content:\n{tavily}")
         return "\n\n".join(parts)
-
-    def _format_generator_messages(self, results: Dict[str, ToolResult]) -> str:
-        return "Materiały zostały wygenerowane i są dostępne w odpowiednich zakładkach."
 
     async def invoke(self, query: str, selected_tool_names: List[str]):
         logger.info("========== AGENT INVOKE START ==========")
 
-        # 1. PAMIĘĆ I ANALIZA
+        # 1. PRZYGOTOWANIE I PAMIĘĆ
         yield {"type": "step", "content": "Analizowanie kontekstu i profilu...", "status": "loading"}
 
         memories = search_user_memories(query=query, user_id=self.user_id, n_results=5)
         memory_context = f"PROFIL UŻYTKOWNIKA:\n{chr(10).join(['- ' + m for m in memories])}" if memories else ""
 
         history_messages = get_conversation_history(self.conversation_id, 3)
-        if len(history_messages) == 0:
+        if not history_messages:
             asyncio.create_task(
                 asyncio.to_thread(set_conversation_title, self.conversation_id, query, self.synthesis_model))
 
         standalone_query = await self._create_standalone_query(query, history_messages)
         yield {"type": "step", "content": "Analizowanie kontekstu i profilu...", "status": "complete"}
 
-        # 2. RETRIEVAL
-        internal_tool_map = {"Wiedza z plików": "RAGTool", "Generowanie fiszek": "FlashcardGenerator",
-                             "Generowanie egzaminu": "ExamGenerator", "Wyszukaj w internecie": "TavilySearchResults"}
+        # 2. WYSZUKIWANIE (RETRIEVAL)
+        internal_tool_map = {
+            "Wiedza z plików": "RAGTool",
+            "Generowanie fiszek": "FlashcardGenerator",
+            "Generowanie egzaminu": "ExamGenerator",
+            "Wyszukaj w internecie": "TavilySearchResults"
+        }
+
         ordered_tools = [internal_tool_map[n] for n in selected_tool_names if n in internal_tool_map]
         retrieval_tools = [t for t in ordered_tools if t in ["RAGTool", "TavilySearchResults"]]
         generator_tools = [t for t in ordered_tools if t in ["FlashcardGenerator", "ExamGenerator"]]
 
-        rag_content, tavily_content, context, context_source, tool_results = None, None, None, "zapytania", {}
+        context, context_source, tool_results = None, "zapytania", {}
+        rag_content, tavily_content = None, None
 
         if retrieval_tools:
             yield {"type": "step", "content": "Wyszukiwanie informacji...", "status": "loading"}
             tasks = []
             for t_name in retrieval_tools:
                 tool = self._initialize_tool(t_name)
-                # POPRAWKA: Używamy poprawnych helperów _execute_*
                 tasks.append(
                     self._execute_rag(tool, standalone_query) if t_name == "RAGTool" else self._execute_tavily(tool,
                                                                                                                standalone_query))
@@ -252,31 +229,71 @@ class ChatAgent:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for t_name, res in zip(retrieval_tools, results):
                 if not isinstance(res, Exception) and res[0]:
-                    tool_results[t_name] = ToolResult(t_name, res[1], True)
+                    content = res[1]
+                    tool_results[t_name] = ToolResult(t_name, content, True)
                     if t_name == "RAGTool":
-                        rag_content = res[1]
+                        rag_content = content
                     else:
-                        tavily_content = res[1]
-                    context = res[1] if not context else f"{context}\n\n{res[1]}"
-                elif isinstance(res, Exception):
-                    logger.error(f"Błąd zadania {t_name}: {res}")
+                        tavily_content = content
+                    context = content if not context else f"{context}\n\n{content}"
 
             context_source = "dokumentów i internetu" if rag_content and tavily_content else "dokumentów" if rag_content else "internetu" if tavily_content else "zapytania"
             yield {"type": "step", "content": "Wyszukiwanie informacji...", "status": "complete"}
 
-        # 3. GENERATORS (pomińmy detale dla zwięzłości, są jak w poprzedniej wersji)
+        # 3. GENEROWANIE MATERIAŁÓW (FIX: TUTAJ BYŁ BŁĄD)
         if generator_tools:
-            # (logika generatorów bez zmian)
-            pass
+            yield {"type": "step", "content": "Generowanie materiałów edukacyjnych...", "status": "loading"}
 
-        # 4. SYNTEZA
+            gen_context = self._build_generator_context(query, rag_content, tavily_content)
+            gen_tasks = []
+
+            for t_name in generator_tools:
+                logger.info(f"[AGENT] Uruchamiam generator: {t_name}")
+                tool = self._initialize_tool(t_name)
+                gen_tasks.append(tool.ainvoke(gen_context))
+
+            gen_results = await asyncio.gather(*gen_tasks, return_exceptions=True)
+
+            for t_name, res in zip(generator_tools, gen_results):
+                if isinstance(res, Exception):
+                    logger.error(f"Błąd generatora {t_name}: {res}")
+                    tool_results[t_name] = ToolResult(t_name, "", False, str(res))
+                else:
+                    tool_results[t_name] = ToolResult(t_name, str(res), True)
+
+                    # Wyemituj event z akcją nawigacji jeśli są metadane
+                    try:
+                        parsed = json.loads(res)
+                        if "_metadata" in parsed:
+                            meta = parsed["_metadata"]
+                            yield {
+                                "type": "action",
+                                "action_type": meta.get("type"),
+                                "id": meta.get("deck_id") or meta.get("exam_id"),
+                                "name": meta.get("deck_name") or meta.get("exam_name"),
+                                "count": meta.get("count", 0)
+                            }
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.debug(f"Nie udało się sparsować metadanych z {t_name}: {e}")
+
+            yield {"type": "step", "content": "Generowanie materiałów edukacyjnych...", "status": "complete"}
+
+        # 4. SYNTEZA ODPOWIEDZI
         yield {"type": "step", "content": "Przygotowywanie odpowiedzi...", "status": "loading"}
+
+        # Jeśli coś wygenerowano, dodaj info do syntezy
+        if any(t in generator_tools for t in tool_results if tool_results[t].success):
+            success_gen = [n for n in selected_tool_names if internal_tool_map.get(n) in generator_tools]
+            gen_status = "\n".join([f"- {name}: Gotowe" for name in success_gen])
+            context = f"{context or ''}\n\nSTATUS OPERACJI:\n{gen_status}"
+
         async for chunk in self._final_synthesis_stream(query, history_messages, context, context_source, tool_results,
                                                         memory_context):
             yield {"type": "chunk", "content": chunk}
+
         yield {"type": "step", "content": "Przygotowywanie odpowiedzi...", "status": "complete"}
 
-        # 5. BACKGROUND MEMORY UPDATE
+        # 5. TŁO: AKTUALIZACJA PAMIĘCI
         asyncio.create_task(self._update_memory_background(query))
         logger.info("========== AGENT INVOKE END ==========")
 
@@ -286,6 +303,6 @@ class ChatAgent:
             facts = await extractor.extract_memories(text)
             for fact in facts:
                 add_user_memory(user_id=self.user_id, text=fact, importance=0.8)
-            logger.info(f"[MEMORY] Zapisano {len(facts)} nowych faktów.")
+            if facts: logger.info(f"[MEMORY] Zapisano {len(facts)} nowych faktów.")
         except Exception as e:
             logger.error(f"Memory update failed: {e}")

@@ -158,6 +158,7 @@ async def create_message(
 ):
     """
     Dodaj nową wiadomość w konwersacji, o ile konwersacja należy do zalogowanego użytkownika.
+    Opcjonalnie można przekazać metadata z krokami (steps) i akcjami (actions).
     """
     try:
         if not message.text or not message.sender:
@@ -177,12 +178,21 @@ async def create_message(
             conversation_id=conversation_id,
             sender=message.sender,
             text=message.text,
+            meta_json=message.metadata,  # Include metadata (steps, actions)
         )
         db.add(new_message)
         db.commit()
         db.refresh(new_message)
 
-        return new_message
+        # Manually create MessageRead to properly map meta_json to metadata
+        return MessageRead(
+            id=new_message.id,
+            conversation_id=new_message.conversation_id,
+            sender=new_message.sender,
+            text=new_message.text,
+            created_at=new_message.created_at,
+            metadata=new_message.meta_json  # Map meta_json to metadata
+        ) 
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -225,7 +235,19 @@ async def get_messages(
             .order_by(Message.created_at)
             .all()
         )
-        return messages
+
+        # Manually map meta_json to metadata for proper JSON response
+        result = []
+        for msg in messages:
+            result.append(MessageRead(
+                id=msg.id,
+                conversation_id=msg.conversation_id,
+                sender=msg.sender,
+                text=msg.text,
+                created_at=msg.created_at,
+                metadata=msg.meta_json  # Map meta_json to metadata
+            ))
+        return result
     except Exception as e:
         logger.error(f"Error fetching messages: {e}")
         raise HTTPException(

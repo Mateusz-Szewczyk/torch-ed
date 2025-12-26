@@ -146,8 +146,10 @@ def google_callback():
         if error:
             return redirect(f"{FRONTEND}?error=oauth_failed")
 
-        # Create response with JWT cookie (same as your /login endpoint)
-        response = redirect(f"{FRONTEND}?login=success")
+        # Create response with JWT cookie AND token in URL
+        # Token in URL is needed for cross-origin web clients (Flutter web)
+        # where cookies from different domains don't work
+        response = redirect(f"{FRONTEND}?login=success&token={jwt_token}")
         response.set_cookie(
             'TorchED_auth',
             jwt_token,
@@ -203,8 +205,10 @@ def github_callback():
         if error:
             return redirect(f"{FRONTEND}?error=oauth_failed")
 
-        # Create response with JWT cookie (same as your /login endpoint)
-        response = redirect(f"{FRONTEND}?login=success")
+        # Create response with JWT cookie AND token in URL
+        # Token in URL is needed for cross-origin web clients (Flutter web)
+        # where cookies from different domains don't work
+        response = redirect(f"{FRONTEND}?login=success&token={jwt_token}")
         response.set_cookie(
             'TorchED_auth',
             jwt_token,

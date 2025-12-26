@@ -73,14 +73,43 @@ async def query_knowledge(
             # Stream chunks from agent
             async for msg in agent.invoke(query=query, selected_tool_names=selected_tools):
                 # Send each chunk as SSE
+                msg_type = msg.get("type", "chunk")
 
-                # Standaryzacja danych dla frontendu
-                data = {
-                    "type": msg.get("type", "chunk"),
-                    "content": msg.get("content", ""),
-                    "status": msg.get("status", "complete"),  # loading, complete, error
-                    "done": False
-                }
+                # Buduj odpowiedź w zależności od typu eventu
+                if msg_type == "action":
+                    # Event z akcją nawigacji (wygenerowane fiszki/egzamin)
+                    data = {
+                        "type": "action",
+                        "action_type": msg.get("action_type"),
+                        "id": msg.get("id"),
+                        "name": msg.get("name"),
+                        "count": msg.get("count", 0),
+                        "done": False
+                    }
+                elif msg_type == "step":
+                    # Event z krokiem procesu
+                    data = {
+                        "type": "step",
+                        "content": msg.get("content", ""),
+                        "status": msg.get("status", "complete"),
+                        "done": False
+                    }
+                elif msg_type == "chunk":
+                    # Event z fragmentem tekstu odpowiedzi
+                    data = {
+                        "type": "chunk",
+                        "content": msg.get("content", ""),
+                        "done": False
+                    }
+                else:
+                    # Fallback dla nieznanych typów
+                    data = {
+                        "type": msg_type,
+                        "content": msg.get("content", ""),
+                        "status": msg.get("status", "complete"),
+                        "done": False
+                    }
+
                 yield f"data: {json.dumps(data)}\n\n"
 
             # Send completion signal
