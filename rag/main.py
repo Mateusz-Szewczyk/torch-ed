@@ -84,6 +84,7 @@ app.add_middleware(
         "https://torch-9vlkoolu7-mateusz-szewczyks-projects.vercel.app",
         "https://torch-ed.vercel.app",
         "https://torched.pl",
+        "https://www.torched.pl",
     ],
     # Allow all localhost origins with any port (for development)
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
