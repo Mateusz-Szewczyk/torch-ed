@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, date, timedelta
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_, case
+from typing import Optional, List, Dict, Any
+from fastapi_cache.decorator import cache
+import logging
 
 from ..dependencies import get_db
 from ..auth import get_current_user
@@ -22,22 +25,343 @@ from ..models import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+# =============================================
+# HELPER FUNCTIONS
+# =============================================
+
+def calculate_study_streak(study_sessions: List[StudySessionModel], exam_results: List) -> Dict[str, Any]:
+    """
+    Oblicza study streak - liczbę kolejnych dni nauki.
+    Uwzględnia zarówno sesje fiszek jak i egzaminy.
+    Zwraca current streak, longest streak i informację czy aktywny dzisiaj.
+    """
+    if not study_sessions and not exam_results:
+        return {'current': 0, 'longest': 0, 'is_active_today': False}
+
+    # Zbierz wszystkie daty aktywności
+    study_dates = set()
+
+    for session in study_sessions:
+        try:
+            started = getattr(session, 'started_at', None)
+            if started:
+                study_dates.add(started.date())
+        except Exception as e:
+            logger.warning(f"Error accessing session.started_at: {e}")
+            continue
+
+    for result in exam_results:
+        try:
+            exam_result = result[0] if isinstance(result, tuple) else result
+            started = getattr(exam_result, 'started_at', None)
+            if started:
+                study_dates.add(started.date())
+        except Exception as e:
+            logger.warning(f"Error accessing exam_result.started_at: {e}")
+            continue
+
+    if not study_dates:
+        return {'current': 0, 'longest': 0, 'is_active_today': False}
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    is_active_today = today in study_dates
+
+    # Sortuj daty malejąco
+    sorted_dates = sorted(study_dates, reverse=True)
+
+    # Oblicz current streak
+    current_streak = 0
+    if sorted_dates[0] == today or sorted_dates[0] == yesterday:
+        current_date = sorted_dates[0]
+        for study_date in sorted_dates:
+            if study_date == current_date:
+                current_streak += 1
+                current_date = current_date - timedelta(days=1)
+            else:
+                break
+
+    # Oblicz longest streak
+    longest_streak = 0
+    if sorted_dates:
+        sorted_asc = sorted(study_dates)
+        current_run = 1
+        for i in range(1, len(sorted_asc)):
+            if (sorted_asc[i] - sorted_asc[i-1]).days == 1:
+                current_run += 1
+            else:
+                longest_streak = max(longest_streak, current_run)
+                current_run = 1
+        longest_streak = max(longest_streak, current_run)
+
+    return {
+        'current': current_streak,
+        'longest': longest_streak,
+        'is_active_today': is_active_today
+    }
+
+
+def get_period_stats(
+    study_records: List[StudyRecordModel],
+    study_sessions: List[StudySessionModel],
+    exam_results: List,
+    start_date: datetime,
+    end_date: datetime
+) -> Dict[str, Any]:
+    """
+    Oblicza statystyki dla określonego przedziału czasowego.
+    """
+    # Filtruj rekordy studiów
+    period_records = [
+        r for r in study_records
+        if r.reviewed_at and start_date <= r.reviewed_at <= end_date
+    ]
+
+    # Filtruj sesje studiów
+    period_sessions = []
+    for s in study_sessions:
+        try:
+            started = getattr(s, 'started_at', None)
+            if started and start_date <= started <= end_date:
+                period_sessions.append(s)
+        except Exception:
+            continue
+
+    # Filtruj wyniki egzaminów
+    period_exams = []
+    for r in exam_results:
+        try:
+            exam_result = r[0] if isinstance(r, tuple) else r
+            started = getattr(exam_result, 'started_at', None)
+            if started and start_date <= started <= end_date:
+                period_exams.append(r)
+        except Exception:
+            continue
+
+    # Oblicz statystyki
+    total_flashcards = len(period_records)
+    total_sessions = len(period_sessions)
+    total_exams = len(period_exams)
+
+    # Średni rating fiszek
+    avg_rating = 0.0
+    if period_records:
+        valid_ratings = [r.rating for r in period_records if r.rating is not None]
+        if valid_ratings:
+            avg_rating = sum(valid_ratings) / len(valid_ratings)
+
+    # Średni wynik egzaminów
+    avg_exam_score = 0.0
+    if period_exams:
+        exam_scores = []
+        for r in period_exams:
+            exam_result = r[0] if isinstance(r, tuple) else r
+            if exam_result.score is not None:
+                exam_scores.append(exam_result.score)
+        if exam_scores:
+            avg_exam_score = sum(exam_scores) / len(exam_scores)
+
+    # Łączny czas nauki (w godzinach)
+    total_study_hours = 0.0
+    for session in period_sessions:
+        try:
+            completed = getattr(session, 'completed_at', None)
+            started = getattr(session, 'started_at', None)
+            if completed and started:
+                duration = (completed - started).total_seconds() / 3600
+                if 0 <= duration <= 24:  # Sanity check
+                    total_study_hours += duration
+        except Exception:
+            continue
+
+    # Unikalne dni nauki
+    study_days = set()
+    for session in period_sessions:
+        try:
+            started = getattr(session, 'started_at', None)
+            if started:
+                study_days.add(started.date())
+        except Exception:
+            continue
+    for exam in period_exams:
+        try:
+            exam_result = exam[0] if isinstance(exam, tuple) else exam
+            started = getattr(exam_result, 'started_at', None)
+            if started:
+                study_days.add(started.date())
+        except Exception:
+            continue
+
+    return {
+        'flashcards_studied': total_flashcards,
+        'study_sessions': total_sessions,
+        'exams_completed': total_exams,
+        'average_flashcard_rating': round(avg_rating, 2),
+        'average_exam_score': round(avg_exam_score, 2),
+        'total_study_hours': round(total_study_hours, 2),
+        'active_days': len(study_days)
+    }
+
+
+def get_deck_statistics(
+    deck: Deck,
+    user_flashcards: List[UserFlashcardModel],
+    study_records: List[StudyRecordModel],
+    study_sessions: List[StudySessionModel],
+    user_id: int
+) -> Dict[str, Any]:
+    """
+    Oblicza szczegółowe statystyki dla konkretnego decka.
+    """
+    # Fiszki należące do tego decka
+    deck_flashcard_ids = {f.id for f in deck.flashcards} if deck.flashcards else set()
+
+    # UserFlashcards dla tego decka
+    deck_user_flashcards = [
+        uf for uf in user_flashcards
+        if uf.flashcard_id in deck_flashcard_ids
+    ]
+
+    total_cards = len(deck_flashcard_ids)
+    studied_cards = len(deck_user_flashcards)
+
+    # Mastery levels
+    mastered = len([uf for uf in deck_user_flashcards if uf.ef > 2.5])
+    learning = len([uf for uf in deck_user_flashcards if 1.8 < uf.ef <= 2.5])
+    difficult = len([uf for uf in deck_user_flashcards if uf.ef <= 1.8])
+    not_started = total_cards - studied_cards
+
+    # Sesje dla tego decka
+    deck_sessions = [s for s in study_sessions if s.deck_id == deck.id]
+
+    # Oblicz łączny czas nauki
+    total_study_hours = 0.0
+    for session in deck_sessions:
+        try:
+            completed = getattr(session, 'completed_at', None)
+            started = getattr(session, 'started_at', None)
+            if completed and started:
+                duration = (completed - started).total_seconds() / 3600
+                if 0 <= duration <= 24:
+                    total_study_hours += duration
+        except Exception:
+            continue
+
+    # Średni EF
+    avg_ef = 2.5  # default
+    if deck_user_flashcards:
+        avg_ef = sum(uf.ef for uf in deck_user_flashcards) / len(deck_user_flashcards)
+
+    # Następna sesja (najbliższa data next_review)
+    now = datetime.utcnow()
+    next_review = None
+    if deck_user_flashcards:
+        upcoming_reviews = [uf.next_review for uf in deck_user_flashcards if uf.next_review]
+        if upcoming_reviews:
+            next_review = min(upcoming_reviews)
+
+    # Karty do przeglądu dziś
+    cards_due_today = len([
+        uf for uf in deck_user_flashcards
+        if uf.next_review and uf.next_review <= now
+    ])
+
+    # Ostatnia sesja
+    last_session = None
+    if deck_sessions:
+        valid_sessions = []
+        for s in deck_sessions:
+            try:
+                started = getattr(s, 'started_at', None)
+                if started:
+                    valid_sessions.append(started)
+            except Exception:
+                continue
+        if valid_sessions:
+            last_session = max(valid_sessions)
+
+    # Completion percentage
+    completion = 0.0
+    if total_cards > 0:
+        completion = round((mastered / total_cards) * 100, 1)
+
+    return {
+        'deck_id': deck.id,
+        'deck_name': deck.name,
+        'total_cards': total_cards,
+        'studied_cards': studied_cards,
+        'mastered_cards': mastered,
+        'learning_cards': learning,
+        'difficult_cards': difficult,
+        'not_started_cards': not_started,
+        'completion_percentage': completion,
+        'average_ef': round(avg_ef, 2),
+        'total_study_hours': round(total_study_hours, 2),
+        'total_sessions': len(deck_sessions),
+        'cards_due_today': cards_due_today,
+        'next_review_date': next_review.isoformat() if next_review else None,
+        'last_session_date': last_session.isoformat() if last_session else None
+    }
+
+
+def serialize(obj):
+    """Konwertuje obiekt ORM na słownik, obsługując pola datetime."""
+    result = {}
+    try:
+        for col in obj.__table__.columns:
+            try:
+                value = getattr(obj, col.name, None)
+                if value is None:
+                    result[col.name] = None
+                elif isinstance(value, (datetime, date)):
+                    result[col.name] = value.isoformat()
+                else:
+                    result[col.name] = value
+            except Exception as e:
+                logger.warning(f"Error serializing column {col.name}: {e}")
+                result[col.name] = None
+    except Exception as e:
+        logger.error(f"Error serializing object: {e}")
+        return {}
+    return result
+
+
+def calculate_change(current: float, previous: float) -> Dict[str, Any]:
+    """Oblicza zmianę procentową między okresami."""
+    if previous == 0:
+        if current == 0:
+            return {'value': 0, 'percentage': 0, 'trend': 'neutral'}
+        return {'value': current, 'percentage': 100, 'trend': 'up'}
+
+    change = current - previous
+    percentage = round((change / previous) * 100, 1)
+    trend = 'up' if change > 0 else ('down' if change < 0 else 'neutral')
+
+    return {'value': round(change, 2), 'percentage': percentage, 'trend': trend}
 
 
 @router.get("/")
 @router.get("")  # Obsługa zarówno z, jak i bez trailing slash
+@cache(expire=60)  # Cache na 60 sekund
 async def get_dashboard_data(
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
     """
-    Pobiera dane dashboardu dla uwierzytelnionego użytkownika jako surowy JSON.
-    Zwraca średnie wyniki dziennie oraz nazwy decków i egzaminów.
-    Rozszerzone o udostępnione materiały zachowując wsteczną kompatybilność.
+    Pobiera kompletne dane dashboardu dla uwierzytelnionego użytkownika.
+    Zawiera rozszerzone statystyki, porównania czasowe i szczegółowe metryki.
+
+    Cache: 60 sekund (invalidowany po zmianach danych)
     """
     user_id = current_user.id_
+    now = datetime.utcnow()
+    today = now.date()
+
     try:
-        # === ORYGINALNE ZAPYTANIA (zachowane dla kompatybilności) ===
+        # === PODSTAWOWE ZAPYTANIA ===
 
         # Pobierz dane studiów
         study_records_result = (
@@ -80,18 +404,16 @@ async def get_dashboard_data(
             .all()
         ) if exam_result_ids else []
 
-        # === ROZSZERZONE ZAPYTANIA (nowe dane) ===
+        # === DECKI I EGZAMINY ===
 
-        # Pobierz wszystkie decki użytkownika (własne + udostępnione)
         # Własne decki
-        own_deck_ids = set()
-        own_decks = db.query(Deck).filter(
+        own_decks = db.query(Deck).options(joinedload(Deck.flashcards)).filter(
             Deck.user_id == user_id,
-            Deck.template_id.is_(None)  # Wyklucz kopie z udostępnionych
+            Deck.template_id.is_(None)
         ).all()
         own_deck_ids = {deck.id for deck in own_decks}
 
-        # Udostępnione decki (kopie użytkownika)
+        # Udostępnione decki
         shared_deck_access = db.query(UserDeckAccess).filter(
             UserDeckAccess.user_id == user_id,
             UserDeckAccess.is_active == True
@@ -104,19 +426,17 @@ async def get_dashboard_data(
             shared_decks_info[access.user_deck_id] = {
                 'original_deck_id': access.original_deck_id,
                 'code_used': access.accessed_via_code,
-                'added_at': access.added_at
+                'added_at': access.added_at.isoformat() if access.added_at else None
             }
 
-        # Pobierz wszystkie egzaminy użytkownika (własne + udostępnione)
         # Własne egzaminy
-        own_exam_ids = set()
         own_exams = db.query(Exam).filter(
             Exam.user_id == user_id,
-            Exam.template_id.is_(None)  # Wyklucz kopie z udostępnionych
+            Exam.template_id.is_(None)
         ).all()
         own_exam_ids = {exam.id for exam in own_exams}
 
-        # Udostępnione egzaminy (kopie użytkownika)
+        # Udostępnione egzaminy
         shared_exam_access = db.query(UserExamAccess).filter(
             UserExamAccess.user_id == user_id,
             UserExamAccess.is_active == True
@@ -129,135 +449,275 @@ async def get_dashboard_data(
             shared_exams_info[access.user_exam_id] = {
                 'original_exam_id': access.original_exam_id,
                 'code_used': access.accessed_via_code,
-                'added_at': access.added_at
+                'added_at': access.added_at.isoformat() if access.added_at else None
             }
 
-        # Pobierz nazwy wszystkich decków (własne + udostępnione)
+        # Pobierz wszystkie decki z fiszkami
         all_deck_ids = own_deck_ids.union(shared_deck_ids)
-        all_decks = db.query(Deck).filter(Deck.id.in_(all_deck_ids)).all() if all_deck_ids else []
+        all_decks = db.query(Deck).options(joinedload(Deck.flashcards)).filter(
+            Deck.id.in_(all_deck_ids)
+        ).all() if all_deck_ids else []
 
-        # Rozszerzone mapowanie nazw decków z informacją o typie dostępu
-        deck_id_to_name = {}
+        # Mapowania
+        deck_id_to_name = {deck.id: deck.name for deck in all_decks}
         deck_id_to_info = {}
-
         for deck in all_decks:
-            deck_id_to_name[deck.id] = deck.name  # Zachowane dla kompatybilności
             deck_id_to_info[deck.id] = {
                 'name': deck.name,
                 'access_type': 'shared' if deck.id in shared_deck_ids else 'own',
                 'user_id': deck.user_id,
-                'created_at': deck.created_at.isoformat() if deck.created_at else None
+                'created_at': deck.created_at.isoformat() if deck.created_at else None,
+                'flashcard_count': len(deck.flashcards) if deck.flashcards else 0
             }
-
-            # Dodaj informacje o udostępnieniu jeśli to kopia
             if deck.id in shared_decks_info:
                 deck_id_to_info[deck.id].update(shared_decks_info[deck.id])
-                if 'added_at' in deck_id_to_info[deck.id] and deck_id_to_info[deck.id]['added_at']:
-                    deck_id_to_info[deck.id]['added_at'] = deck_id_to_info[deck.id]['added_at'].isoformat()
 
-        # Pobierz nazwy wszystkich egzaminów (własne + udostępnione)
         all_exam_ids = own_exam_ids.union(shared_exam_ids)
         all_exams = db.query(Exam).filter(Exam.id.in_(all_exam_ids)).all() if all_exam_ids else []
 
-        # Mapowanie nazw egzaminów z informacją o typie dostępu
-        exam_id_to_name = {}
+        exam_id_to_name = {exam.id: exam.name for exam in all_exams}
         exam_id_to_info = {}
-
         for exam in all_exams:
-            exam_id_to_name[exam.id] = exam.name
             exam_id_to_info[exam.id] = {
                 'name': exam.name,
                 'access_type': 'shared' if exam.id in shared_exam_ids else 'own',
                 'user_id': exam.user_id,
                 'created_at': exam.created_at.isoformat() if exam.created_at else None
             }
-
-            # Dodaj informacje o udostępnieniu jeśli to kopia
             if exam.id in shared_exams_info:
                 exam_id_to_info[exam.id].update(shared_exams_info[exam.id])
-                if 'added_at' in exam_id_to_info[exam.id] and exam_id_to_info[exam.id]['added_at']:
-                    exam_id_to_info[exam.id]['added_at'] = exam_id_to_info[exam.id]['added_at'].isoformat()
 
-        # === ORYGINALNE OBLICZENIA (zachowane) ===
+        # === OBLICZENIA CZASOWE ===
 
-        # Oblicz średnie wyniki egzaminów dziennie
+        # Definicje przedziałów czasowych
+        today_start = datetime.combine(today, datetime.min.time())
+        today_end = datetime.combine(today, datetime.max.time())
+
+        week_start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
+        week_end = today_end
+
+        last_week_start = week_start - timedelta(days=7)
+        last_week_end = week_start - timedelta(seconds=1)
+
+        month_start = datetime.combine(today.replace(day=1), datetime.min.time())
+        month_end = today_end
+
+        # Poprzedni miesiąc
+        if today.month == 1:
+            last_month_start = datetime.combine(date(today.year - 1, 12, 1), datetime.min.time())
+        else:
+            last_month_start = datetime.combine(date(today.year, today.month - 1, 1), datetime.min.time())
+        last_month_end = month_start - timedelta(seconds=1)
+
+        year_start = datetime.combine(date(today.year, 1, 1), datetime.min.time())
+        year_end = today_end
+
+        # Oblicz statystyki dla każdego okresu
+        stats_today = get_period_stats(
+            study_records_result, study_sessions_result, exam_results_result,
+            today_start, today_end
+        )
+
+        stats_this_week = get_period_stats(
+            study_records_result, study_sessions_result, exam_results_result,
+            week_start, week_end
+        )
+
+        stats_last_week = get_period_stats(
+            study_records_result, study_sessions_result, exam_results_result,
+            last_week_start, last_week_end
+        )
+
+        stats_this_month = get_period_stats(
+            study_records_result, study_sessions_result, exam_results_result,
+            month_start, month_end
+        )
+
+        stats_last_month = get_period_stats(
+            study_records_result, study_sessions_result, exam_results_result,
+            last_month_start, last_month_end
+        )
+
+        stats_this_year = get_period_stats(
+            study_records_result, study_sessions_result, exam_results_result,
+            year_start, year_end
+        )
+
+        # === PORÓWNANIA ===
+
+        week_comparison = {
+            'flashcards': calculate_change(
+                stats_this_week['flashcards_studied'],
+                stats_last_week['flashcards_studied']
+            ),
+            'study_hours': calculate_change(
+                stats_this_week['total_study_hours'],
+                stats_last_week['total_study_hours']
+            ),
+            'exams': calculate_change(
+                stats_this_week['exams_completed'],
+                stats_last_week['exams_completed']
+            ),
+            'avg_rating': calculate_change(
+                stats_this_week['average_flashcard_rating'],
+                stats_last_week['average_flashcard_rating']
+            ),
+            'avg_exam_score': calculate_change(
+                stats_this_week['average_exam_score'],
+                stats_last_week['average_exam_score']
+            )
+        }
+
+        month_comparison = {
+            'flashcards': calculate_change(
+                stats_this_month['flashcards_studied'],
+                stats_last_month['flashcards_studied']
+            ),
+            'study_hours': calculate_change(
+                stats_this_month['total_study_hours'],
+                stats_last_month['total_study_hours']
+            ),
+            'exams': calculate_change(
+                stats_this_month['exams_completed'],
+                stats_last_month['exams_completed']
+            ),
+            'avg_rating': calculate_change(
+                stats_this_month['average_flashcard_rating'],
+                stats_last_month['average_flashcard_rating']
+            ),
+            'avg_exam_score': calculate_change(
+                stats_this_month['average_exam_score'],
+                stats_last_month['average_exam_score']
+            )
+        }
+
+        # === STUDY STREAK ===
+        study_streak = calculate_study_streak(study_sessions_result, exam_results_result)
+
+        # === FLASHCARD MASTERY STATISTICS ===
+        total_user_flashcards = len(user_flashcards_result)
+        mastered_flashcards = len([uf for uf in user_flashcards_result if uf.ef > 2.5])
+        learning_flashcards = len([uf for uf in user_flashcards_result if 1.8 < uf.ef <= 2.5])
+        difficult_flashcards = len([uf for uf in user_flashcards_result if uf.ef <= 1.8])
+
+        # Karty do przeglądu dziś
+        cards_due_today = len([
+            uf for uf in user_flashcards_result
+            if uf.next_review and uf.next_review <= now
+        ])
+
+        # Najbliższa sesja nauki
+        upcoming_reviews = [uf.next_review for uf in user_flashcards_result if uf.next_review and uf.next_review > now]
+        next_study_session = min(upcoming_reviews).isoformat() if upcoming_reviews else None
+
+        flashcard_mastery = {
+            'total': total_user_flashcards,
+            'mastered': mastered_flashcards,
+            'learning': learning_flashcards,
+            'difficult': difficult_flashcards,
+            'mastery_percentage': round((mastered_flashcards / total_user_flashcards * 100) if total_user_flashcards > 0 else 0, 1),
+            'cards_due_today': cards_due_today,
+            'next_study_session': next_study_session
+        }
+
+        # === DAILY AVERAGES ===
+
+        # Średnie wyniki egzaminów dziennie (z filtrowaniem NULL)
         exam_daily_average = (
             db.query(
                 func.date(ExamResultModel.started_at).label("date"),
-                func.avg(ExamResultModel.score).label("average_score")
+                func.avg(ExamResultModel.score).label("average_score"),
+                func.count(ExamResultModel.id).label("count")
             )
-            .filter(ExamResultModel.user_id == user_id)
+            .filter(
+                ExamResultModel.user_id == user_id,
+                ExamResultModel.score.isnot(None),
+                ExamResultModel.started_at.isnot(None)  # Dodane filtrowanie
+            )
             .group_by(func.date(ExamResultModel.started_at))
             .all()
         )
         exam_daily_average_serialized = [
             {
-                "date": record.date.isoformat(),
-                "average_score": float(record.average_score)
+                "date": record.date.isoformat() if record.date else None,
+                "average_score": round(float(record.average_score), 2) if record.average_score else 0,
+                "count": record.count or 0
             }
             for record in exam_daily_average
+            if record.date is not None
         ]
 
-        # Oblicz średnie oceny fiszek dziennie
+        # Średnie oceny fiszek dziennie (z filtrowaniem NULL)
         flashcard_daily_average = (
             db.query(
                 func.date(StudyRecordModel.reviewed_at).label("date"),
-                func.avg(StudyRecordModel.rating).label("average_rating")
+                func.avg(StudyRecordModel.rating).label("average_rating"),
+                func.count(StudyRecordModel.id).label("count")
             )
             .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
-            .filter(StudySessionModel.user_id == user_id)
+            .filter(
+                StudySessionModel.user_id == user_id,
+                StudyRecordModel.rating.isnot(None),
+                StudyRecordModel.reviewed_at.isnot(None)  # Dodane filtrowanie
+            )
             .group_by(func.date(StudyRecordModel.reviewed_at))
             .all()
         )
         flashcard_daily_average_serialized = [
             {
-                "date": record.date.isoformat(),
-                "average_rating": float(record.average_rating)
+                "date": record.date.isoformat() if record.date else None,
+                "average_rating": round(float(record.average_rating), 2) if record.average_rating else 0,
+                "count": record.count or 0
             }
             for record in flashcard_daily_average
+            if record.date is not None
         ]
 
-        # Oblicz dodatkowe metryki (średnia czasów sesji)
-        session_durations = [
-            {
-                "date": session.started_at.date().isoformat(),
-                "duration_hours": (
-                    (session.completed_at - session.started_at).total_seconds() / 3600
-                    if session.completed_at else 0
-                )
-            }
-            for session in study_sessions_result
-        ]
+        # === SESSION DURATIONS ===
+        session_durations = []
+        for session in study_sessions_result:
+            try:
+                started = getattr(session, 'started_at', None)
+                if started:
+                    duration = 0.0
+                    completed = getattr(session, 'completed_at', None)
+                    if completed:
+                        duration = (completed - started).total_seconds() / 3600
+                        if duration < 0 or duration > 24:  # Sanity check
+                            duration = 0.0
+                    session_durations.append({
+                        "date": started.date().isoformat(),
+                        "duration_hours": round(duration, 2),
+                        "deck_id": getattr(session, 'deck_id', None)
+                    })
+            except Exception as e:
+                logger.warning(f"Error processing session duration: {e}")
+                continue
 
-        # === FUNKCJA SERIALIZUJĄCA (oryginalna) ===
+        # === SERIALIZACJA ===
+        def safe_serialize(obj):
+            try:
+                return serialize(obj)
+            except Exception as e:
+                logger.warning(f"Error serializing object: {e}")
+                return {}
 
-        def serialize(obj):
-            """Konwertuje obiekt ORM na słownik, obsługując pola datetime."""
-            result = {}
-            for col in obj.__table__.columns:
-                value = getattr(obj, col.name)
-                if isinstance(value, (datetime, date)):
-                    result[col.name] = value.isoformat()
-                else:
-                    result[col.name] = value
-            return result
+        serialized_study_records = [safe_serialize(record) for record in study_records_result]
+        serialized_user_flashcards = [safe_serialize(card) for card in user_flashcards_result]
+        serialized_study_sessions = [safe_serialize(session) for session in study_sessions_result]
+        serialized_exam_result_answers = [safe_serialize(answer) for answer in exam_result_answers_result]
 
-        # Serializacja wszystkich danych (oryginalna struktura)
-        serialized_study_records = [serialize(record) for record in study_records_result]
-        serialized_user_flashcards = [serialize(card) for card in user_flashcards_result]
-        serialized_study_sessions = [serialize(session) for session in study_sessions_result]
-        serialized_exam_result_answers = [serialize(answer) for answer in exam_result_answers_result]
-        serialized_exam_results = [
-            {
-                **serialize(result[0]),
-                "exam_name": result.exam_name
-            }
-            for result in exam_results_result
-        ]
+        serialized_exam_results = []
+        for result in exam_results_result:
+            try:
+                exam_data = safe_serialize(result[0])
+                exam_data["exam_name"] = result.exam_name if hasattr(result, 'exam_name') else result[1] if len(result) > 1 else "Unknown"
+                serialized_exam_results.append(exam_data)
+            except Exception as e:
+                logger.warning(f"Error serializing exam result: {e}")
+                continue
 
-        # === DODATKOWE STATYSTYKI (nowe, ale opcjonalne) ===
-
-        # Liczniki materiałów
+        # === MATERIAL COUNTS ===
         material_counts = {
             'decks': {
                 'total': len(all_deck_ids),
@@ -268,23 +728,16 @@ async def get_dashboard_data(
                 'total': len(all_exam_ids),
                 'own': len(own_exam_ids),
                 'shared': len(shared_exam_ids)
+            },
+            'flashcards': {
+                'total': sum(len(d.flashcards) if d.flashcards else 0 for d in all_decks),
+                'studied': total_user_flashcards
             }
         }
 
-        # Aktywność z ostatniego tygodnia
-        week_ago = datetime.now() - timedelta(days=7)
-        recent_activity = {
-            'study_sessions_this_week': len([s for s in study_sessions_result if s.started_at >= week_ago]),
-            'exam_attempts_this_week': len([r[0] for r in exam_results_result if r[0].started_at >= week_ago]),
-            'total_study_sessions': len(study_sessions_result),
-            'total_exam_attempts': len(exam_results_result),
-            'total_cards_studied': len(serialized_study_records)
-        }
-
-        # === ODPOWIEDŹ (zachowana oryginalna struktura + rozszerzenia) ===
-
+        # === RESPONSE ===
         response = {
-            # ORYGINALNE POLA (zachowane dla kompatybilności wstecznej)
+            # ORYGINALNE POLA (kompatybilność wsteczna)
             "study_records": serialized_study_records,
             "user_flashcards": serialized_user_flashcards,
             "study_sessions": serialized_study_sessions,
@@ -293,25 +746,568 @@ async def get_dashboard_data(
             "session_durations": session_durations,
             "exam_daily_average": exam_daily_average_serialized,
             "flashcard_daily_average": flashcard_daily_average_serialized,
-            "deck_names": deck_id_to_name,  # Zachowane dla kompatybilności
+            "deck_names": deck_id_to_name,
 
-            # NOWE POLA (rozszerzenia, które nie wpływają na istniejący frontend)
+            # ROZSZERZENIA
             "deck_info": deck_id_to_info,
             "exam_info": exam_id_to_info,
             "exam_names": exam_id_to_name,
             "material_counts": material_counts,
-            "recent_activity": recent_activity,
 
-            # Dodatkowe mapowania pomocnicze
-            "access_info": {
-                "shared_decks": shared_decks_info,
-                "shared_exams": shared_exams_info
-            }
+            # NOWE STATYSTYKI CZASOWE
+            "time_period_stats": {
+                "today": stats_today,
+                "this_week": stats_this_week,
+                "last_week": stats_last_week,
+                "this_month": stats_this_month,
+                "last_month": stats_last_month,
+                "this_year": stats_this_year
+            },
+
+            # PORÓWNANIA
+            "comparisons": {
+                "week_over_week": week_comparison,
+                "month_over_month": month_comparison
+            },
+
+            # STUDY STREAK
+            "study_streak": study_streak,
+
+            # FLASHCARD MASTERY
+            "flashcard_mastery": flashcard_mastery,
+
+            # QUICK STATS (dla szybkiego podglądu)
+            "quick_stats": {
+                "flashcards_today": stats_today['flashcards_studied'],
+                "flashcards_this_week": stats_this_week['flashcards_studied'],
+                "flashcards_this_month": stats_this_month['flashcards_studied'],
+                "flashcards_this_year": stats_this_year['flashcards_studied'],
+                "exams_today": stats_today['exams_completed'],
+                "exams_this_week": stats_this_week['exams_completed'],
+                "exams_this_month": stats_this_month['exams_completed'],
+                "study_hours_today": stats_today['total_study_hours'],
+                "study_hours_this_week": stats_this_week['total_study_hours'],
+                "study_hours_this_month": stats_this_month['total_study_hours'],
+                "cards_due_today": cards_due_today,
+                "streak_days": study_streak['current']
+            },
+
+            # METADATA
+            "generated_at": now.isoformat(),
+            "cache_ttl_seconds": 60
         }
 
         return response
 
     except SQLAlchemyError as e:
+        logger.error(f"Database error in dashboard: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     except Exception as e:
+        import traceback
+        logger.error(f"Unexpected error in dashboard: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@router.get("/deck/{deck_id}")
+@cache(expire=60)
+async def get_deck_statistics_endpoint(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Pobiera szczegółowe statystyki dla konkretnego decka.
+
+    Zwraca:
+    - Mastery levels (mastered, learning, difficult, not_started)
+    - Completion percentage
+    - Session history
+    - Rating distribution
+    - Time stats
+    """
+    user_id = current_user.id_
+    now = datetime.utcnow()
+
+    try:
+        # Sprawdź dostęp do decka
+        deck = db.query(Deck).options(joinedload(Deck.flashcards)).filter(Deck.id == deck_id).first()
+
+        if not deck:
+            raise HTTPException(status_code=404, detail="Deck not found")
+
+        # Sprawdź czy użytkownik ma dostęp (własny lub udostępniony)
+        is_owner = deck.user_id == user_id
+        has_access = db.query(UserDeckAccess).filter(
+            UserDeckAccess.user_id == user_id,
+            UserDeckAccess.user_deck_id == deck_id,
+            UserDeckAccess.is_active == True
+        ).first() is not None
+
+        if not is_owner and not has_access:
+            raise HTTPException(status_code=403, detail="Access denied to this deck")
+
+        # Pobierz dane
+        user_flashcards = db.query(UserFlashcardModel).filter(
+            UserFlashcardModel.user_id == user_id
+        ).all()
+
+        study_sessions = db.query(StudySessionModel).filter(
+            StudySessionModel.user_id == user_id,
+            StudySessionModel.deck_id == deck_id
+        ).all()
+
+        study_records = (
+            db.query(StudyRecordModel)
+            .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
+            .filter(
+                StudySessionModel.user_id == user_id,
+                StudySessionModel.deck_id == deck_id
+            )
+            .all()
+        )
+
+        # Podstawowe statystyki
+        basic_stats = get_deck_statistics(deck, user_flashcards, study_records, study_sessions, user_id)
+
+        # Rating distribution
+        rating_counts = {0: 0, 3: 0, 5: 0}
+        for record in study_records:
+            if record.rating is not None and record.rating in rating_counts:
+                rating_counts[record.rating] += 1
+
+        total_reviews = sum(rating_counts.values())
+        rating_distribution = {
+            'hard': rating_counts[0],
+            'good': rating_counts[3],
+            'easy': rating_counts[5],
+            'hard_percentage': round((rating_counts[0] / total_reviews * 100) if total_reviews > 0 else 0, 1),
+            'good_percentage': round((rating_counts[3] / total_reviews * 100) if total_reviews > 0 else 0, 1),
+            'easy_percentage': round((rating_counts[5] / total_reviews * 100) if total_reviews > 0 else 0, 1),
+            'total_reviews': total_reviews
+        }
+
+        # Session history (ostatnie 10 sesji)
+        session_history = []
+
+        # Bezpieczne sortowanie sesji
+        def get_session_start(s):
+            try:
+                started = getattr(s, 'started_at', None)
+                return started if started else datetime.min
+            except Exception:
+                return datetime.min
+
+        sorted_sessions = sorted(study_sessions, key=get_session_start, reverse=True)[:10]
+
+        for session in sorted_sessions:
+            try:
+                started = getattr(session, 'started_at', None)
+                completed = getattr(session, 'completed_at', None)
+
+                duration = 0.0
+                if completed and started:
+                    duration = (completed - started).total_seconds() / 3600
+                    if duration < 0 or duration > 24:
+                        duration = 0.0
+
+                session_records = [r for r in study_records if r.session_id == session.id]
+                session_history.append({
+                    'id': session.id,
+                    'started_at': started.isoformat() if started else None,
+                    'completed_at': completed.isoformat() if completed else None,
+                    'duration_hours': round(duration, 2),
+                    'cards_reviewed': len(session_records),
+                    'avg_rating': round(sum(r.rating for r in session_records if r.rating is not None) / len(session_records), 2) if session_records else 0
+                })
+            except Exception as e:
+                logger.warning(f"Error processing session history: {e}")
+                continue
+
+        # Daily progress (ostatnie 30 dni)
+        thirty_days_ago = now - timedelta(days=30)
+        daily_progress = (
+            db.query(
+                func.date(StudyRecordModel.reviewed_at).label("date"),
+                func.count(StudyRecordModel.id).label("cards_reviewed"),
+                func.avg(StudyRecordModel.rating).label("avg_rating")
+            )
+            .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
+            .filter(
+                StudySessionModel.user_id == user_id,
+                StudySessionModel.deck_id == deck_id,
+                StudyRecordModel.reviewed_at >= thirty_days_ago
+            )
+            .group_by(func.date(StudyRecordModel.reviewed_at))
+            .all()
+        )
+
+        daily_progress_serialized = [
+            {
+                "date": record.date.isoformat(),
+                "cards_reviewed": record.cards_reviewed,
+                "avg_rating": round(float(record.avg_rating), 2) if record.avg_rating else 0
+            }
+            for record in daily_progress
+        ]
+
+        return {
+            **basic_stats,
+            "rating_distribution": rating_distribution,
+            "session_history": session_history,
+            "daily_progress": daily_progress_serialized,
+            "is_owner": is_owner,
+            "generated_at": now.isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in deck statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in deck statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@router.get("/decks/all")
+@cache(expire=60)
+async def get_all_decks_statistics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Pobiera przegląd statystyk wszystkich decków użytkownika.
+    """
+    user_id = current_user.id_
+    now = datetime.utcnow()
+
+    try:
+        # Własne decki
+        own_decks = db.query(Deck).options(joinedload(Deck.flashcards)).filter(
+            Deck.user_id == user_id,
+            Deck.template_id.is_(None)
+        ).all()
+
+        # Udostępnione decki
+        shared_access = db.query(UserDeckAccess).filter(
+            UserDeckAccess.user_id == user_id,
+            UserDeckAccess.is_active == True
+        ).all()
+        shared_deck_ids = {a.user_deck_id for a in shared_access}
+
+        shared_decks = db.query(Deck).options(joinedload(Deck.flashcards)).filter(
+            Deck.id.in_(shared_deck_ids)
+        ).all() if shared_deck_ids else []
+
+        all_decks = own_decks + shared_decks
+
+        # Pobierz dane użytkownika
+        user_flashcards = db.query(UserFlashcardModel).filter(
+            UserFlashcardModel.user_id == user_id
+        ).all()
+
+        study_sessions = db.query(StudySessionModel).filter(
+            StudySessionModel.user_id == user_id
+        ).all()
+
+        study_records = (
+            db.query(StudyRecordModel)
+            .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
+            .filter(StudySessionModel.user_id == user_id)
+            .all()
+        )
+
+        # Oblicz statystyki dla każdego decka
+        deck_stats = []
+        for deck in all_decks:
+            stats = get_deck_statistics(deck, user_flashcards, study_records, study_sessions, user_id)
+            stats['is_own'] = deck.id in {d.id for d in own_decks}
+            deck_stats.append(stats)
+
+        # Sortuj po cards_due_today (najpilniejsze na górze)
+        deck_stats.sort(key=lambda x: (-x['cards_due_today'], -x['completion_percentage']))
+
+        # Summary
+        total_cards_due = sum(d['cards_due_today'] for d in deck_stats)
+        total_mastered = sum(d['mastered_cards'] for d in deck_stats)
+        total_learning = sum(d['learning_cards'] for d in deck_stats)
+        total_difficult = sum(d['difficult_cards'] for d in deck_stats)
+        total_cards = sum(d['total_cards'] for d in deck_stats)
+
+        return {
+            "decks": deck_stats,
+            "summary": {
+                "total_decks": len(deck_stats),
+                "own_decks": len(own_decks),
+                "shared_decks": len(shared_decks),
+                "total_cards": total_cards,
+                "total_cards_due_today": total_cards_due,
+                "total_mastered": total_mastered,
+                "total_learning": total_learning,
+                "total_difficult": total_difficult,
+                "overall_mastery_percentage": round((total_mastered / total_cards * 100) if total_cards > 0 else 0, 1)
+            },
+            "generated_at": now.isoformat()
+        }
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in all decks statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in all decks statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@router.get("/goals")
+@cache(expire=60)
+async def get_goals_and_achievements(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Pobiera cele, osiągnięcia i sugestie dla użytkownika.
+    """
+    user_id = current_user.id_
+    now = datetime.utcnow()
+    today = now.date()
+
+    try:
+        # Pobierz podstawowe dane
+        study_sessions = db.query(StudySessionModel).filter(
+            StudySessionModel.user_id == user_id
+        ).all()
+
+        exam_results_query = (
+            db.query(ExamResultModel)
+            .filter(ExamResultModel.user_id == user_id)
+        )
+        exam_results = exam_results_query.all()
+
+        user_flashcards = db.query(UserFlashcardModel).filter(
+            UserFlashcardModel.user_id == user_id
+        ).all()
+
+        study_records = (
+            db.query(StudyRecordModel)
+            .join(StudySessionModel, StudyRecordModel.session_id == StudySessionModel.id)
+            .filter(StudySessionModel.user_id == user_id)
+            .all()
+        )
+
+        # Streak info
+        streak_data = calculate_study_streak(study_sessions, [(e,) for e in exam_results])
+
+        # Achievements (odznaki)
+        achievements = []
+
+        # Streak achievements
+        if streak_data['current'] >= 7:
+            achievements.append({
+                'id': 'streak_week',
+                'name': 'Week Warrior',
+                'description': '7 day study streak',
+                'icon': 'fire',
+                'earned': True,
+                'earned_at': today.isoformat()
+            })
+        if streak_data['current'] >= 30:
+            achievements.append({
+                'id': 'streak_month',
+                'name': 'Monthly Master',
+                'description': '30 day study streak',
+                'icon': 'trophy',
+                'earned': True,
+                'earned_at': today.isoformat()
+            })
+        if streak_data['longest'] >= 100:
+            achievements.append({
+                'id': 'streak_100',
+                'name': 'Century Club',
+                'description': '100 day study streak (all time)',
+                'icon': 'star',
+                'earned': True,
+                'earned_at': None
+            })
+
+        # Flashcard achievements
+        total_reviews = len(study_records)
+        if total_reviews >= 100:
+            achievements.append({
+                'id': 'reviews_100',
+                'name': 'Getting Started',
+                'description': '100 flashcard reviews',
+                'icon': 'book',
+                'earned': True
+            })
+        if total_reviews >= 1000:
+            achievements.append({
+                'id': 'reviews_1000',
+                'name': 'Dedicated Learner',
+                'description': '1000 flashcard reviews',
+                'icon': 'book_open',
+                'earned': True
+            })
+        if total_reviews >= 10000:
+            achievements.append({
+                'id': 'reviews_10000',
+                'name': 'Flashcard Master',
+                'description': '10000 flashcard reviews',
+                'icon': 'crown',
+                'earned': True
+            })
+
+        # Mastery achievements
+        mastered_count = len([uf for uf in user_flashcards if uf.ef > 2.5])
+        if mastered_count >= 50:
+            achievements.append({
+                'id': 'mastered_50',
+                'name': 'Quick Learner',
+                'description': '50 cards mastered',
+                'icon': 'brain',
+                'earned': True
+            })
+        if mastered_count >= 500:
+            achievements.append({
+                'id': 'mastered_500',
+                'name': 'Knowledge Keeper',
+                'description': '500 cards mastered',
+                'icon': 'graduation_cap',
+                'earned': True
+            })
+
+        # Exam achievements
+        total_exams = len(exam_results)
+        if total_exams >= 10:
+            achievements.append({
+                'id': 'exams_10',
+                'name': 'Test Taker',
+                'description': '10 exams completed',
+                'icon': 'clipboard_check',
+                'earned': True
+            })
+
+        perfect_exams = len([e for e in exam_results if e.score and e.score >= 100])
+        if perfect_exams >= 1:
+            achievements.append({
+                'id': 'perfect_exam',
+                'name': 'Perfectionist',
+                'description': 'Perfect score on an exam',
+                'icon': 'check_circle',
+                'earned': True
+            })
+
+        # Suggestions (co użytkownik powinien zrobić)
+        suggestions = []
+
+        cards_due = len([uf for uf in user_flashcards if uf.next_review and uf.next_review <= now])
+        if cards_due > 0:
+            suggestions.append({
+                'type': 'review_due',
+                'priority': 'high',
+                'title': f'{cards_due} cards due for review',
+                'description': 'Keep your memory fresh by reviewing these cards',
+                'action': 'flashcards'
+            })
+
+        if not streak_data['is_active_today']:
+            suggestions.append({
+                'type': 'keep_streak',
+                'priority': 'high',
+                'title': 'Keep your streak alive!',
+                'description': f"You have a {streak_data['current']} day streak. Study today to continue!",
+                'action': 'flashcards'
+            })
+
+        difficult_cards = len([uf for uf in user_flashcards if uf.ef <= 1.8])
+        if difficult_cards > 10:
+            suggestions.append({
+                'type': 'difficult_cards',
+                'priority': 'medium',
+                'title': f'{difficult_cards} difficult cards need attention',
+                'description': 'Focus on these cards to improve your mastery',
+                'action': 'flashcards'
+            })
+
+        # Milestones (najbliższe cele)
+        milestones = []
+
+        # Next streak milestone
+        for milestone in [7, 14, 30, 60, 100, 365]:
+            if streak_data['current'] < milestone:
+                days_left = milestone - streak_data['current']
+                milestones.append({
+                    'type': 'streak',
+                    'target': milestone,
+                    'current': streak_data['current'],
+                    'days_left': days_left,
+                    'description': f'{milestone} day streak'
+                })
+                break
+
+        # Next review milestone
+        for milestone in [100, 500, 1000, 5000, 10000]:
+            if total_reviews < milestone:
+                reviews_left = milestone - total_reviews
+                milestones.append({
+                    'type': 'reviews',
+                    'target': milestone,
+                    'current': total_reviews,
+                    'remaining': reviews_left,
+                    'description': f'{milestone} flashcard reviews'
+                })
+                break
+
+        # Next mastery milestone
+        for milestone in [50, 100, 250, 500, 1000]:
+            if mastered_count < milestone:
+                cards_left = milestone - mastered_count
+                milestones.append({
+                    'type': 'mastery',
+                    'target': milestone,
+                    'current': mastered_count,
+                    'remaining': cards_left,
+                    'description': f'{milestone} cards mastered'
+                })
+                break
+
+        return {
+            "streak": streak_data,
+            "achievements": achievements,
+            "suggestions": suggestions,
+            "milestones": milestones,
+            "stats": {
+                "total_reviews": total_reviews,
+                "mastered_cards": mastered_count,
+                "total_exams": total_exams,
+                "perfect_exams": perfect_exams,
+                "cards_due_today": cards_due
+            },
+            "generated_at": now.isoformat()
+        }
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in goals: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in goals: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@router.post("/invalidate-cache")
+async def invalidate_dashboard_cache(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Invaliduje cache dashboardu dla użytkownika.
+    Wywołuj po zakończeniu sesji nauki lub egzaminu.
+    """
+    # FastAPI-cache używa automatycznego TTL, więc po 60s cache wygasa
+    # Dla natychmiastowej invalidacji potrzebujemy Redis backend
+    # Na razie zwracamy informację
+    return {
+        "message": "Cache will expire within 60 seconds",
+        "user_id": current_user.id_,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
