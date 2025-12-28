@@ -1059,6 +1059,269 @@ async def get_all_decks_statistics(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
+@router.get("/calendar")
+@cache(expire=10)  # Cache na 10 sekund - krótszy czas żeby pokazać aktualne dane
+async def get_learning_calendar(
+    months_back: int = Query(default=3, ge=1, le=12, description="Months of history to fetch"),
+    months_forward: int = Query(default=1, ge=1, le=3, description="Months of scheduled sessions to fetch"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Pobiera dane kalendarza nauki w stylu GitHub contribution graph.
+
+    Returns:
+        - history: Dict[date_string, {count, decks}] - przeszłe dni z liczbą fiszek
+        - scheduled: Dict[date_string, {count, decks}] - zaplanowane sesje nauki
+        - stats: {max_count, total_days_studied, current_streak}
+    """
+    user_id = current_user.id_
+    now = datetime.utcnow()
+    today = now.date()
+
+    # Use end of today to ensure all of today's records are included
+    end_of_today = datetime.combine(today, datetime.max.time())
+
+    logger.info(f"[Calendar] Fetching calendar for user_id={user_id}, today={today}, now={now}")
+
+    # Oblicz zakres dat
+    start_date = today - timedelta(days=months_back * 30)
+    end_date = today + timedelta(days=months_forward * 30)
+
+    try:
+        # =============================================
+        # HISTORIA - ile UNIKALNYCH fiszek przerobiono każdego dnia
+        # Używamy logiki z zapytania SQL:
+        # SELECT uf.user_id, sr.reviewed_at::date AS review_date,
+        #        COUNT(DISTINCT sr.user_flashcard_id) AS individual_flashcards_studied
+        # FROM study_records sr
+        # JOIN user_flashcards uf ON sr.user_flashcard_id = uf.id
+        # GROUP BY uf.user_id, review_date
+        # =============================================
+
+        # Pobierz wszystkie study_records dla użytkownika przez JOIN z user_flashcards
+        study_records = (
+            db.query(
+                StudyRecordModel.reviewed_at,
+                StudyRecordModel.user_flashcard_id,
+                UserFlashcardModel.user_id,
+                Flashcard.deck_id,
+                Deck.name.label('deck_name')
+            )
+            .join(UserFlashcardModel, StudyRecordModel.user_flashcard_id == UserFlashcardModel.id)
+            .join(Flashcard, UserFlashcardModel.flashcard_id == Flashcard.id)
+            .join(Deck, Flashcard.deck_id == Deck.id)
+            .filter(
+                UserFlashcardModel.user_id == user_id,
+                StudyRecordModel.reviewed_at >= start_date,
+                StudyRecordModel.reviewed_at <= end_of_today  # Use end of today to include all today's records
+            )
+            .all()
+        )
+
+        logger.info(f"[Calendar] Query returned {len(study_records)} study_records for user {user_id}")
+
+        # Agreguj po dniach - licząc UNIKALNE fiszki (user_flashcard_id) per dzień per deck
+        history_data: Dict[str, Dict[str, Any]] = {}
+        # Struktura pomocnicza: day_str -> deck_name -> set of user_flashcard_ids
+        day_deck_flashcards: Dict[str, Dict[str, set]] = {}
+
+        for record in study_records:
+            if record.reviewed_at and record.user_flashcard_id:
+                day_str = record.reviewed_at.date().isoformat()
+                deck_name = record.deck_name or f"Deck {record.deck_id}"
+
+                if day_str not in day_deck_flashcards:
+                    day_deck_flashcards[day_str] = {}
+
+                if deck_name not in day_deck_flashcards[day_str]:
+                    day_deck_flashcards[day_str][deck_name] = set()
+
+                day_deck_flashcards[day_str][deck_name].add(record.user_flashcard_id)
+
+        # Konwertuj na history_data z liczbami
+        for day_str, decks_data in day_deck_flashcards.items():
+            total_unique = sum(len(flashcard_ids) for flashcard_ids in decks_data.values())
+            history_data[day_str] = {
+                'count': total_unique,
+                'decks': [
+                    {'name': deck_name, 'count': len(flashcard_ids)}
+                    for deck_name, flashcard_ids in decks_data.items()
+                ]
+            }
+
+        logger.info(f"[Calendar] Found {len(study_records)} study records, {len(history_data)} unique study days")
+        if today.isoformat() in history_data:
+            logger.info(f"[Calendar] Today ({today.isoformat()}) has {history_data[today.isoformat()]['count']} unique flashcards")
+
+        # =============================================
+        # ZAPLANOWANE SESJE - na podstawie next_review
+        # =============================================
+
+        # Use start of today to include cards due today
+        today_start = datetime.combine(today, datetime.min.time())
+
+        scheduled_cards = (
+            db.query(
+                UserFlashcardModel.next_review,
+                Deck.id.label('deck_id'),
+                Deck.name.label('deck_name')
+            )
+            .join(Flashcard, UserFlashcardModel.flashcard_id == Flashcard.id)
+            .join(Deck, Flashcard.deck_id == Deck.id)
+            .filter(
+                UserFlashcardModel.user_id == user_id,
+                UserFlashcardModel.next_review >= today_start,  # Include today's cards
+                UserFlashcardModel.next_review <= end_date
+            )
+            .all()
+        )
+
+        # Agreguj po dniach
+        scheduled_data: Dict[str, Dict[str, Any]] = {}
+
+        for card in scheduled_cards:
+            if card.next_review:
+                day_str = card.next_review.date().isoformat()
+
+                if day_str not in scheduled_data:
+                    scheduled_data[day_str] = {
+                        'count': 0,
+                        'decks': {}
+                    }
+
+                scheduled_data[day_str]['count'] += 1
+
+                deck_name = card.deck_name or f"Deck {card.deck_id}"
+                if deck_name not in scheduled_data[day_str]['decks']:
+                    scheduled_data[day_str]['decks'][deck_name] = 0
+                scheduled_data[day_str]['decks'][deck_name] += 1
+
+        # Konwertuj decks dict na listę dla JSON
+        for day_str in scheduled_data:
+            scheduled_data[day_str]['decks'] = [
+                {'name': name, 'count': count}
+                for name, count in scheduled_data[day_str]['decks'].items()
+            ]
+
+        # =============================================
+        # STATYSTYKI ROCZNE I DZIENNE
+        # Liczymy UNIKALNE fiszki per dzień w roku i sumujemy.
+        # Używamy tego samego wzorca JOIN co w historii kalendarza.
+        # =============================================
+
+        year_start = datetime(today.year, 1, 1)
+
+        # Pobierz wszystkie study records z tego roku przez JOIN z user_flashcards
+        year_study_records = (
+            db.query(
+                StudyRecordModel.reviewed_at,
+                StudyRecordModel.user_flashcard_id,
+            )
+            .join(UserFlashcardModel, StudyRecordModel.user_flashcard_id == UserFlashcardModel.id)
+            .filter(
+                UserFlashcardModel.user_id == user_id,
+                StudyRecordModel.reviewed_at >= year_start,
+                StudyRecordModel.reviewed_at <= end_of_today  # Use end of today to include all today's records
+            )
+            .all()
+        )
+
+        logger.info(f"[Calendar] Year query returned {len(year_study_records)} study_records for user {user_id} from {year_start} to {end_of_today}")
+
+        # Zlicz unikalne fiszki per dzień i zsumuj
+        year_day_flashcards: Dict[str, set] = {}
+        for record in year_study_records:
+            if record.reviewed_at and record.user_flashcard_id:
+                day_str = record.reviewed_at.date().isoformat()
+                if day_str not in year_day_flashcards:
+                    year_day_flashcards[day_str] = set()
+                year_day_flashcards[day_str].add(record.user_flashcard_id)
+
+        # Suma unikalnych fiszek per dzień
+        total_flashcards_year = sum(len(flashcard_ids) for flashcard_ids in year_day_flashcards.values())
+
+        logger.info(f"[Calendar] Year stats: {len(year_study_records)} records, {len(year_day_flashcards)} days, {total_flashcards_year} unique flashcards this year")
+
+        # Sprawdź czy użytkownik uczył się dzisiaj (fiszki lub egzaminy)
+        today_start = datetime.combine(today, datetime.min.time())
+        today_end = datetime.combine(today, datetime.max.time())
+
+        has_studied_today = False
+
+        # Sprawdź fiszki
+        if today.isoformat() in history_data:
+            has_studied_today = True
+        else:
+            # Sprawdź egzaminy (jeśli nie ma w history_data, bo history_data jest z study_records)
+            # Warto sprawdzić czy exam results są uwzględniane w kalendarzu?
+            # Obecna implementacja kalendarza patrzy tylko na StudyRecordModel (fiszki).
+            # Dodajmy sprawdzenie egzaminów dla flagi has_studied_today
+            exams_today = db.query(ExamResultModel).filter(
+                ExamResultModel.user_id == user_id,
+                ExamResultModel.started_at >= today_start,
+                ExamResultModel.started_at <= today_end
+            ).first()
+            if exams_today:
+                has_studied_today = True
+
+        # =============================================
+        # STATYSTYKI
+        # =============================================
+
+        max_count = max([d['count'] for d in history_data.values()]) if history_data else 0
+        total_days_studied = len(history_data)
+
+        study_sessions = db.query(StudySessionModel).filter(
+            StudySessionModel.user_id == user_id
+        ).all()
+        exam_results = db.query(ExamResultModel).filter(
+            ExamResultModel.user_id == user_id
+        ).all()
+        streak_data = calculate_study_streak(study_sessions, [(e,) for e in exam_results])
+
+        cards_due_today = db.query(UserFlashcardModel).filter(
+            UserFlashcardModel.user_id == user_id,
+            UserFlashcardModel.next_review <= end_of_today  # Use end of today
+        ).count()
+
+        # Get decks scheduled for today
+        today_str = today.isoformat()
+        decks_due_today = []
+        if today_str in scheduled_data:
+            decks_due_today = scheduled_data[today_str].get('decks', [])
+
+        logger.info(f"[Calendar] Final stats: total_flashcards_year={total_flashcards_year}, cards_due_today={cards_due_today}, has_studied_today={has_studied_today}")
+
+        return {
+            "history": history_data,
+            "scheduled": scheduled_data,
+            "stats": {
+                "max_count": max_count,
+                "total_days_studied": total_days_studied,
+                "current_streak": streak_data['current'],
+                "longest_streak": streak_data['longest'],
+                "is_active_today": streak_data['is_active_today'],
+                "cards_due_today": cards_due_today,
+                "total_flashcards_year": total_flashcards_year,
+                "has_studied_today": has_studied_today,
+                "decks_due_today": decks_due_today  # Add decks scheduled for today
+            },
+            "range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat()
+            },
+            "generated_at": now.isoformat()
+        }
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error in calendar: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in calendar: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
 @router.get("/goals")
 @cache(expire=60)
 async def get_goals_and_achievements(

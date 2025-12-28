@@ -198,9 +198,9 @@ def bulk_record(
         db.commit()
         logger.info(f"Bulk record saved. session_id={session.id}")
     except SQLAlchemyError as e:
-        logger.error(f"Błąd podczas commitowania transakcji: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        logger.error(f"Error saving bulk record: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save bulk record.")
 
     return {
         "message": "Bulk record saved",
