@@ -18,6 +18,7 @@ from ..vector_store import delete_file_from_vector_store, create_vector_store
 from ..file_processor.pdf_processor import PDFProcessor
 from ..file_processor.documents_processor import DocumentProcessor
 from ..chunking import create_chunks
+from ..services.subscription import SubscriptionService
 
 import os
 from pathlib import Path
@@ -52,6 +53,11 @@ async def upload_file(
     user_id = str(current_user.id_)
     logger.info(f"Received upload request from user_id: {user_id} for file: {file.filename}")
 
+    # Check subscription limits
+    subscription_service = SubscriptionService(db, current_user)
+    # Check file count first
+    subscription_service.check_file_upload_limit(0)
+
     if start_page is None:
         start_page = 0
     if end_page is not None and end_page < 0:
@@ -73,6 +79,9 @@ async def upload_file(
 
     try:
         content = await file.read()
+        # Check file size limit
+        subscription_service.check_file_upload_limit(len(content))
+
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(content)
         logger.info(f"Saved uploaded file: {safe_filename} to {file_path}")

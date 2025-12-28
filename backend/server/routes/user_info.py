@@ -95,6 +95,10 @@ def user_profile() -> Union[Response, Tuple[Response, int]]:
             if hasattr(user, 'created_at') and user.created_at:
                 join_date = user.created_at.strftime('%Y-%m-%d')
 
+            role_expiry = None
+            if hasattr(user, 'role_expiry') and user.role_expiry:
+                role_expiry = user.role_expiry.isoformat()
+
             return jsonify({
                 'success': True,
                 'user': {
@@ -102,6 +106,7 @@ def user_profile() -> Union[Response, Tuple[Response, int]]:
                     'email': user.email,
                     'username': user.user_name,
                     'role': user.role,
+                    'roleExpiry': role_expiry,
                     'confirmed': user.confirmed,
                     'joinDate': join_date
                 }

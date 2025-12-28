@@ -819,6 +819,11 @@ def session_check() -> Response | tuple:
         if iss != 'TorchED_BACKEND_AUTH':
             return add_security_headers(jsonify({'authenticated': False, 'error': 'Invalid token issuer'})), 401
 
+        # Get role_expiry if available
+        role_expiry = None
+        if hasattr(user, 'role_expiry') and user.role_expiry:
+            role_expiry = user.role_expiry.isoformat()
+
         # Return success with user information
         return add_security_headers(jsonify({
             'authenticated': True,
@@ -826,7 +831,8 @@ def session_check() -> Response | tuple:
             'email': user.email,
             'confirmed': user.confirmed,
             'role': user.role,
-            'username': user.user_name
+            'username': user.user_name,
+            'role_expiry': role_expiry
         })), 200
 
     except Exception as e:

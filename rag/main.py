@@ -12,7 +12,7 @@ import base64
 
 from src.routers import (
     files, decks, flashcards, query, chats, exams,
-    study_sessions, user_flashcards, dashboard, memories
+    study_sessions, user_flashcards, dashboard, memories, subscription, payments
 )
 from src.config import Config
 
@@ -155,6 +155,8 @@ app.include_router(study_sessions.router, prefix="/api/study_sessions", tags=["S
 app.include_router(user_flashcards.router, prefix="/api/user_flashcards", tags=["User Flashcards"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(memories.router, prefix="/api/memories", tags=["Memories"])
+app.include_router(subscription.router, prefix="/api/subscription", tags=["Subscription"])
+app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -66,6 +66,7 @@ async def query_knowledge(
                 conversation_id=conversation_id,
                 openai_api_key=OPENAI_API_KEY,
                 tavily_api_key=TAVILY_API_KEY,
+                db=db,
             )
 
             logger.info(f"[STREAM] Starting stream for user_id: {user_id}")
@@ -101,14 +102,15 @@ async def query_knowledge(
                         "content": msg.get("content", ""),
                         "done": False
                     }
-                else:
-                    # Fallback dla nieznanych typów
+                elif msg_type == "error":
+                    # Event z błędem (np. limit subskrypcji)
                     data = {
-                        "type": msg_type,
-                        "content": msg.get("content", ""),
-                        "status": msg.get("status", "complete"),
-                        "done": False
+                        "type": "error",
+                        "error": msg.get("error", "Unknown error"),
+                        "done": True
                     }
+                else:
+                    continue
 
                 yield f"data: {json.dumps(data)}\n\n"
 

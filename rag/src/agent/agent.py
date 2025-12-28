@@ -10,11 +10,14 @@ from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
 from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, trim_messages
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
+from sqlalchemy.orm import Session
 
 from .agent_memory import get_conversation_history
 from .utils import set_conversation_title
 from .tools import FlashcardGenerator, RAGTool, ExamGenerator, DirectAnswer
 from ..vector_store import add_user_memory, search_user_memories
+from ..services.subscription import SubscriptionService
+from ..models import User
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +65,12 @@ class MemoryExtractor:
 class ChatAgent:
     MAX_HISTORY_TOKENS = 1500
 
-    def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, **kwargs):
+    def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, db: Session, **kwargs):
         self.user_id = user_id
         self.conversation_id = conversation_id
         self.openai_api_key = openai_api_key
         self.tavily_api_key = tavily_api_key
+        self.db = db
         self.synthesis_model = ChatOpenAI(
             model_name="gpt-4o-mini",
             temperature=0.1,
@@ -187,6 +191,21 @@ class ChatAgent:
 
     async def invoke(self, query: str, selected_tool_names: List[str]):
         logger.info("========== AGENT INVOKE START ==========")
+
+        # 0. SPRAWDZENIE LIMITÓW SUBSKRYPCJI
+        try:
+            user = self.db.query(User).filter(User.id_ == int(self.user_id)).first()
+            if user:
+                subscription_service = SubscriptionService(self.db, user)
+
+                # Sprawdź limity dla generatorów
+                if "FlashcardGenerator" in selected_tool_names or "ExamGenerator" in selected_tool_names:
+                    # Sprawdzamy czy użytkownik nie przekroczył limitu pytań
+                    # Przekazujemy 0, aby sprawdzić tylko czy limit już nie został osiągnięty
+                    subscription_service.check_generation_limit(0)
+        except Exception as e:
+            yield {"type": "error", "error": str(e)}
+            return
 
         # 1. PRZYGOTOWANIE I PAMIĘĆ
         yield {"type": "step", "content": "Analizowanie kontekstu i profilu...", "status": "loading"}

@@ -380,6 +380,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     role: Mapped[str] = mapped_column(String, nullable=False, default="user")
+    role_expiry: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     user_flashcards = relationship(

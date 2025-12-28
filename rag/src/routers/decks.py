@@ -12,6 +12,7 @@ from ..utils import (
     create_shareable_deck, add_deck_by_code, get_user_shared_decks,
     get_shareable_content_info, generate_share_code
 )
+from ..services.subscription import SubscriptionService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -85,6 +86,10 @@ def create_deck(
 ):
     """Tworzy nowy deck wraz z flashcardami"""
     try:
+        # Check subscription limits
+        subscription_service = SubscriptionService(db, current_user)
+        subscription_service.check_deck_limit()
+
         deck = Deck(
             name=deck_data.get('name'),
             description=deck_data.get('description', ''),
