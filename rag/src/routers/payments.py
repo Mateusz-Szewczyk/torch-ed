@@ -300,13 +300,13 @@ async def get_subscription_plans():
                 "features": [
                     "3 uploaded files",
                     "5 flashcard decks",
-                    "20 AI questions per week",
+                    "50 AI questions per week",
                     "Basic chat support",
                 ],
                 "limits": {
                     "files": 3,
                     "decks": 5,
-                    "questions_per_period": 20,
+                    "questions_per_period": 50,
                 },
             },
             {
@@ -316,16 +316,16 @@ async def get_subscription_plans():
                 "currency": "PLN",
                 "period": "month",
                 "features": [
-                    "20 uploaded files",
-                    "50 flashcard decks",
-                    "200 AI questions per month",
+                    "10 uploaded files",
+                    "20 flashcard decks",
+                    "500 AI questions per month",
                     "Priority chat support",
                     "Advanced analytics",
                 ],
                 "limits": {
-                    "files": 20,
-                    "decks": 50,
-                    "questions_per_period": 200,
+                    "files": 10,
+                    "decks": 20,
+                    "questions_per_period": 500,
                 },
                 "popular": True,
             },
@@ -339,9 +339,6 @@ async def get_subscription_plans():
                     "Unlimited files",
                     "Unlimited flashcard decks",
                     "Unlimited AI questions",
-                    "24/7 priority support",
-                    "Advanced analytics",
-                    "API access",
                 ],
                 "limits": {
                     "files": -1,

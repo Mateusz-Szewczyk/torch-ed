@@ -39,11 +39,34 @@ class BulkRecordData(BaseModel):
 
 def _update_sm2(user_flashcard: UserFlashcard, rating: int):
     """
-    Implementacja algorytmu SM-2 (SuperMemo 2).
+    Implementacja algorytmu SM-2 (SuperMemo 2) z inteligentną obsługą spóźnionych przeglądów.
+
     - Jeśli rating < 3: resetuje powtórkę.
     - Jeśli rating >= 3: zwiększa EF i wylicza nowy interwał.
+    - Uwzględnia jak bardzo spóźniony jest przegląd i dostosowuje interwał:
+      * 0-2 dni spóźnienia: normalny algorytm
+      * 3-7 dni: redukcja interwału o 30-50%
+      * >7 dni: znacząca redukcja (podobnie jak rating < 3)
     """
     logger.debug(f"SM-2 update for Flashcard {user_flashcard.flashcard_id}, rating={rating}")
+
+    # Calculate how overdue this card is
+    now = datetime.utcnow()
+    days_overdue = max(0, (now - user_flashcard.next_review).days) if user_flashcard.next_review else 0
+    logger.debug(f"Card is {days_overdue} days overdue")
+
+    # Determine overdue penalty factor
+    overdue_penalty = 1.0
+    if days_overdue > 7:
+        # Very overdue - significant penalty (reduce interval by 60-70%)
+        overdue_penalty = 0.3
+        logger.debug("Very overdue (>7 days): applying 70% interval reduction")
+    elif days_overdue > 2:
+        # Moderately overdue - reduce interval by 30-50%
+        # Linear interpolation between 30% and 50% reduction
+        reduction = 0.3 + (0.2 * (days_overdue - 3) / 4)  # scales from 0.3 to 0.5
+        overdue_penalty = 1.0 - min(reduction, 0.5)
+        logger.debug(f"Moderately overdue ({days_overdue} days): applying {int(reduction*100)}% interval reduction")
 
     if rating < 3:
         user_flashcard.repetitions = 0
@@ -59,13 +82,22 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int):
             logger.debug("Second repetition: interval set to 6 days.")
         else:
             new_interval = user_flashcard.interval * user_flashcard.ef
-            user_flashcard.interval = int(round(new_interval))
-            logger.debug(f"Repetition {user_flashcard.repetitions}: interval updated to {user_flashcard.interval} days.")
+            # Apply overdue penalty to the new interval
+            new_interval = new_interval * overdue_penalty
+            user_flashcard.interval = max(1, int(round(new_interval)))  # At least 1 day
+            logger.debug(f"Repetition {user_flashcard.repetitions}: interval updated to {user_flashcard.interval} days (with overdue penalty: {overdue_penalty:.2f})")
 
     # Aktualizacja EF (Easiness Factor)
     # SuperMemo wzór:
     # EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
     ef_change = 0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)
+
+    # Additional EF penalty for very overdue cards (indicates difficulty in remembering)
+    if days_overdue > 7 and rating < 5:
+        ef_penalty = -0.1 * (days_overdue / 7)  # Additional penalty proportional to overdue days
+        ef_change += ef_penalty
+        logger.debug(f"Additional EF penalty for overdue: {ef_penalty:.3f}")
+
     user_flashcard.ef += ef_change
     user_flashcard.ef = max(1.3, round(user_flashcard.ef, 2))  # nie mniej niż 1.3
     logger.debug(f"Updated EF to {user_flashcard.ef}")
@@ -184,7 +216,7 @@ async def bulk_record(
         logger.debug(f"Added StudyRecord: {study_record}")
 
         # Zaktualizuj EF, interval itd.
-        _update_sm2(uf, item.rating)
+        _update_sm2(uf, item.rating) 
         logger.debug(f"Updated UserFlashcard after SM2: {uf}")
 
         # Upewnij się, że SQLAlchemy widzi zmiany w uf
@@ -245,6 +277,86 @@ def get_next_review_date(
     earliest = min(uf.next_review for uf in user_flashcards)
     logger.debug(f"Earliest next_review date: {earliest}")
     return {"next_review": earliest.isoformat()}
+
+
+@router.get("/overdue_stats")
+def get_overdue_stats(
+    deck_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns statistics about overdue flashcards for a given deck:
+    - total_cards: total number of flashcards in the deck
+    - overdue_cards: number of cards that are overdue
+    - due_today: number of cards due today
+    - overdue_breakdown: breakdown by severity (slightly, moderately, very overdue)
+    """
+    logger.info(f"Fetching overdue_stats for deck_id={deck_id}, user_id={current_user.id_}")
+
+    deck = db.query(Deck).filter(
+        Deck.id == deck_id,
+        Deck.user_id == current_user.id_
+    ).first()
+    if not deck:
+        logger.error(f"Deck id={deck_id} not found for user_id={current_user.id_}")
+        raise HTTPException(status_code=404, detail="Deck not found.")
+
+    user_flashcards = db.query(UserFlashcard).filter(
+        UserFlashcard.user_id == current_user.id_,
+        UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
+    ).all()
+
+    if not user_flashcards:
+        return {
+            "total_cards": len(deck.flashcards),
+            "overdue_cards": 0,
+            "due_today": 0,
+            "overdue_breakdown": {
+                "slightly_overdue": 0,  # 1-2 days
+                "moderately_overdue": 0,  # 3-7 days
+                "very_overdue": 0  # >7 days
+            }
+        }
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    overdue_count = 0
+    due_today_count = 0
+    slightly_overdue = 0
+    moderately_overdue = 0
+    very_overdue = 0
+
+    for uf in user_flashcards:
+        if uf.next_review <= now:
+            overdue_count += 1
+            days_overdue = (now - uf.next_review).days
+
+            if days_overdue <= 2:
+                slightly_overdue += 1
+            elif days_overdue <= 7:
+                moderately_overdue += 1
+            else:
+                very_overdue += 1
+
+        if today_start <= uf.next_review < today_end:
+            due_today_count += 1
+
+    stats = {
+        "total_cards": len(user_flashcards),
+        "overdue_cards": overdue_count,
+        "due_today": due_today_count,
+        "overdue_breakdown": {
+            "slightly_overdue": slightly_overdue,
+            "moderately_overdue": moderately_overdue,
+            "very_overdue": very_overdue
+        }
+    }
+
+    logger.debug(f"Overdue stats: {stats}")
+    return stats
 
 
 class StartStudySessionRequest(BaseModel):
@@ -336,7 +448,17 @@ def start_study_session(
     # -- (4) Fetch available flashcards: next_review <= now()
     now = datetime.utcnow()
     available_ufs = [uf for uf in user_flashcards if uf.next_review <= now]
-    logger.debug(f"Found {len(available_ufs)} available UserFlashcards for study.")
+
+    # Sort by how overdue they are (most overdue first) to help users catch up efficiently
+    available_ufs.sort(key=lambda uf: uf.next_review)
+
+    logger.debug(f"Found {len(available_ufs)} available UserFlashcards for study (sorted by overdue date).")
+
+    # Log overdue statistics for monitoring
+    if available_ufs:
+        most_overdue_days = (now - available_ufs[0].next_review).days
+        least_overdue_days = (now - available_ufs[-1].next_review).days
+        logger.info(f"Overdue range: {most_overdue_days} to {least_overdue_days} days")
 
     if not available_ufs:
         # Find the earliest next_review date among UserFlashcards
@@ -397,7 +519,74 @@ def start_study_session(
     )
 
 
-@router.get("/retake_session", response_model=List[FlashcardResponse], status_code=200)
+@router.post("/reset_stale_cards")
+def reset_stale_cards(
+    deck_id: int,
+    days_threshold: int = Query(30, description="Number of days to consider a card stale"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Reset flashcards that haven't been reviewed for a very long time (default: 30 days).
+    These cards are likely forgotten and need to be re-learned from the beginning.
+
+    This resets:
+    - interval to 0
+    - repetitions to 0
+    - next_review to now (making them available immediately)
+    - EF is reduced but not reset completely (to preserve some learning history)
+    """
+    logger.info(f"Resetting stale cards for deck_id={deck_id}, user_id={current_user.id_}, threshold={days_threshold} days")
+
+    deck = db.query(Deck).filter(
+        Deck.id == deck_id,
+        Deck.user_id == current_user.id_
+    ).first()
+    if not deck:
+        logger.error(f"Deck id={deck_id} not found for user_id={current_user.id_}")
+        raise HTTPException(status_code=404, detail="Deck not found.")
+
+    now = datetime.utcnow()
+    stale_threshold = now - timedelta(days=days_threshold)
+
+    user_flashcards = db.query(UserFlashcard).filter(
+        UserFlashcard.user_id == current_user.id_,
+        UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
+        UserFlashcard.next_review < stale_threshold
+    ).all()
+
+    if not user_flashcards:
+        logger.info("No stale cards found.")
+        return {"message": "No stale cards found", "reset_count": 0}
+
+    reset_count = 0
+    for uf in user_flashcards:
+        days_stale = (now - uf.next_review).days
+        logger.debug(f"Resetting UserFlashcard {uf.id} (flashcard_id={uf.flashcard_id}), {days_stale} days stale")
+
+        # Reset to beginner state
+        uf.interval = 0
+        uf.repetitions = 0
+        uf.next_review = now  # Available immediately
+
+        # Reduce EF but don't reset completely - preserve some learning history
+        uf.ef = max(1.3, uf.ef * 0.7)  # Reduce by 30%
+
+        db.add(uf)
+        reset_count += 1
+
+    try:
+        db.commit()
+        logger.info(f"Reset {reset_count} stale flashcards for deck_id={deck_id}")
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Error resetting stale cards: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset stale cards.")
+
+    return {
+        "message": f"Successfully reset {reset_count} stale flashcards",
+        "reset_count": reset_count
+    }
 def retake_session(
     deck_id: int = Query(..., description="ID of the deck to retake session from"),
     db: Session = Depends(get_db),

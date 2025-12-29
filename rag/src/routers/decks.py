@@ -1,16 +1,14 @@
 import logging
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy.exc import IntegrityError
 
-from ..models import User, Deck, Flashcard, ShareableContent, UserDeckAccess
+from ..models import User, Deck, Flashcard, ShareableContent, UserDeckAccess, UserFlashcard, StudyRecord
 from ..dependencies import get_db
 from ..auth import get_current_user
 from ..utils import (
-    create_shareable_deck, add_deck_by_code, get_user_shared_decks,
-    get_shareable_content_info, generate_share_code
+    create_shareable_deck, add_deck_by_code, get_user_shared_decks
 )
 from ..services.subscription import SubscriptionService
 
@@ -615,7 +613,12 @@ def delete_deck(
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db)
 ):
-    """Usuwa deck"""
+    """Usuwa deck. Zabezpiecza relacje: najpierw usuwa wpisy w user_flashcards aby nie naruszyć FK.
+
+    Logika:
+      - Jeżeli deck jest używany także przez innych użytkowników (inne wpisy w UserFlashcard lub aktywne UserDeckAccess) -> nie usuwamy fizycznie decka i flashcardów, usuwamy jedynie powiązane wpisy w `user_flashcards` należące do bieżącego użytkownika oraz zwracamy stosowną informację.
+      - Jeśli nikt poza bieżącym użytkownikiem nie korzysta z decka -> bezpiecznie usuwamy user_flashcards, flashcards, shareable content i sam deck.
+    """
     try:
         deck = db.query(Deck).filter(
             Deck.id == deck_id,
@@ -625,19 +628,78 @@ def delete_deck(
         if not deck:
             raise HTTPException(status_code=404, detail="Deck not found or access denied")
 
-        # Jeśli deck jest udostępniony, dezaktywuj kod udostępniania
-        if deck.is_template:
-            shared_content = db.query(ShareableContent).filter(
-                ShareableContent.content_type == 'deck',
-                ShareableContent.content_id == deck_id,
-                ShareableContent.creator_id == current_user.id_
-            ).first()
-            if shared_content:
-                shared_content.is_public = False
-                logger.info(f"Deactivated share code for deleted deck {deck_id}")
+        # Pobierz wszystkie id flashcardów należących do decka
+        flashcard_ids = [r[0] for r in db.query(Flashcard.id).filter(Flashcard.deck_id == deck_id).all()]
+
+        # Sprawdź, czy inni użytkownicy korzystają z tych flashcardów
+        other_user_flashcards_count = 0
+        if flashcard_ids:
+            other_user_flashcards_count = db.query(UserFlashcard).filter(
+                UserFlashcard.flashcard_id.in_(flashcard_ids),
+                UserFlashcard.user_id != current_user.id_
+            ).count()
+
+        # Sprawdź, czy istnieją aktywne dostępy (kopie) decka u innych użytkowników
+        other_user_deck_access_count = db.query(UserDeckAccess).filter(
+            UserDeckAccess.original_deck_id == deck_id,
+            UserDeckAccess.is_active == True,
+            UserDeckAccess.user_id != current_user.id_
+        ).count()
+
+        # Jeśli inni użytkownicy korzystają z decka -> nie usuwamy flashcardów i decka
+        if other_user_flashcards_count > 0 or other_user_deck_access_count > 0:
+            logger.info(f"Deck {deck_id} is used by other users (user_flashcards:{other_user_flashcards_count}, access:{other_user_deck_access_count}). Removing only current user's study records and leaving deck intact.")
+
+            # Usuń wpisy study_records związane z user_flashcards bieżącego użytkownika
+            if flashcard_ids:
+                # pobierz user_flashcard ids należące do bieżącego użytkownika
+                user_uf_rows = db.query(UserFlashcard.id).filter(
+                    UserFlashcard.user_id == current_user.id_,
+                    UserFlashcard.flashcard_id.in_(flashcard_ids)
+                ).all()
+                user_uf_ids = [r[0] for r in user_uf_rows] if user_uf_rows else []
+
+                if user_uf_ids:
+                    # Usuń study_records dla tych user_flashcardów
+                    db.query(StudyRecord).filter(StudyRecord.user_flashcard_id.in_(user_uf_ids)).delete(synchronize_session=False)
+
+                # Usuń wpisy user_flashcards tylko dla bieżącego użytkownika (jeśli istnieją)
+                db.query(UserFlashcard).filter(
+                    UserFlashcard.user_id == current_user.id_,
+                    UserFlashcard.flashcard_id.in_(flashcard_ids)
+                ).delete(synchronize_session=False)
+
+            # Nie usuwamy flashcards ani decka
+            db.commit()
+
+            return {
+                'message': 'Deck is used by other users. Your study records related to this deck were removed, but the deck and flashcards were not deleted.'
+            }
+
+        # Brak innych użytkowników -> bezpieczne usuwanie wszystkich zależności
+        logger.info(f"No other users detected for deck {deck_id}. Performing full delete.")
+
+        # Usuń wszystkie wpisy user_flashcards powiązane z tym deckiem (dla wszystkich użytkowników)
+        if flashcard_ids:
+            # Najpierw pobierz wszystkie user_flashcard ids powiązane z tymi flashcardami
+            all_uf_rows = db.query(UserFlashcard.id).filter(UserFlashcard.flashcard_id.in_(flashcard_ids)).all()
+            all_uf_ids = [r[0] for r in all_uf_rows] if all_uf_rows else []
+
+            if all_uf_ids:
+                # Usuń study_records powiązane z tymi user_flashcardami
+                db.query(StudyRecord).filter(StudyRecord.user_flashcard_id.in_(all_uf_ids)).delete(synchronize_session=False)
+
+            # Usuń wpisy user_flashcards powiązane z tym deckiem (dla wszystkich użytkowników)
+            db.query(UserFlashcard).filter(UserFlashcard.flashcard_id.in_(flashcard_ids)).delete(synchronize_session=False)
+
+        # Usuń powiązane shareable content
+        db.query(ShareableContent).filter(
+            ShareableContent.content_type == 'deck',
+            ShareableContent.content_id == deck_id
+        ).delete(synchronize_session=False)
 
         # Usuń flashcards
-        db.query(Flashcard).filter(Flashcard.deck_id == deck_id).delete()
+        db.query(Flashcard).filter(Flashcard.deck_id == deck_id).delete(synchronize_session=False)
 
         # Usuń deck
         db.delete(deck)
@@ -645,93 +707,7 @@ def delete_deck(
 
         logger.info(f"Deck {deck_id} deleted by user {current_user.id_}")
 
-        return {'message': 'Deck deleted successfully. Existing copies owned by other users remain unaffected.'}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error deleting deck {deck_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to delete deck")
-
-
-@router.patch("/{deck_id}/conversation")
-def update_deck_conversation(
-        deck_id: int,
-        conversation_data: dict,
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
-    """Aktualizuje tylko conversation_id dla deck'a"""
-    try:
-        deck = db.query(Deck).filter(
-            Deck.id == deck_id,
-            Deck.user_id == current_user.id_
-        ).first()
-
-        if not deck:
-            raise HTTPException(status_code=404, detail="Deck not found or access denied")
-
-        # Aktualizuj tylko conversation_id
-        if 'conversation_id' in conversation_data:
-            deck.conversation_id = conversation_data['conversation_id']
-
-        db.commit()
-        db.refresh(deck)
-
-        return {
-            'id': deck.id,
-            'conversation_id': deck.conversation_id,
-            'message': 'Conversation ID updated successfully'
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error updating conversation for deck {deck_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update conversation ID")
-
-
-@router.delete("/{deck_id}")
-def delete_deck(
-        deck_id: int,
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db)
-):
-    """Usuwa deck"""
-    try:
-        deck = db.query(Deck).filter(
-            Deck.id == deck_id,
-            Deck.user_id == current_user.id_
-        ).first()
-
-        if not deck:
-            raise HTTPException(status_code=404, detail="Deck not found or access denied")
-
-        # Sprawdź czy deck jest udostępniony
-        if deck.is_template:
-            shared_content = db.query(ShareableContent).filter(
-                ShareableContent.content_type == 'deck',
-                ShareableContent.content_id == deck_id,
-                ShareableContent.is_public == True
-            ).first()
-            if shared_content and shared_content.access_count > 0:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Cannot delete deck that has been shared and accessed by others"
-                )
-
-        # Usuń flashcards
-        db.query(Flashcard).filter(Flashcard.deck_id == deck_id).delete()
-
-        # Usuń deck
-        db.delete(deck)
-        db.commit()
-
-        logger.info(f"Deck {deck_id} deleted by user {current_user.id_}")
-
-        return {'message': 'Deck deleted successfully'}
+        return {'message': 'Deck deleted successfully. Existing copies owned by other users were handled accordingly.'}
 
     except HTTPException:
         raise

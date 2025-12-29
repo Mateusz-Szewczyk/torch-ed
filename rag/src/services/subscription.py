@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from ..models import User, ORMFile, Deck, Exam, ExamQuestion, Flashcard
+from ..models import User, ORMFile, Deck, Exam, ExamQuestion, Flashcard, Message
 import datetime
 from datetime import timedelta
 
@@ -20,14 +20,14 @@ LIMITS = {
         "max_file_size_mb": 5,
         "max_files": 3,
         "max_decks": 5,
-        "max_questions_period": 20,
+        "max_questions_period": 50,
         "question_period_days": 7, # weekly
     },
     UserRole.PRO: {
         "max_file_size_mb": 5,
-        "max_files": 20,
-        "max_decks": 50,
-        "max_questions_period": 200,
+        "max_files": 10,
+        "max_decks": 20,
+        "max_questions_period": 500,
         "question_period_days": 30, # monthly
     },
     UserRole.EXPERT: {
@@ -69,24 +69,10 @@ class SubscriptionService:
         period_days = self.limits["question_period_days"]
         start_date = datetime.datetime.now(datetime.UTC) - timedelta(days=period_days)
 
-        # Count exam questions created in period
-        exam_questions_count = self.db.query(func.count(ExamQuestion.id))\
-            .join(Exam)\
-            .filter(Exam.user_id == self.user.id_)\
-            .filter(Exam.created_at >= start_date)\
-            .scalar()
-
-        # Count flashcards created in period (assuming flashcards in decks created by user)
-        # Flashcard doesn't have created_at, but Deck does.
-        # This is an approximation. Ideally Flashcard should have created_at.
-        # Let's use Deck.created_at for flashcards.
-        flashcards_count = self.db.query(func.count(Flashcard.id))\
-            .join(Deck)\
-            .filter(Deck.user_id == self.user.id_)\
-            .filter(Deck.created_at >= start_date)\
-            .scalar()
-
-        total_questions_used = (exam_questions_count or 0) + (flashcards_count or 0)
+        total_questions_used = self.db.query(Message)\
+            .filter(Message.sender != 'bot')\
+            .filter(Message.created_at >= start_date)\
+            .count()
 
         # Get role_expiry if user has premium subscription
         role_expiry = None

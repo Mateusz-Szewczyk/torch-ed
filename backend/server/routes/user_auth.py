@@ -251,11 +251,11 @@ def login() -> Response | tuple:
         # Successful login - reset failed attempts
         reset_failed_attempts(email)
 
-        # Generate JWT token using private key
+        # Generate JWT token using private key with user's actual role from database
         try:
             token_bytes = generate_token(
                 user_id=user.id_,
-                role='user',
+                role=user.role,  # Use role from database, not hardcoded 'user'
                 iss='TorchED_BACKEND_AUTH',
                 path=Config.PRP_PATH
             )
@@ -838,3 +838,112 @@ def session_check() -> Response | tuple:
     except Exception as e:
         logger.error(f"Error in session_check: {e}")
         return add_security_headers(jsonify({'authenticated': False})), 401
+
+
+@user_auth.route('/refresh-token', methods=['POST'])
+@limiter.limit("10 per minute")
+def refresh_token() -> Response | tuple:
+    """
+    Refresh JWT token with current user role from database.
+
+    Use this endpoint after subscription upgrade to get a new token
+    with updated role information.
+    """
+    client_ip = get_remote_address()
+
+    try:
+        # Get existing token
+        token = request.cookies.get(COOKIE_AUTH, None)
+
+        if not token:
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                token = auth_header[7:]
+
+        if not token:
+            return add_security_headers(jsonify({'error': 'No token provided'})), 401
+
+        # Check if token is blacklisted
+        if is_token_blacklisted(token):
+            return add_security_headers(jsonify({'error': 'Token revoked'})), 401
+
+        # Decode current token
+        try:
+            decoded_data = decode_token(token.encode('utf-8'), Config.PUP_PATH)
+        except Exception as e:
+            logger.error(f"Token decode error in refresh: {e}")
+            return add_security_headers(jsonify({'error': 'Invalid token'})), 401
+
+        if not decoded_data:
+            return add_security_headers(jsonify({'error': 'Token verification failed'})), 401
+
+        user_id = decoded_data.get('aud')
+        if not user_id:
+            return add_security_headers(jsonify({'error': 'Invalid token payload'})), 401
+
+        # Get user from database with fresh role
+        user = session.query(User).filter_by(id_=user_id).first()
+        if not user:
+            return add_security_headers(jsonify({'error': 'User not found'})), 401
+
+        if not user.confirmed:
+            return add_security_headers(jsonify({'error': 'Account not confirmed'})), 401
+
+        # Blacklist old token
+        try:
+            # Calculate remaining TTL (max 5 days)
+            exp_time = decoded_data.get('exp', 0)
+            current_time = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+            remaining_ttl = max(0, exp_time - current_time)
+            if remaining_ttl > 0:
+                blacklist_token(token, remaining_ttl)
+        except Exception as e:
+            logger.warning(f"Failed to blacklist old token during refresh: {e}")
+
+        # Generate new token with current role from database
+        try:
+            new_token_bytes = generate_token(
+                user_id=user.id_,
+                role=user.role,  # Fresh role from database
+                iss='TorchED_BACKEND_AUTH',
+                path=Config.PRP_PATH
+            )
+            new_token = new_token_bytes.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Token generation failed during refresh: {e}")
+            return add_security_headers(jsonify({'error': 'Token refresh failed'})), 500
+
+        logger.info(f"Token refreshed for user {user_id}, role: {user.role}")
+        log_auth_attempt('token_refresh', user.email, client_ip, True, f'Role: {user.role}')
+
+        # Get role_expiry
+        role_expiry = None
+        if hasattr(user, 'role_expiry') and user.role_expiry:
+            role_expiry = user.role_expiry.isoformat()
+
+        resp = jsonify({
+            'success': True,
+            'message': 'Token refreshed successfully',
+            'token': new_token,
+            'role': user.role,
+            'role_expiry': role_expiry
+        })
+
+        # Set new cookie
+        resp.set_cookie(
+            COOKIE_AUTH,
+            new_token,
+            samesite='None' if Config.IS_SECURE else 'Lax',
+            max_age=60 * 60 * 24 * 5,  # 5 days
+            httponly=True,
+            secure=Config.IS_SECURE,
+            path='/',
+            domain=Config.DOMAIN
+        )
+
+        return add_security_headers(resp)
+
+    except Exception as e:
+        logger.error(f"Error in refresh_token: {e}")
+        return add_security_headers(jsonify({'error': 'Server error occurred'})), 500
+
