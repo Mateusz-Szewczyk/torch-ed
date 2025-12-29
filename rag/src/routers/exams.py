@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends, status, Query
+from fastapi import APIRouter, HTTPException, Depends, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 import logging
@@ -22,6 +22,7 @@ from ..utils import (
     get_shareable_content_info, deactivate_share_code,
     get_user_created_share_codes, get_sharing_statistics
 )
+from .dashboard import invalidate_user_dashboard_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -265,6 +266,7 @@ async def get_exam_share_statistics(
 @router.post("/submit/", response_model=ExamResultRead)
 async def submit_exam_result(
         result: ExamResultCreate,
+        background_tasks: BackgroundTasks,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
@@ -340,6 +342,11 @@ async def submit_exam_result(
 
         db.commit()
         db.refresh(exam_result)
+
+        # Invalidate dashboard cache in background
+        background_tasks.add_task(invalidate_user_dashboard_cache, user_id)
+        logger.debug(f"Scheduled dashboard cache invalidation for user {user_id}")
+
         return exam_result
 
     except HTTPException:

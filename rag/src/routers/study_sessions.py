@@ -1,6 +1,6 @@
 # src/routers/study_sessions.py
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ from ..models import (
     StudySession, StudyRecord, UserFlashcard,
     Flashcard, Deck, User
 )
+from .dashboard import invalidate_user_dashboard_cache
 
 from pydantic import BaseModel
 
@@ -75,8 +76,9 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int):
 
 
 @router.post("/bulk_record", response_model=dict, status_code=201)
-def bulk_record(
+async def bulk_record(
     data: BulkRecordData,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -197,6 +199,11 @@ def bulk_record(
         db.flush()
         db.commit()
         logger.info(f"Bulk record saved. session_id={session.id}")
+
+        # Invalidate dashboard cache in background
+        background_tasks.add_task(invalidate_user_dashboard_cache, current_user.id_)
+        logger.debug(f"Scheduled dashboard cache invalidation for user {current_user.id_}")
+
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error saving bulk record: {e}")

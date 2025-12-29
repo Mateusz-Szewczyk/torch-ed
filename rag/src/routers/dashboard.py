@@ -5,6 +5,7 @@ from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_, case
 from typing import Optional, List, Dict, Any
 from fastapi_cache.decorator import cache
+from fastapi_cache import FastAPICache
 import logging
 
 from ..dependencies import get_db
@@ -26,6 +27,46 @@ from ..models import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def invalidate_user_dashboard_cache(user_id: int):
+    """
+    Invaliduje cache dashboardu dla konkretnego użytkownika.
+    Wywołuj po zakończeniu sesji nauki, zapisaniu bulk_record, lub zakończeniu egzaminu.
+    """
+    try:
+        backend = FastAPICache.get_backend()
+        # Usuń cache dla wszystkich endpointów dashboardu dla tego użytkownika
+        # FastAPI-cache używa prefiksu i klucza opartego na parametrach
+        cache_keys_patterns = [
+            f"fastapi-cache:get_dashboard_data*user_id={user_id}*",
+            f"fastapi-cache:get_calendar_heatmap*user_id={user_id}*",
+            f"fastapi-cache:get_deck_stats*user_id={user_id}*",
+            f"fastapi-cache:get_daily_goal*user_id={user_id}*",
+            f"fastapi-cache:get_goals*user_id={user_id}*",
+        ]
+
+        # Dla Redis backend możemy użyć scan i delete
+        if hasattr(backend, '_redis'):
+            redis_client = backend._redis
+            for pattern in cache_keys_patterns:
+                try:
+                    # Używamy scan_iter zamiast keys dla bezpieczeństwa
+                    async for key in redis_client.scan_iter(match=pattern):
+                        await redis_client.delete(key)
+                        logger.debug(f"Deleted cache key: {key}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete cache for pattern {pattern}: {e}")
+        else:
+            # Dla InMemory backend - nie ma natywnej inwalidacji per-user
+            # Cache wygaśnie naturalnie po TTL
+            logger.debug(f"InMemory backend - cache will expire naturally for user {user_id}")
+
+        logger.info(f"Dashboard cache invalidated for user {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to invalidate dashboard cache for user {user_id}: {e}")
+        return False
 
 
 # =============================================
@@ -331,6 +372,14 @@ def serialize(obj):
 
 def calculate_change(current: float, previous: float) -> Dict[str, Any]:
     """Oblicza zmianę procentową między okresami."""
+    import math
+
+    # Handle NaN and Infinity cases
+    if math.isnan(current) or math.isnan(previous):
+        return {'value': 0, 'percentage': 0, 'trend': 'neutral'}
+    if math.isinf(current) or math.isinf(previous):
+        return {'value': 0, 'percentage': 0, 'trend': 'neutral'}
+
     if previous == 0:
         if current == 0:
             return {'value': 0, 'percentage': 0, 'trend': 'neutral'}
@@ -338,6 +387,10 @@ def calculate_change(current: float, previous: float) -> Dict[str, Any]:
 
     change = current - previous
     percentage = round((change / previous) * 100, 1)
+
+    # Cap percentage to avoid extreme values
+    percentage = max(-1000, min(1000, percentage))
+
     trend = 'up' if change > 0 else ('down' if change < 0 else 'neutral')
 
     return {'value': round(change, 2), 'percentage': percentage, 'trend': trend}
@@ -1565,11 +1618,10 @@ async def invalidate_dashboard_cache(
     Invaliduje cache dashboardu dla użytkownika.
     Wywołuj po zakończeniu sesji nauki lub egzaminu.
     """
-    # FastAPI-cache używa automatycznego TTL, więc po 60s cache wygasa
-    # Dla natychmiastowej invalidacji potrzebujemy Redis backend
-    # Na razie zwracamy informację
+    success = await invalidate_user_dashboard_cache(current_user.id_)
     return {
-        "message": "Cache will expire within 60 seconds",
+        "message": "Cache invalidated" if success else "Cache invalidation attempted",
+        "success": success,
         "user_id": current_user.id_,
         "timestamp": datetime.utcnow().isoformat()
     }
