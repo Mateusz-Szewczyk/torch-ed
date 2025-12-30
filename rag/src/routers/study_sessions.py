@@ -1,9 +1,11 @@
 # src/routers/study_sessions.py
+from decimal import Decimal
+from math import ceil
 
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import logging
 
@@ -25,11 +27,13 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+
 class BulkRatingItem(BaseModel):
     """Single rating item for bulk SM2 update."""
     flashcard_id: int
     rating: int
     answered_at: datetime
+
 
 class BulkRecordData(BaseModel):
     """The shape of the JSON for bulk_record."""
@@ -37,82 +41,99 @@ class BulkRecordData(BaseModel):
     deck_id: int
     ratings: List[BulkRatingItem]
 
-def _update_sm2(user_flashcard: UserFlashcard, rating: int):
+
+def _update_sm2(user_flashcard: UserFlashcard, rating: int) -> None:
     """
-    Implementacja algorytmu SM-2 (SuperMemo 2) z inteligentną obsługą spóźnionych przeglądów.
+    Implementation of the SM-2 algorithm with 'torch-ed' modifications for overdue handling.
 
-    - Jeśli rating < 3: resetuje powtórkę.
-    - Jeśli rating >= 3: zwiększa EF i wylicza nowy interwał.
-    - Uwzględnia jak bardzo spóźniony jest przegląd i dostosowuje interwał:
-      * 0-2 dni spóźnienia: normalny algorytm
-      * 3-7 dni: redukcja interwału o 30-50%
-      * >7 dni: znacząca redukcja (podobnie jak rating < 3)
+    Logic:
+    - Calculates actual days since last review to credit overdue time (making the next interval larger if you remembered it after a long delay).
+    - If rating < 3: Resets repetitions and interval to 1 (canonical SM-2).
+    - If rating >= 3: Updates EF and calculates next interval based on effective previous interval.
+    - Sets 'needs_again_today' flag if rating < 4 for immediate re-learning queues.
     """
-    logger.debug(f"SM-2 update for Flashcard {user_flashcard.flashcard_id}, rating={rating}")
+    # Configuration for overdue credit (embedded)
+    BETA = Decimal("0.5")  # Controls how much credit is given for overdue time (0.5 is moderate)
+    MAX_RATIO = Decimal("10.0")  # Cap on how much longer the actual gap can be vs scheduled
 
-    # Calculate how overdue this card is
-    now = datetime.utcnow()
-    days_overdue = max(0, (now - user_flashcard.next_review).days) if user_flashcard.next_review else 0
-    logger.debug(f"Card is {days_overdue} days overdue")
+    if not (0 <= rating <= 5):
+        raise ValueError(f"Rating must be between 0 and 5, got {rating}")
 
-    # Determine overdue penalty factor
-    overdue_penalty = 1.0
-    if days_overdue > 7:
-        # Very overdue - significant penalty (reduce interval by 60-70%)
-        overdue_penalty = 0.3
-        logger.debug("Very overdue (>7 days): applying 70% interval reduction")
-    elif days_overdue > 2:
-        # Moderately overdue - reduce interval by 30-50%
-        # Linear interpolation between 30% and 50% reduction
-        reduction = 0.3 + (0.2 * (days_overdue - 3) / 4)  # scales from 0.3 to 0.5
-        overdue_penalty = 1.0 - min(reduction, 0.5)
-        logger.debug(f"Moderately overdue ({days_overdue} days): applying {int(reduction*100)}% interval reduction")
+    # 1. Determine current time (UTC)
+    now = datetime.now(timezone.utc)
+
+    # 2. Calculate actual days passed since the last review
+    # If last_review is missing, assume it was reviewed on schedule (no overdue credit)
+    scheduled_days = max(1, int(user_flashcard.interval) if user_flashcard.interval else 1)
+
+    if user_flashcard.last_review is None:
+        actual_days = scheduled_days
+    else:
+        # Calculate diff based on calendar dates to avoid time-of-day issues
+        # Ensure last_review is timezone-aware for subtraction if needed
+        last_review_date = user_flashcard.last_review.date()
+        actual_days = max(1, (now.date() - last_review_date).days)
+
+    # 3. Calculate 'Effective Previous Interval' (Credits some overdue time)
+    # If actual <= scheduled, no bonus. If actual > scheduled, we scale the interval base.
+    if actual_days <= scheduled_days:
+        effective_prev = Decimal(str(scheduled_days))
+    else:
+        ratio = min(Decimal(str(actual_days)) / Decimal(str(scheduled_days)), MAX_RATIO)
+        # detailed logic: credit = ratio^(-beta). As ratio grows, credit multiplier shrinks.
+        credit_factor = ratio ** (-BETA)
+        effective_prev = Decimal(str(scheduled_days)) + (
+                    Decimal(str(actual_days)) - Decimal(str(scheduled_days))) * credit_factor
+
+    # 4. Update Card State
+    # Session-level flag: if rated < 4, it should be reviewed again today (learning step)
+    # Note: Assuming 'needs_again_today' is a field on your model. If not, remove this line.
+    if hasattr(user_flashcard, 'needs_again_today'):
+        user_flashcard.needs_again_today = (rating < 4)
 
     if rating < 3:
+        # Canonical SM-2: Reset repetitions and interval, but keep EF (don't punish difficulty for forgetting)
         user_flashcard.repetitions = 0
         user_flashcard.interval = 1
-        logger.debug("Rating < 3: Reset repetitions and interval to 1 day.")
     else:
+        # Success (Rating 3-5)
+
+        # Update Easiness Factor (EF)
+        # EF' = EF + (0.1 - (5-q) * (0.08 + (5-q) * 0.02))
+        rating_decimal = Decimal(str(rating))
+        ef_change = Decimal("0.1") - (Decimal("5.0") - rating_decimal) * (
+                    Decimal("0.08") + (Decimal("5.0") - rating_decimal) * Decimal("0.02"))
+
+        # Ensure user_flashcard.ef is Decimal
+        current_ef = Decimal(str(user_flashcard.ef)) if not isinstance(user_flashcard.ef,
+                                                                       Decimal) else user_flashcard.ef
+        user_flashcard.ef = max(Decimal("1.3"), round(current_ef + ef_change, 2))
+
+        # Calculate New Interval
         user_flashcard.repetitions += 1
+
         if user_flashcard.repetitions == 1:
             user_flashcard.interval = 1
-            logger.debug("First repetition: interval set to 1 day.")
         elif user_flashcard.repetitions == 2:
             user_flashcard.interval = 6
-            logger.debug("Second repetition: interval set to 6 days.")
         else:
-            new_interval = user_flashcard.interval * user_flashcard.ef
-            # Apply overdue penalty to the new interval
-            new_interval = new_interval * overdue_penalty
-            user_flashcard.interval = max(1, int(round(new_interval)))  # At least 1 day
-            logger.debug(f"Repetition {user_flashcard.repetitions}: interval updated to {user_flashcard.interval} days (with overdue penalty: {overdue_penalty:.2f})")
+            # For n > 2, use the effective previous interval * EF
+            ef_decimal = Decimal(str(user_flashcard.ef)) if not isinstance(user_flashcard.ef,
+                                                                           Decimal) else user_flashcard.ef
+            new_interval = effective_prev * ef_decimal
+            user_flashcard.interval = max(1, int(ceil(float(new_interval))))
 
-    # Aktualizacja EF (Easiness Factor)
-    # SuperMemo wzór:
-    # EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
-    ef_change = 0.1 - (5 - rating) * (0.08 + (5 - rating) * 0.02)
-
-    # Additional EF penalty for very overdue cards (indicates difficulty in remembering)
-    if days_overdue > 7 and rating < 5:
-        ef_penalty = -0.1 * (days_overdue / 7)  # Additional penalty proportional to overdue days
-        ef_change += ef_penalty
-        logger.debug(f"Additional EF penalty for overdue: {ef_penalty:.3f}")
-
-    user_flashcard.ef += ef_change
-    user_flashcard.ef = max(1.3, round(user_flashcard.ef, 2))  # nie mniej niż 1.3
-    logger.debug(f"Updated EF to {user_flashcard.ef}")
-
-    # Ustawienie następnego dnia przeglądu
-    user_flashcard.next_review = datetime.utcnow() + timedelta(days=user_flashcard.interval)
-    logger.debug(f"Next review set to {user_flashcard.next_review}")
+    # 5. Set Next Review Date
+    user_flashcard.last_review = now
+    user_flashcard.next_review = now + timedelta(days=user_flashcard.interval)
 
 
 @router.post("/bulk_record", response_model=dict, status_code=201)
 async def bulk_record(
-    data: BulkRecordData,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        data: BulkRecordData,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Bulk save ratings & update SM2 for the given session and deck.
@@ -144,7 +165,8 @@ async def bulk_record(
             StudySession.deck_id == data.deck_id
         ).first()
         if not session:
-            logger.error(f"StudySession id={data.session_id} not found or does not belong to user_id={current_user.id_}")
+            logger.error(
+                f"StudySession id={data.session_id} not found or does not belong to user_id={current_user.id_}")
             raise HTTPException(
                 status_code=404,
                 detail="Study session not found or doesn't belong to user."
@@ -160,7 +182,8 @@ async def bulk_record(
             UserFlashcard.user_id == current_user.id_,
             UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
         ).all()
-        logger.debug(f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
+        logger.debug(
+            f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
     except Exception as e:
         logger.error(f"Error fetching UserFlashcards: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -171,13 +194,14 @@ async def bulk_record(
     # -- (4) Inicjalizacja brakujących UserFlashcard
     missing_flashcard_ids = [fc.id for fc in deck.flashcards if fc.id not in uf_map]
     if missing_flashcard_ids:
-        logger.info(f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
+        logger.info(
+            f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
         new_ufs = []
         for fc_id in missing_flashcard_ids:
             new_uf = UserFlashcard(
                 user_id=current_user.id_,
                 flashcard_id=fc_id,
-                ef=2.5,
+                ef=Decimal("2.5"),
                 interval=0,
                 repetitions=0,
                 next_review=datetime.utcnow()
@@ -216,7 +240,7 @@ async def bulk_record(
         logger.debug(f"Added StudyRecord: {study_record}")
 
         # Zaktualizuj EF, interval itd.
-        _update_sm2(uf, item.rating) 
+        _update_sm2(uf, item.rating)
         logger.debug(f"Updated UserFlashcard after SM2: {uf}")
 
         # Upewnij się, że SQLAlchemy widzi zmiany w uf
@@ -249,9 +273,9 @@ async def bulk_record(
 
 @router.get("/next_review_date")
 def get_next_review_date(
-    deck_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+        deck_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
 ):
     """
     Returns the earliest next_review date among all userFlashcards in the deck.
@@ -281,15 +305,15 @@ def get_next_review_date(
 
 @router.get("/overdue_stats")
 def get_overdue_stats(
-    deck_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+        deck_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
 ):
     """
     Returns statistics about overdue flashcards for a given deck:
     - total_cards: total number of flashcards in the deck
-    - overdue_cards: number of cards that are overdue
-    - due_today: number of cards due today
+    - overdue_cards: number of cards that are overdue (before today)
+    - due_today: number of cards due today (including past hours today)
     - overdue_breakdown: breakdown by severity (slightly, moderately, very overdue)
     """
     logger.info(f"Fetching overdue_stats for deck_id={deck_id}, user_id={current_user.id_}")
@@ -319,7 +343,8 @@ def get_overdue_stats(
             }
         }
 
-    now = datetime.utcnow()
+    # FIX #1: Use timezone-aware datetime
+    now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 
@@ -330,9 +355,16 @@ def get_overdue_stats(
     very_overdue = 0
 
     for uf in user_flashcards:
-        if uf.next_review <= now:
+        # Ensure next_review is timezone-aware for comparison
+        next_review = uf.next_review
+        if next_review.tzinfo is None:
+            next_review = next_review.replace(tzinfo=timezone.utc)
+
+        # FIX #2: Separate overdue (past days) from due_today (today's range)
+        # Overdue = cards scheduled before today
+        if next_review < today_start:
             overdue_count += 1
-            days_overdue = (now - uf.next_review).days
+            days_overdue = (now.date() - next_review.date()).days
 
             if days_overdue <= 2:
                 slightly_overdue += 1
@@ -341,7 +373,8 @@ def get_overdue_stats(
             else:
                 very_overdue += 1
 
-        if today_start <= uf.next_review < today_end:
+        # Due today = cards scheduled for any time today (past or future)
+        if today_start <= next_review < today_end:
             due_today_count += 1
 
     stats = {
@@ -388,9 +421,9 @@ class StudySessionResponse(BaseModel):
 
 @router.post("/start", response_model=StudySessionResponse, status_code=201)
 def start_study_session(
-    request: StartStudySessionRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+        request: StartStudySessionRequest,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
 ):
     """
     Starts a new study session for the given deck if there are available flashcards to study.
@@ -416,7 +449,8 @@ def start_study_session(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards])
     ).all()
-    logger.debug(f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
+    logger.debug(
+        f"Found {len(user_flashcards)} UserFlashcard entries for user_id={current_user.id_} and deck_id={deck.id}")
 
     # Map flashcard_id -> UserFlashcard
     uf_map = {uf.flashcard_id: uf for uf in user_flashcards}
@@ -424,13 +458,14 @@ def start_study_session(
     # -- (3) Initialize missing UserFlashcards
     missing_flashcard_ids = [fc.id for fc in deck.flashcards if fc.id not in uf_map]
     if missing_flashcard_ids:
-        logger.info(f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
+        logger.info(
+            f"Initializing {len(missing_flashcard_ids)} missing UserFlashcard entries for user_id={current_user.id_}")
         new_ufs = []
         for fc_id in missing_flashcard_ids:
             new_uf = UserFlashcard(
                 user_id=current_user.id_,
                 flashcard_id=fc_id,
-                ef=2.5,
+                ef=Decimal("2.5"),
                 interval=0,
                 repetitions=0,
                 next_review=datetime.utcnow()
@@ -521,10 +556,10 @@ def start_study_session(
 
 @router.post("/reset_stale_cards")
 def reset_stale_cards(
-    deck_id: int,
-    days_threshold: int = Query(30, description="Number of days to consider a card stale"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+        deck_id: int,
+        days_threshold: int = Query(30, description="Number of days to consider a card stale"),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)
 ):
     """
     Reset flashcards that haven't been reviewed for a very long time (default: 30 days).
@@ -536,7 +571,8 @@ def reset_stale_cards(
     - next_review to now (making them available immediately)
     - EF is reduced but not reset completely (to preserve some learning history)
     """
-    logger.info(f"Resetting stale cards for deck_id={deck_id}, user_id={current_user.id_}, threshold={days_threshold} days")
+    logger.info(
+        f"Resetting stale cards for deck_id={deck_id}, user_id={current_user.id_}, threshold={days_threshold} days")
 
     deck = db.query(Deck).filter(
         Deck.id == deck_id,
@@ -570,7 +606,8 @@ def reset_stale_cards(
         uf.next_review = now  # Available immediately
 
         # Reduce EF but don't reset completely - preserve some learning history
-        uf.ef = max(1.3, uf.ef * 0.7)  # Reduce by 30%
+        current_ef = Decimal(str(uf.ef)) if not isinstance(uf.ef, Decimal) else uf.ef
+        uf.ef = max(Decimal("1.3"), current_ef * Decimal("0.7"))  # Reduce by 30%
 
         db.add(uf)
         reset_count += 1
@@ -587,10 +624,13 @@ def reset_stale_cards(
         "message": f"Successfully reset {reset_count} stale flashcards",
         "reset_count": reset_count
     }
+
+
+@router.get("/retake_session")
 def retake_session(
-    deck_id: int = Query(..., description="ID of the deck to retake session from"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        deck_id: int = Query(..., description="ID of the deck to retake session from"),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Retake flashcards from the latest session for the given deck and user.
@@ -673,9 +713,9 @@ def retake_session(
 
 @router.get("/retake_hard_cards", response_model=List[dict], status_code=200)
 def retake_hard_cards(
-    deck_id: int = Query(..., description="ID of the deck to retake hard cards from"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+        deck_id: int = Query(..., description="ID of the deck to retake hard cards from"),
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
 ):
     """
     Retake hard flashcards from the given deck:
@@ -700,7 +740,7 @@ def retake_hard_cards(
     hard_user_flashcards = db.query(UserFlashcard).filter(
         UserFlashcard.user_id == current_user.id_,
         UserFlashcard.flashcard_id.in_([fc.id for fc in deck.flashcards]),
-        UserFlashcard.ef <= 1.8,
+        UserFlashcard.ef <= Decimal("1.8"),
         UserFlashcard.next_review > now
     ).order_by(UserFlashcard.ef.asc()).all()
 
@@ -743,7 +783,8 @@ def retake_hard_cards(
     db.commit()
     db.refresh(new_session)
 
-    logger.info(f"Created new StudySession (retake): id={new_session.id}, user_id={current_user.id_}, deck_id={deck.id}")
+    logger.info(
+        f"Created new StudySession (retake): id={new_session.id}, user_id={current_user.id_}, deck_id={deck.id}")
 
     result = []
     for c in cards:

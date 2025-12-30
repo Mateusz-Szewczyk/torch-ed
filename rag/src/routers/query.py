@@ -41,15 +41,6 @@ async def query_knowledge(
 ):
     """
     Streaming endpoint that responds to user queries with Server-Sent Events (SSE).
-
-    If selected_tools are provided, they will be executed in the specified order.
-    Returns chunks of the answer as they are generated for a real-time typing effect.
-
-    Each event is formatted as:
-    data: {"chunk": "text content", "done": false}
-
-    Final event:
-    data: {"chunk": "", "done": true}
     """
     user_id = current_user.id_
     query = request.query
@@ -75,20 +66,33 @@ async def query_knowledge(
             async for msg in agent.invoke(query=query, selected_tool_names=selected_tools):
                 # Send each chunk as SSE
                 msg_type = msg.get("type", "chunk")
+                data = None
 
-                # Buduj odpowiedź w zależności od typu eventu
+                # Build response based on event type
                 if msg_type == "action":
-                    # Event z akcją nawigacji (wygenerowane fiszki/egzamin)
-                    data = {
-                        "type": "action",
-                        "action_type": msg.get("action_type"),
-                        "id": msg.get("id"),
-                        "name": msg.get("name"),
-                        "count": msg.get("count", 0),
-                        "done": False
-                    }
+                    action_type = msg.get("action_type")
+
+                    if action_type == "set_conversation_title":
+                        # Handle title update specifically
+                        data = {
+                            "type": "action",
+                            "action_type": "set_conversation_title",
+                            "name": msg.get("name"),
+                            "done": False
+                        }
+                    else:
+                        # Handle standard navigation actions (flashcards/exams)
+                        data = {
+                            "type": "action",
+                            "action_type": action_type,
+                            "id": msg.get("id"),
+                            "name": msg.get("name"),
+                            "count": msg.get("count", 0),
+                            "done": False
+                        }
+
                 elif msg_type == "step":
-                    # Event z krokiem procesu
+                    # Process step event
                     data = {
                         "type": "step",
                         "content": msg.get("content", ""),
@@ -96,23 +100,22 @@ async def query_knowledge(
                         "done": False
                     }
                 elif msg_type == "chunk":
-                    # Event z fragmentem tekstu odpowiedzi
+                    # Text content chunk
                     data = {
                         "type": "chunk",
                         "content": msg.get("content", ""),
                         "done": False
                     }
                 elif msg_type == "error":
-                    # Event z błędem (np. limit subskrypcji)
+                    # Error event
                     data = {
                         "type": "error",
                         "error": msg.get("error", "Unknown error"),
                         "done": True
                     }
-                else:
-                    continue
 
-                yield f"data: {json.dumps(data)}\n\n"
+                if data:
+                    yield f"data: {json.dumps(data)}\n\n"
 
             # Send completion signal
             logger.info(f"[STREAM] Stream completed for user_id: {user_id}")
@@ -130,6 +133,6 @@ async def query_knowledge(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Accel-Buffering": "no",
         }
     )

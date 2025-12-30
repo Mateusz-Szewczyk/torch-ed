@@ -213,10 +213,10 @@ class ChatAgent:
         memories = search_user_memories(query=query, user_id=self.user_id, n_results=5)
         memory_context = f"PROFIL UŻYTKOWNIKA:\n{chr(10).join(['- ' + m for m in memories])}" if memories else ""
 
-        history_messages = get_conversation_history(self.conversation_id, 3)
-        if not history_messages:
-            asyncio.create_task(
-                asyncio.to_thread(set_conversation_title, self.conversation_id, query, self.synthesis_model))
+        history_messages = get_conversation_history(self.conversation_id, 8)
+        if not history_messages or len(history_messages) < 2:
+            new_title = await set_conversation_title(self.conversation_id, query, self.synthesis_model)
+            yield {"type": "action", "action_type": "set_conversation_title", "name": new_title}
 
         standalone_query = await self._create_standalone_query(query, history_messages)
         yield {"type": "step", "content": "Analizowanie kontekstu i profilu...", "status": "complete"}
