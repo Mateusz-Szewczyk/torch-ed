@@ -216,7 +216,7 @@ class UserFlashcard(Base):
     ef = Column(Float, default=2.5)
     interval = Column(Integer, default=0)
     repetitions = Column(Integer, default=0)
-    next_review = Column(DateTime, default=datetime.datetime.now(datetime.UTC))
+    next_review = Column(DateTime, default=datetime.datetime.now(datetime.UTC).date())
 
     user = relationship("User", back_populates="user_flashcards")
     flashcard = relationship("Flashcard", back_populates="user_flashcards")

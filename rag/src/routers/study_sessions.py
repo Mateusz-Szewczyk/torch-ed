@@ -124,8 +124,8 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int) -> None:
             user_flashcard.interval = max(1, int(ceil(float(new_interval))))
 
     # 5. Set Next Review Date
-    user_flashcard.last_review = now
-    user_flashcard.next_review = now + timedelta(days=user_flashcard.interval)
+    user_flashcard.last_review = now.date()
+    user_flashcard.next_review = now.date() + timedelta(days=user_flashcard.interval)
 
 
 @router.post("/bulk_record", response_model=dict, status_code=201)
@@ -204,7 +204,7 @@ async def bulk_record(
                 ef=Decimal("2.5"),
                 interval=0,
                 repetitions=0,
-                next_review=datetime.utcnow()
+                next_review=datetime.now(timezone.utc)
             )
             db.add(new_uf)
             new_ufs.append(new_uf)
