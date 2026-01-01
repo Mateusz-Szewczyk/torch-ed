@@ -44,7 +44,7 @@ class MemoryExtractor:
     """Module responsible for extracting long-term facts about the user."""
 
     def __init__(self, api_key: str):
-        self.model = ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=api_key, temperature=0)
+        self.model = ChatOpenAI(model_name="gpt-5-nano", openai_api_key=api_key, temperature=0)
 
     async def extract_memories(self, text: str) -> list[str]:
         system_prompt = (
@@ -72,7 +72,7 @@ class ChatAgent:
         self.tavily_api_key = tavily_api_key
         self.db = db
         self.synthesis_model = ChatOpenAI(
-            model_name="gpt-4o-mini",
+            model_name="gpt-5-nano",
             temperature=0.1,
             openai_api_key=self.openai_api_key
         )

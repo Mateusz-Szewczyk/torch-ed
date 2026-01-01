@@ -61,7 +61,7 @@ class FlashcardGenerator(BaseTool):
     _model: Any = PrivateAttr()
     _output_parser: JsonOutputParser = PrivateAttr()
 
-    def __init__(self, user_id: str, api_key: str, model_name: str = "gpt-4o-mini"):
+    def __init__(self, user_id: str, api_key: str, model_name: str = "gpt-5-nano"):
         super().__init__(user_id=user_id, api_key=api_key)
         self.user_id = user_id
         # Wymuszamy JSON mode w OpenAI
@@ -164,7 +164,7 @@ class ExamGenerator(BaseTool):
     openai_api_key: str = Field(..., description="API key")
     _model: Any = PrivateAttr()
 
-    def __init__(self, user_id: str, openai_api_key: str, model_name: str = "gpt-4o-mini"):
+    def __init__(self, user_id: str, openai_api_key: str, model_name: str = "gpt-5-nano"):
         super().__init__(user_id=user_id, openai_api_key=openai_api_key)
         self.user_id = user_id
         self._model = ChatOpenAI(
@@ -264,7 +264,7 @@ class RAGTool(BaseTool):
     api_key: str = Field(..., description="API key")
     _model: Any = PrivateAttr()
 
-    def __init__(self, user_id: str, api_key: str, model_name: str = "gpt-4o-mini"):
+    def __init__(self, user_id: str, api_key: str, model_name: str = "gpt-5-nano"):
         super().__init__(user_id=user_id, api_key=api_key)
         self.user_id = user_id
         self._model = ChatOpenAI(model_name=model_name, openai_api_key=api_key, temperature=0.1)

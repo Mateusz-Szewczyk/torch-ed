@@ -1346,9 +1346,42 @@ async def get_learning_calendar(
 
         logger.info(f"[Calendar] Final stats: total_flashcards_year={total_flashcards_year}, cards_due_today={cards_due_today}, has_studied_today={has_studied_today}")
 
+        overdue_cards_per_deck = db.query(
+            Deck.name.label('deck_name'),
+            func.count(UserFlashcardModel.id).label('count')
+        ).join(
+            Flashcard, UserFlashcardModel.flashcard_id == Flashcard.id
+        ).join(
+            Deck, Flashcard.deck_id == Deck.id
+        ).filter(
+            UserFlashcardModel.user_id == user_id,
+            UserFlashcardModel.next_review < today  # Strictly less than today = overdue
+        ).group_by(
+            Deck.name
+        ).all()
+
+        total_overdue_count = 0
+        decks_list = []
+
+        for deck_name, count in overdue_cards_per_deck:
+            total_overdue_count += count
+            decks_list.append({
+                "name": deck_name,
+                "count": count
+            })
+
+        # 4. Construct the final dictionary
+        overdue_data = {
+            today_str: {
+                "count": total_overdue_count,
+                "decks": decks_list
+            }
+        }
+
         return {
             "history": history_data,
             "scheduled": scheduled_data,
+            "overdue": overdue_data,
             "stats": {
                 "max_count": max_count,
                 "total_days_studied": total_days_studied,
@@ -1358,7 +1391,7 @@ async def get_learning_calendar(
                 "cards_due_today": cards_due_today,
                 "total_flashcards_year": total_flashcards_year,
                 "has_studied_today": has_studied_today,
-                "decks_due_today": decks_due_today  # Add decks scheduled for today
+                "decks_due_today": decks_due_today
             },
             "range": {
                 "start": start_date.isoformat(),
