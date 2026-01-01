@@ -1346,10 +1346,24 @@ async def get_learning_calendar(
         ).all()
         streak_data = calculate_study_streak(study_sessions, [(e,) for e in exam_results])
 
-        cards_due_today = db.query(UserFlashcardModel).filter(
+        # Calculate due/overdue cards with SAME logic as overdue_stats endpoint
+        start_of_today = datetime.combine(today, datetime.min.time())
+
+        # Cards that are OVERDUE (scheduled before today)
+        overdue_cards_count = db.query(UserFlashcardModel).filter(
             UserFlashcardModel.user_id == user_id,
-            UserFlashcardModel.next_review <= end_of_today  # Use end of today
+            UserFlashcardModel.next_review < start_of_today
         ).count()
+
+        # Cards due SPECIFICALLY today (scheduled for today)
+        cards_due_today_only = db.query(UserFlashcardModel).filter(
+            UserFlashcardModel.user_id == user_id,
+            UserFlashcardModel.next_review >= start_of_today,
+            UserFlashcardModel.next_review <= end_of_today
+        ).count()
+
+        # Total cards that need review (overdue + due today) - this is the actionable count
+        cards_to_review_today = overdue_cards_count + cards_due_today_only
 
         # Get decks scheduled for today
         today_str = today.isoformat()
@@ -1357,7 +1371,7 @@ async def get_learning_calendar(
         if today_str in scheduled_data:
             decks_due_today = scheduled_data[today_str].get('decks', [])
 
-        logger.info(f"[Calendar] Final stats: total_flashcards_year={total_flashcards_year}, cards_due_today={cards_due_today}, has_studied_today={has_studied_today}")
+        logger.info(f"[Calendar] Final stats: total_flashcards_year={total_flashcards_year}, overdue={overdue_cards_count}, due_today={cards_due_today_only}, total_to_review={cards_to_review_today}, has_studied_today={has_studied_today}")
 
         overdue_cards_per_deck = db.query(
             Deck.name.label('deck_name'),
@@ -1401,7 +1415,9 @@ async def get_learning_calendar(
                 "current_streak": streak_data['current'],
                 "longest_streak": streak_data['longest'],
                 "is_active_today": streak_data['is_active_today'],
-                "cards_due_today": cards_due_today,
+                "cards_due_today": cards_due_today_only,  # Only cards scheduled for today
+                "overdue_cards": overdue_cards_count,  # Cards that are past due
+                "cards_to_review_today": cards_to_review_today,  # Total actionable (overdue + due today)
                 "total_flashcards_year": total_flashcards_year,
                 "has_studied_today": has_studied_today,
                 "decks_due_today": decks_due_today
