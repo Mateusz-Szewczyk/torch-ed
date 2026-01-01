@@ -542,9 +542,9 @@ async def get_dashboard_data(
 
         # === OBLICZENIA CZASOWE ===
 
-        # Definicje przedziałów czasowych
-        today_start = today
-        today_end = today
+        # Definicje przedziałów czasowych - use datetime objects for proper comparison
+        today_start = datetime.combine(today, datetime.min.time())
+        today_end = datetime.combine(today, datetime.max.time())
 
         week_start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
         week_end = today_end
@@ -1137,9 +1137,9 @@ async def get_learning_calendar(
 
     logger.info(f"[Calendar] Fetching calendar for user_id={user_id}, today={today}, now={now}")
 
-    # Oblicz zakres dat
-    start_date = today - timedelta(days=months_back * 30)
-    end_date = today + timedelta(days=months_forward * 30)
+    # Oblicz zakres dat - convert to datetime for proper comparison with datetime columns
+    start_date = datetime.combine(today - timedelta(days=months_back * 30), datetime.min.time())
+    end_date = datetime.combine(today + timedelta(days=months_forward * 30), datetime.max.time())
 
     try:
         # =============================================
@@ -1355,7 +1355,7 @@ async def get_learning_calendar(
             Deck, Flashcard.deck_id == Deck.id
         ).filter(
             UserFlashcardModel.user_id == user_id,
-            UserFlashcardModel.next_review < today  # Strictly less than today = overdue
+            UserFlashcardModel.next_review < datetime.combine(today, datetime.min.time())  # Strictly less than start of today = overdue
         ).group_by(
             Deck.name
         ).all()
