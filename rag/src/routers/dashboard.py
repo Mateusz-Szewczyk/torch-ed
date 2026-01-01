@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, date, timedelta
+import datetime
 from sqlalchemy import func, and_, or_, case
 from typing import Optional, List, Dict, Any
 from fastapi_cache.decorator import cache
@@ -543,8 +544,8 @@ async def get_dashboard_data(
         # === OBLICZENIA CZASOWE ===
 
         # Definicje przedziałów czasowych
-        today_start = datetime.combine(today, datetime.min.time())
-        today_end = datetime.combine(today, datetime.max.time())
+        today_start = today
+        today_end = today
 
         week_start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
         week_end = today_end
