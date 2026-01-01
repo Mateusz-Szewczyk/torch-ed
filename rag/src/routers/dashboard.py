@@ -2,9 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, date, timedelta
-import datetime
-from sqlalchemy import func, and_, or_, case
-from typing import Optional, List, Dict, Any
+from sqlalchemy import func
+from typing import List, Dict, Any
 from fastapi_cache.decorator import cache
 from fastapi_cache import FastAPICache
 import logging
