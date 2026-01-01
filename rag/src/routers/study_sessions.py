@@ -71,7 +71,8 @@ def _update_sm2(user_flashcard: UserFlashcard, rating: int) -> None:
     else:
         # Calculate diff based on calendar dates to avoid time-of-day issues
         # Ensure last_review is timezone-aware for subtraction if needed
-        last_review_date = user_flashcard.last_review.date()
+        last_review = user_flashcard.last_review
+        last_review_date = last_review.date() if hasattr(last_review, 'date') else last_review
         actual_days = max(1, (now.date() - last_review_date).days)
 
     # 3. Calculate 'Effective Previous Interval' (Credits some overdue time)
@@ -364,7 +365,10 @@ def get_overdue_stats(
         # Overdue = cards scheduled before today
         if next_review < today_start:
             overdue_count += 1
-            days_overdue = (now.date() - next_review.date()).days
+            d_now = now.date() if hasattr(now, 'date') else now
+            d_next = next_review.date() if hasattr(next_review, 'date') else next_review
+
+            days_overdue = (d_now - d_next).days
 
             if days_overdue <= 2:
                 slightly_overdue += 1
