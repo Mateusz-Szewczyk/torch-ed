@@ -154,6 +154,7 @@ def get_period_stats(
 ) -> Dict[str, Any]:
     """
     Oblicza statystyki dla określonego przedziału czasowego.
+    Liczy UNIKALNE fiszki per dzień i sumuje je (zgodnie z logiką kalendarza).
     """
     # Filtruj rekordy studiów
     period_records = [
@@ -182,8 +183,19 @@ def get_period_stats(
         except Exception:
             continue
 
-    # Oblicz statystyki
-    total_flashcards = len(period_records)
+    # Oblicz statystyki - UNIKALNE fiszki per dzień
+    # Grupuj po dniu i zlicz unikalne user_flashcard_id per dzień
+    day_flashcards: Dict[str, set] = {}
+    for record in period_records:
+        if record.reviewed_at and record.user_flashcard_id:
+            day_str = record.reviewed_at.date().isoformat()
+            if day_str not in day_flashcards:
+                day_flashcards[day_str] = set()
+            day_flashcards[day_str].add(record.user_flashcard_id)
+
+    # Suma unikalnych fiszek per dzień (nie całkowita liczba review'ów)
+    total_flashcards = sum(len(flashcard_ids) for flashcard_ids in day_flashcards.values())
+    total_reviews = len(period_records)  # Zachowaj też całkowitą liczbę review'ów dla statystyk
     total_sessions = len(period_sessions)
     total_exams = len(period_exams)
 
@@ -237,7 +249,8 @@ def get_period_stats(
             continue
 
     return {
-        'flashcards_studied': total_flashcards,
+        'flashcards_studied': total_flashcards,  # Unikalne fiszki per dzień (suma)
+        'total_reviews': total_reviews,  # Całkowita liczba review'ów
         'study_sessions': total_sessions,
         'exams_completed': total_exams,
         'average_flashcard_rating': round(avg_rating, 2),
