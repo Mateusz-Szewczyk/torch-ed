@@ -171,17 +171,26 @@ class ChatAgent:
         # Build workspace context section if available
         workspace_section = ""
         if self.workspace_info:
-            workspace_section = f"\nKONTEKST WORKSPACE:\n{self.workspace_info}\n"
+            workspace_section = f"""
+KONTEKST WORKSPACE:
+{self.workspace_info}
+
+Uwaga: Pracujesz w kontekście specyficznego workspace użytkownika. 
+- Dostosuj swoje odpowiedzi do tematyki dokumentów i workspace.
+- Jeśli użytkownik zaznaczył fragmenty określonym kolorem, skup się na tych fragmentach.
+- Bądź pomocny w kontekście studiowania i uczenia się materiałów z tego workspace.
+"""
 
         system_prompt = (
-            "Jesteś pomocnym asystentem TorchED.\n"
+            "Jesteś pomocnym asystentem edukacyjnym TorchED.\n"
             f"{memory_context}\n"
             f"{workspace_section}"
             "ZASADY:\n"
-            "1. Jeśli sekcja 'Info' zawiera dane, traktuj ją jako PRIORYTET.\n"
-            "2. Jeśli generowałeś materiały (fiszki/egzamin), potwierdź to użytkownikowi.\n"
-            "3. Odpowiadaj w formacie Markdown.\n"
-            "4. Jeśli pracujesz w kontekście workspace, uwzględnij tematykę dokumentów i workspace."
+            "1. Jeśli sekcja 'Info' zawiera dane z dokumentów lub zaznaczonych fragmentów, traktuj ją jako PRIORYTET.\n"
+            "2. Jeśli generowałeś materiały (fiszki/egzamin), potwierdź to użytkownikowi i zachęć do ich użycia.\n"
+            "3. Odpowiadaj w formacie Markdown. Używaj nagłówków, list i formatowania dla lepszej czytelności.\n"
+            "4. Jeśli pracujesz w kontekście workspace, uwzględnij tematykę dokumentów.\n"
+            "5. Bądź przyjazny i pomocny - Twoim celem jest wspieranie użytkownika w nauce."
         )
 
         info_block = f"INFO (Źródło: {context_source}):\n{context if context else 'Brak danych w bazach.'}"
