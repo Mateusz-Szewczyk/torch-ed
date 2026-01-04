@@ -4,28 +4,65 @@ import logging
 import uuid
 from typing import List, Dict, Any
 
+import chromadb
+from chromadb.config import Settings
 from langchain_chroma import Chroma
 from langchain_openai import OpenAIEmbeddings
-from .config import PERSIST_DIRECTORY
+from .config import get_chroma_client_settings
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Inicjalizacja embeddings i Chroma
+# Inicjalizacja embeddings
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 
+
+def _create_chroma_client():
+    """
+    Creates appropriate ChromaDB client based on configuration.
+    Local: uses PersistentClient with persist_directory
+    Remote: uses HttpClient for Railway ChromaDB service
+    """
+    settings = get_chroma_client_settings()
+
+    if settings['mode'] == 'remote':
+        logger.info(f"Connecting to remote ChromaDB at {settings['host']}:{settings['port']} (SSL: {settings['ssl']})")
+        return chromadb.HttpClient(
+            host=settings['host'],
+            port=settings['port'],
+            ssl=settings['ssl'],
+            settings=Settings(
+                anonymized_telemetry=False,
+                allow_reset=False
+            )
+        )
+    else:
+        logger.info(f"Using local ChromaDB with persist_directory: {settings['persist_directory']}")
+        return chromadb.PersistentClient(
+            path=settings['persist_directory'],
+            settings=Settings(
+                anonymized_telemetry=False,
+                allow_reset=True
+            )
+        )
+
+
+# Create the ChromaDB client (shared between collections)
+_chroma_client = _create_chroma_client()
+
+# Initialize collections using langchain_chroma with our client
 collection_name = 'torched-rag'
 client = Chroma(
+    client=_chroma_client,
     collection_name=collection_name,
     embedding_function=embeddings,
-    persist_directory=PERSIST_DIRECTORY
 )
 
 memory_collection_name = 'user-memories'
 memory_client = Chroma(
+    client=_chroma_client,
     collection_name=memory_collection_name,
     embedding_function=embeddings,
-    persist_directory=PERSIST_DIRECTORY
 )
 
 

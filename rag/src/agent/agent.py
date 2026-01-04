@@ -7,7 +7,7 @@ import asyncio
 
 from langchain_community.tools.tavily_search.tool import TavilySearchResults
 from langchain_community.utilities.tavily_search import TavilySearchAPIWrapper
-from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, trim_messages
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from sqlalchemy.orm import Session
@@ -44,7 +44,8 @@ class MemoryExtractor:
     """Module responsible for extracting long-term facts about the user."""
 
     def __init__(self, api_key: str):
-        self.model = ChatOpenAI(model_name="gpt-5-nano", openai_api_key=api_key, temperature=0)
+        # Note: gpt-5-nano only supports temperature=1, so we omit the parameter
+        self.model = ChatOpenAI(model_name="gpt-5-nano", openai_api_key=api_key)
 
     async def extract_memories(self, text: str) -> list[str]:
         system_prompt = (
@@ -63,17 +64,21 @@ class MemoryExtractor:
 
 
 class ChatAgent:
-    MAX_HISTORY_TOKENS = 1500
+    MAX_HISTORY_MESSAGES = 10  # Limit messages instead of tokens for gpt-5-nano compatibility
 
-    def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, db: Session, **kwargs):
+    def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, db: Session,
+                 workspace_context: Optional[str] = None, workspace_context_source: Optional[str] = None, **kwargs):
         self.user_id = user_id
         self.conversation_id = conversation_id
         self.openai_api_key = openai_api_key
         self.tavily_api_key = tavily_api_key
         self.db = db
+        # Workspace context (pre-fetched from highlights)
+        self.workspace_context = workspace_context
+        self.workspace_context_source = workspace_context_source
+        # Note: gpt-5-nano only supports temperature=1, so we omit the parameter
         self.synthesis_model = ChatOpenAI(
             model_name="gpt-5-nano",
-            temperature=0.1,
             openai_api_key=self.openai_api_key
         )
         self.tool_instances: Dict[str, BaseTool] = {}
@@ -157,10 +162,8 @@ class ChatAgent:
     async def _final_synthesis_stream(self, original_query: str, history: List[BaseMessage], context: Optional[str],
                                       context_source: str, tool_results: Dict[str, ToolResult],
                                       memory_context: str = ""):
-        trimmed_history = trim_messages(
-            history, max_tokens=self.MAX_HISTORY_TOKENS, strategy="last",
-            token_counter=self.synthesis_model, start_on="human"
-        )
+        # Simple message limit instead of token-based trimming (gpt-5-nano doesn't support token counting)
+        trimmed_history = history[-self.MAX_HISTORY_MESSAGES:] if len(history) > self.MAX_HISTORY_MESSAGES else history
 
         system_prompt = (
             "Jesteś pomocnym asystentem TorchED.\n"
@@ -235,6 +238,15 @@ class ChatAgent:
 
         context, context_source, tool_results = None, "zapytania", {}
         rag_content, tavily_content = None, None
+
+        # Check if workspace context is provided (from highlights)
+        if self.workspace_context:
+            # Use pre-fetched workspace context instead of RAG
+            logger.info(f"[AGENT] Using workspace context from: {self.workspace_context_source}")
+            context = self.workspace_context
+            context_source = self.workspace_context_source or "zaznaczonych fragmentów"
+            # Remove RAGTool from retrieval if workspace context exists - it's already provided
+            retrieval_tools = [t for t in retrieval_tools if t != "RAGTool"]
 
         if retrieval_tools:
             yield {"type": "step", "content": "Wyszukiwanie informacji...", "status": "loading"}

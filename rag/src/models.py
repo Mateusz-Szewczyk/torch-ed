@@ -12,7 +12,11 @@ from sqlalchemy import (
     Float,
     UniqueConstraint,
     func,
+    Text,
+    Index,
 )
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+import uuid
 from sqlalchemy.orm import (
     relationship,
     Mapped,
@@ -30,6 +34,12 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id_"), index=True, nullable=False)
+    workspace_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
     created_at = Column(
         DateTime, default=datetime.datetime.now(datetime.UTC), nullable=False
     )
@@ -41,6 +51,7 @@ class Conversation(Base):
         cascade="all, delete-orphan",
     )
     decks = relationship("Deck", back_populates="conversation")
+    workspace = relationship("Workspace", back_populates="conversations")
 
 
 class Message(Base):
@@ -372,6 +383,78 @@ class ExamResultAnswer(Base):
     selected_answer = relationship("ExamAnswer")
 
 
+# =============================================================================
+# WORKSPACE & CATEGORY MODELS
+# =============================================================================
+
+class FileCategory(Base):
+    """
+    Kategoria pliku - może być systemowa (user_id=NULL) lub użytkownika.
+    """
+    __tablename__ = "file_categories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey("users.id_", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    documents = relationship("WorkspaceDocument", back_populates="category")
+    workspace_categories = relationship("WorkspaceCategory", back_populates="category", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_category_name_user", postgresql_nulls_not_distinct=True),
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Workspace(Base):
+    """
+    Workspace - kontekst pracy użytkownika.
+    Filtruje dokumenty na podstawie wybranych kategorii.
+    """
+    __tablename__ = "workspaces"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey("users.id_", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    workspace_categories = relationship("WorkspaceCategory", back_populates="workspace", cascade="all, delete-orphan")
+    conversations = relationship("Conversation", back_populates="workspace", cascade="all, delete-orphan")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkspaceCategory(Base):
+    """
+    Tabela asocjacyjna: Workspace <-> FileCategory (many-to-many).
+    """
+    __tablename__ = "workspace_categories"
+
+    workspace_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+    category_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_categories.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    workspace = relationship("Workspace", back_populates="workspace_categories")
+    category = relationship("FileCategory", back_populates="workspace_categories")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -400,7 +483,199 @@ class User(Base):
     shared_contents = relationship(
         "ShareableContent", backref="creator", cascade="save-update, merge"
     )
+    workspaces = relationship("Workspace", backref="user", cascade="all, delete-orphan")
+    categories = relationship("FileCategory", backref="user", cascade="all, delete-orphan")
+    workspace_documents = relationship("WorkspaceDocument", backref="user", cascade="all, delete-orphan")
 
     @staticmethod
     def get_user(session: scoped_session, user_name: str) -> Optional["User"] | None:
         return session.query(User).filter_by(user_name=user_name).first()
+
+
+# =============================================================================
+# WORKSPACE MODELS - Document Reader & AI Assistant
+# =============================================================================
+
+class WorkspaceDocument(Base):
+    """
+    Główna tabela dokumentu w Workspace.
+    Przechowuje metadane dokumentu oraz powiązania z użytkownikiem.
+    """
+    __tablename__ = "workspace_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, ForeignKey("users.id_", ondelete="CASCADE"), nullable=False, index=True)
+    category_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_categories.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    title = Column(Text, nullable=False)
+    original_filename = Column(String(512), nullable=True)
+    file_type = Column(String(50), nullable=True)  # 'pdf', 'txt', 'docx', etc.
+    total_length = Column(Integer, default=0)  # Total character count
+    total_sections = Column(Integer, default=0)  # Number of sections
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    category = relationship("FileCategory", back_populates="documents")
+    sections = relationship(
+        "DocumentSection",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentSection.section_index"
+    )
+    highlights = relationship(
+        "UserHighlight",
+        back_populates="document",
+        cascade="all, delete-orphan"
+    )
+    images = relationship(
+        "DocumentImage",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentImage.page_number, DocumentImage.image_index"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentSection(Base):
+    """
+    Sekcja dokumentu dla lazy loadingu.
+    Każda sekcja to logiczny kawałek tekstu (akapit/strona).
+    Dzięki temu pobieramy tylko widoczny fragment.
+    """
+    __tablename__ = "document_sections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspace_documents.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    section_index = Column(Integer, nullable=False)  # Kolejność sekcji
+    content_text = Column(Text, nullable=False)  # Czysty tekst sekcji
+
+    # Style bazowe z PDF (pogrubienia, italic) jako offsety
+    # Format: [{"start": 0, "end": 10, "style": "bold"}, {"start": 15, "end": 25, "style": "italic"}]
+    base_styles = Column(JSONB, default=list)
+
+    # Opcjonalne metadane sekcji (np. numer strony, typ nagłówka)
+    section_metadata = Column(JSONB, default=dict)
+
+    char_start = Column(Integer, default=0)  # Pozycja startowa w całym dokumencie
+    char_end = Column(Integer, default=0)  # Pozycja końcowa w całym dokumencie
+
+    # Relationships
+    document = relationship("WorkspaceDocument", back_populates="sections")
+    highlights = relationship(
+        "UserHighlight",
+        back_populates="section",
+        cascade="all, delete-orphan"
+    )
+
+    # Indeks do szybkiego pobierania kolejnych partii przy scrollowaniu
+    __table_args__ = (
+        Index('idx_sections_order', 'document_id', 'section_index'),
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentImage(Base):
+    """
+    Obrazy wyodrębnione z dokumentu PDF.
+    Przechowuje metadane obrazu i lokalizację w dokumencie.
+    """
+    __tablename__ = "document_images"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspace_documents.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    # Numer strony, z której pochodzi obraz (1-based)
+    page_number = Column(Integer, nullable=False)
+    # Indeks obrazu na stronie (0-based) dla porządku
+    image_index = Column(Integer, default=0)
+
+    # Ścieżka do pliku obrazu (relative path w storage)
+    image_path = Column(String(512), nullable=False)
+    # Typ obrazu (png, jpg, jpeg)
+    image_type = Column(String(20), nullable=False)
+    # Rozmiar w bajtach
+    file_size = Column(Integer, default=0)
+
+    # Wymiary obrazu
+    width = Column(Integer, nullable=True)
+    height = Column(Integer, nullable=True)
+
+    # Pozycja na stronie (do późniejszego użycia)
+    x_position = Column(Float, nullable=True)
+    y_position = Column(Float, nullable=True)
+
+    # Opcjonalne metadane (np. alt text, caption)
+    alt_text = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    document = relationship("WorkspaceDocument", back_populates="images")
+
+    # Indeks dla szybkiego pobierania obrazów dokumentu
+    __table_args__ = (
+        Index('idx_document_images_doc_page', 'document_id', 'page_number'),
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserHighlight(Base):
+    """
+    Zakreślenie użytkownika z kolorem.
+    Kluczowa funkcja: filtrowanie fragmentów po kolorze dla kontekstu AI.
+    """
+    __tablename__ = "user_highlights"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspace_documents.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    section_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("document_sections.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    # Offsety wewnątrz content_text sekcji
+    start_offset = Column(Integer, nullable=False)
+    end_offset = Column(Integer, nullable=False)
+
+    # Kod koloru (np. 'red', 'green', 'yellow', 'blue', 'purple')
+    color_code = Column(String(20), nullable=False)
+
+    # Opcjonalna notatka/adnotacja
+    annotation_text = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    document = relationship("WorkspaceDocument", back_populates="highlights")
+    section = relationship("DocumentSection", back_populates="highlights")
+
+    # Indeksy dla szybkiego wyszukiwania
+    __table_args__ = (
+        # Szybkie znajdowanie zakreśleń dla widocznego fragmentu
+        Index('idx_highlights_lookup', 'section_id'),
+        # Szybkie wyciąganie wszystkich fragmentów danego koloru (dla AI)
+        Index('idx_highlights_color', 'document_id', 'color_code'),
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+

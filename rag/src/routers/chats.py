@@ -3,8 +3,9 @@ from sqlalchemy import and_, exists
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import uuid as uuid_module
 
-from ..models import Conversation, Message, User, Deck, Exam
+from ..models import Conversation, Message, User, Deck, Exam, Workspace
 from ..schemas import (
     ConversationRead,
     MessageCreate,
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 async def create_conversation(
         deck_id: Optional[int] = Body(None),
         exam_id: Optional[int] = Body(None),
+        workspace_id: Optional[str] = Body(None),
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
@@ -31,12 +33,28 @@ async def create_conversation(
     Utwórz nową konwersację dla zalogowanego użytkownika.
     Jeśli podany zostanie deck_id, to po utworzeniu konwersacji
     zostanie zaktualizowane pole conversation_id w tabeli decków.
+    workspace_id pozwala na przypisanie konwersacji do workspace.
     """
-    logger.info(f"Creating a new conversation for user_id: {current_user.id_}")
+    logger.info(f"Creating a new conversation for user_id: {current_user.id_}, workspace_id: {workspace_id}")
     try:
+        # Validate workspace if provided
+        workspace_uuid = None
+        if workspace_id:
+            try:
+                workspace_uuid = uuid_module.UUID(workspace_id)
+                workspace = db.query(Workspace).filter(
+                    Workspace.id == workspace_uuid,
+                    Workspace.user_id == current_user.id_
+                ).first()
+                if not workspace:
+                    raise HTTPException(status_code=404, detail="Workspace not found")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid workspace_id format")
+
         new_conversation = Conversation(
             user_id=current_user.id_,
             title="New conversation",
+            workspace_id=workspace_uuid,
         )
         db.add(new_conversation)
         db.commit()
@@ -56,7 +74,17 @@ async def create_conversation(
                 db.commit()
 
         logger.info(f"Created new conversation with ID {new_conversation.id}")
-        return new_conversation
+
+        # Return with workspace_id as string
+        return {
+            "id": new_conversation.id,
+            "user_id": new_conversation.user_id,
+            "title": new_conversation.title,
+            "workspace_id": str(new_conversation.workspace_id) if new_conversation.workspace_id else None,
+            "created_at": new_conversation.created_at,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating conversation: {e}", exc_info=True)
@@ -68,32 +96,62 @@ async def create_conversation(
 
 @router.get("/", response_model=List[ConversationRead])
 async def get_conversations(
+        workspace_id: Optional[str] = None,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
     """
-    Pobierz wszystkie konwersacje dla zalogowanego użytkownika,
-    wykluczając te które są już używane w egzaminach lub taliach kart.
+    Pobierz konwersacje dla zalogowanego użytkownika.
+    - Jeśli workspace_id jest podany, zwróć konwersacje tylko dla tego workspace.
+    - Jeśli workspace_id nie jest podany, zwróć konwersacje bez workspace,
+      wykluczając te które są już używane w egzaminach lub taliach kart.
     """
     user_id = current_user.id_
-    logger.info(f"Fetching conversations for user_id: {user_id}")
+    logger.info(f"Fetching conversations for user_id: {user_id}, workspace_id: {workspace_id}")
     try:
-        conversations = db.query(Conversation).filter(
-            Conversation.user_id == user_id,
-            ~exists().where(
-                and_(
-                    Exam.conversation_id == Conversation.id,
-                    Exam.conversation_id.isnot(None)
+        if workspace_id:
+            # Get conversations for specific workspace
+            try:
+                workspace_uuid = uuid_module.UUID(workspace_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid workspace_id format")
+
+            conversations = db.query(Conversation).filter(
+                Conversation.user_id == user_id,
+                Conversation.workspace_id == workspace_uuid
+            ).order_by(Conversation.created_at.desc()).all()
+        else:
+            # Get standalone conversations (no workspace, no deck/exam link)
+            conversations = db.query(Conversation).filter(
+                Conversation.user_id == user_id,
+                Conversation.workspace_id.is_(None),
+                ~exists().where(
+                    and_(
+                        Exam.conversation_id == Conversation.id,
+                        Exam.conversation_id.isnot(None)
+                    )
+                ),
+                ~exists().where(
+                    and_(
+                        Deck.conversation_id == Conversation.id,
+                        Deck.conversation_id.isnot(None)
+                    )
                 )
-            ),
-            ~exists().where(
-                and_(
-                    Deck.conversation_id == Conversation.id,
-                    Deck.conversation_id.isnot(None)
-                )
-            )
-        ).all()
-        return conversations
+            ).order_by(Conversation.created_at.desc()).all()
+
+        # Convert workspace_id to string for response
+        result = []
+        for conv in conversations:
+            result.append({
+                "id": conv.id,
+                "user_id": conv.user_id,
+                "title": conv.title,
+                "workspace_id": str(conv.workspace_id) if conv.workspace_id else None,
+                "created_at": conv.created_at,
+            })
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching conversations: {e}")
         raise HTTPException(

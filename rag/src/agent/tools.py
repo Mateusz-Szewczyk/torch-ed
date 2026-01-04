@@ -64,11 +64,10 @@ class FlashcardGenerator(BaseTool):
     def __init__(self, user_id: str, api_key: str, model_name: str = "gpt-5-nano"):
         super().__init__(user_id=user_id, api_key=api_key)
         self.user_id = user_id
-        # Wymuszamy JSON mode w OpenAI
+        # Note: gpt-5-nano only supports temperature=1, so we omit the parameter
         self._model = ChatOpenAI(
             model_name=model_name,
             openai_api_key=api_key,
-            temperature=0.1,
             model_kwargs={"response_format": {"type": "json_object"}}
         )
         self._output_parser = JsonOutputParser()
@@ -167,10 +166,10 @@ class ExamGenerator(BaseTool):
     def __init__(self, user_id: str, openai_api_key: str, model_name: str = "gpt-5-nano"):
         super().__init__(user_id=user_id, openai_api_key=openai_api_key)
         self.user_id = user_id
+        # Note: gpt-5-nano only supports temperature=1, so we omit the parameter
         self._model = ChatOpenAI(
             model_name=model_name,
             openai_api_key=openai_api_key,
-            temperature=0.15,
             model_kwargs={"response_format": {"type": "json_object"}}
         )
 
@@ -267,7 +266,8 @@ class RAGTool(BaseTool):
     def __init__(self, user_id: str, api_key: str, model_name: str = "gpt-5-nano"):
         super().__init__(user_id=user_id, api_key=api_key)
         self.user_id = user_id
-        self._model = ChatOpenAI(model_name=model_name, openai_api_key=api_key, temperature=0.1)
+        # Note: gpt-5-nano only supports temperature=1, so we omit the parameter
+        self._model = ChatOpenAI(model_name=model_name, openai_api_key=api_key)
 
     async def _run(self, query: str) -> str:
         try:

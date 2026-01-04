@@ -1,8 +1,9 @@
 # src/schemas.py
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
+from uuid import UUID
 
 class FlashcardBase(BaseModel):
     question: str
@@ -45,7 +46,7 @@ class StudySessionCreate(BaseModel):
 
 class StudySessionRead(BaseModel):
     id: int
-    user_id: int  # Zmieniono z str na int
+    user_id: int
     deck_id: int
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -109,10 +110,11 @@ class DeckInfoRead(BaseModel):
     class Config:
         from_attributes = True
 
+# --- POPRAWKA: ID może być UUID (dla WorkspaceDocument) lub int (dla starych plików) ---
 class UploadedFileRead(BaseModel):
-    id: int
+    id: Union[str, UUID, int]
     name: str
-    description: Optional[str] = None  # Opcjonalne pole
+    description: Optional[str] = None
     category: str
     created_at: datetime
 
@@ -121,16 +123,25 @@ class UploadedFileRead(BaseModel):
 
 class UploadResponse(BaseModel):
     message: str
-    uploaded_files: List[UploadedFileRead]  # Poprawnie zdefiniowany UploadedFileRead
-    user_id: int  # Zmieniono z str na int
+    uploaded_files: List[UploadedFileRead]
+    user_id: Union[str, int, UUID]  # Poprawka dla elastyczności
     file_name: str
     file_description: Optional[str]
     category: Optional[str]
+
+class WorkspaceMetadata(BaseModel):
+    """Metadata for workspace chat context"""
+    document_id: Optional[str] = None
+    filter_colors: Optional[List[str]] = None  # Colors to filter highlights by (e.g., ['red', 'yellow'])
+    workspace_id: Optional[str] = None
+
 
 class QueryRequest(BaseModel):
     query: str
     conversation_id: int
     selected_tools: Optional[List[str]] = None
+    chat_type: str = "normal"  # "normal" or "workspace"
+    workspace_metadata: Optional[WorkspaceMetadata] = None
 
 class QueryResponse(BaseModel):
     user_id: int
@@ -150,6 +161,7 @@ class ListFilesRequest(BaseModel):
 class ConversationBase(BaseModel):
     user_id: int
     title: Optional[str] = None
+    workspace_id: Optional[str] = None
 
 class ConversationCreate(ConversationBase):
     pass
@@ -158,6 +170,7 @@ class ConversationRead(BaseModel):
     id: int
     user_id: int
     title: Optional[str] = None
+    workspace_id: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -275,7 +288,7 @@ class ExamUpdate(BaseModel):
     name: Optional[str] = Field(None, example="Nowa Nazwa Egzaminu")
     description: Optional[str] = Field(None, example="Nowy opis egzaminu.")
     questions: Optional[List[ExamQuestionCreate]] = None
-    conversation_id: Optional[int] = None  # Allow updating conversation_id if needed
+    conversation_id: Optional[int] = None
 
     @field_validator('questions')
     def validate_questions(cls, v):
@@ -306,7 +319,7 @@ class ExamResultAnswerRead(BaseModel):
 class ExamResultRead(BaseModel):
     id: int
     exam_id: int
-    user_id: int  # Zmieniono z str na int
+    user_id: int
     started_at: datetime
     completed_at: Optional[datetime]
     score: Optional[float]
@@ -380,4 +393,3 @@ class DashboardData(BaseModel):
     study_sessions: List[StudySession]
     exam_result_answers: List[ExamResultAnswer]
     exam_results: List[ExamResult]
-

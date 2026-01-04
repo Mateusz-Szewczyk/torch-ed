@@ -213,6 +213,51 @@ def require_any_role(allowed_roles: list[str]):
 
 
 # Pomocnicze funkcje dla testowania
+def verify_jwt_token(token: str) -> dict | None:
+    """
+    Weryfikuje token JWT i zwraca payload lub None jeśli nieważny.
+    Używane do image loading via query param.
+    """
+    try:
+        logger.info(f"[verify_jwt_token] Token length: {len(token) if token else 0}")
+        logger.info(f"[verify_jwt_token] Token starts with: {token[:50] if token and len(token) > 50 else token}")
+
+        path = Config.PUP_PATH
+        if not path:
+            logger.warning("[verify_jwt_token] PUP_PATH not configured")
+            return None
+
+        with open(path, "r") as f:
+            public_key = f.read()
+        if not public_key:
+            logger.warning("[verify_jwt_token] Public key file is empty")
+            return None
+
+        logger.info("[verify_jwt_token] Decoding token...")
+        decoded = jwt.decode(token.encode("utf-8"), public_key)
+
+        logger.info("[verify_jwt_token] Validating token...")
+        decoded.validate()
+
+        issuer = decoded.get("iss")
+        logger.info(f"[verify_jwt_token] Token issuer: {issuer}")
+        if issuer != "TorchED_BACKEND_AUTH":
+            logger.warning(f"[verify_jwt_token] Invalid issuer: {issuer}")
+            return None
+
+        logger.info(f"[verify_jwt_token] Token validated successfully, aud: {decoded.get('aud')}")
+        return dict(decoded)
+    except ExpiredTokenError:
+        logger.warning("[verify_jwt_token] Token has expired")
+        return None
+    except InvalidTokenError as e:
+        logger.warning(f"[verify_jwt_token] Invalid token: {e}")
+        return None
+    except Exception as e:
+        logger.warning(f"[verify_jwt_token] Token verification failed: {e}", exc_info=True)
+        return None
+
+
 def verify_token_structure(token: str) -> dict:
     """
     Funkcja pomocnicza do debugowania - dekoduje token bez walidacji.
