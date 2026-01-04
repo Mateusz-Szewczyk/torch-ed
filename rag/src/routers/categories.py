@@ -36,8 +36,8 @@ class CategoryCreate(CategoryBase):
 
 class CategoryRead(CategoryBase):
     id: UUID
-    # Changed from int to UUID to match database schema implied by the SQL
-    user_id: Optional[UUID] = None
+    # user_id in file_categories table is INTEGER, not UUID
+    user_id: Optional[int] = None
     is_system: bool = False
 
     class Config:
@@ -58,18 +58,17 @@ async def get_categories(
     Returns both System Default Categories (user_id=null) AND User's Custom Categories.
     """
     try:
-        user_id_str = str(current_user.id_)
+        # user_id in file_categories table is INTEGER (not UUID)
+        user_id = current_user.id_
 
-        # FIX: Use CAST(... AS UUID) instead of ::uuid to avoid parser syntax errors
-        # We explicitly cast the string parameter to UUID for the comparison
         result = db.execute(
             text("""
                 SELECT id, user_id, name, created_at 
                 FROM file_categories 
-                WHERE user_id IS NULL OR user_id = CAST(:user_id AS UUID)
+                WHERE user_id IS NULL OR user_id = :user_id
                 ORDER BY created_at
             """),
-            {"user_id": user_id_str}
+            {"user_id": user_id}
         ).fetchall()
 
         categories = []
@@ -99,15 +98,15 @@ async def create_category(
     Create a new custom category for the current user.
     """
     try:
-        user_id_str = str(current_user.id_)
+        user_id = current_user.id_
 
-        # FIX: Use CAST(:user_id AS UUID)
+        # user_id is INTEGER, not UUID
         existing = db.execute(
             text("""
                 SELECT id FROM file_categories 
-                WHERE user_id = CAST(:user_id AS UUID) AND name = :name
+                WHERE user_id = :user_id AND name = :name
             """),
-            {"user_id": user_id_str, "name": category.name}
+            {"user_id": user_id, "name": category.name}
         ).fetchone()
 
         if existing:
@@ -116,16 +115,14 @@ async def create_category(
                 detail=f"Category '{category.name}' already exists"
             )
 
-        # FIX: The Main Fix.
-        # Replaced ':user_id::uuid' with 'CAST(:user_id AS UUID)'
-        # This prevents the syntax error where the parser confuses ':' with a parameter
+        # user_id is INTEGER, not UUID - no casting needed
         result = db.execute(
             text("""
                 INSERT INTO file_categories (id, user_id, name, created_at)
-                VALUES (gen_random_uuid(), CAST(:user_id AS UUID), :name, NOW())
+                VALUES (gen_random_uuid(), :user_id, :name, NOW())
                 RETURNING id, user_id, name, created_at
             """),
-            {"user_id": user_id_str, "name": category.name}
+            {"user_id": user_id, "name": category.name}
         ).fetchone()
 
         db.commit()
@@ -157,15 +154,15 @@ async def delete_category(
     Delete a custom category (only user's own categories can be deleted).
     """
     try:
-        user_id_str = str(current_user.id_)
+        user_id = current_user.id_
 
-        # FIX: Explicit casting for robust type safety
+        # category_id is UUID, user_id is INTEGER
         category = db.execute(
             text("""
                 SELECT id, user_id, name FROM file_categories 
-                WHERE id = CAST(:category_id AS UUID) AND user_id = CAST(:user_id AS UUID)
+                WHERE id = CAST(:category_id AS UUID) AND user_id = :user_id
             """),
-            {"category_id": str(category_id), "user_id": user_id_str}
+            {"category_id": str(category_id), "user_id": user_id}
         ).fetchone()
 
         if not category:
