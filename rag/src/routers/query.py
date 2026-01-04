@@ -67,6 +67,7 @@ async def query_knowledge(
             # Handle workspace chat context
             workspace_context = None
             workspace_context_source = None
+            workspace_info = None  # Initialize workspace_info
 
             if chat_type == "workspace" and workspace_metadata:
                 # Get context from highlights if colors are specified
@@ -99,6 +100,20 @@ async def query_knowledge(
                         logger.error(f"[WORKSPACE] Error getting highlight context: {e}")
                         yield f"data: {json.dumps({'type': 'step', 'content': 'Pobieranie kontekstu z zaznaczonych fragmentów...', 'status': 'complete', 'done': False})}\n\n"
 
+                # Build workspace context info for LLM system prompt (always for workspace chat)
+                info_parts = []
+                if workspace_metadata.workspace_name:
+                    info_parts.append(f"Workspace: {workspace_metadata.workspace_name}")
+                if workspace_metadata.workspace_description:
+                    info_parts.append(f"Opis: {workspace_metadata.workspace_description}")
+                if workspace_metadata.document_name:
+                    info_parts.append(f"Dokument: {workspace_metadata.document_name}")
+                if workspace_metadata.filter_colors:
+                    info_parts.append(f"Aktywne filtry kolorów: {', '.join(workspace_metadata.filter_colors)}")
+                if info_parts:
+                    workspace_info = "\n".join(info_parts)
+                    logger.info(f"[WORKSPACE] Context info for LLM: {workspace_info}")
+
             agent = ChatAgent(
                 user_id=str(user_id),
                 conversation_id=conversation_id,
@@ -108,6 +123,7 @@ async def query_knowledge(
                 # Pass workspace context if available
                 workspace_context=workspace_context,
                 workspace_context_source=workspace_context_source,
+                workspace_info=workspace_info,  # Pass workspace info for LLM context
             )
 
             logger.info(f"[STREAM] Starting stream for user_id: {user_id}")

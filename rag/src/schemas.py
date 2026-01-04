@@ -134,6 +134,9 @@ class WorkspaceMetadata(BaseModel):
     document_id: Optional[str] = None
     filter_colors: Optional[List[str]] = None  # Colors to filter highlights by (e.g., ['red', 'yellow'])
     workspace_id: Optional[str] = None
+    workspace_name: Optional[str] = None  # Workspace name for LLM context
+    workspace_description: Optional[str] = None  # Workspace description for LLM context
+    document_name: Optional[str] = None  # Current document name for LLM context
 
 
 class QueryRequest(BaseModel):

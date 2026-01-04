@@ -67,7 +67,8 @@ class ChatAgent:
     MAX_HISTORY_MESSAGES = 10  # Limit messages instead of tokens for gpt-5-nano compatibility
 
     def __init__(self, user_id: str, conversation_id: int, openai_api_key: str, tavily_api_key: str, db: Session,
-                 workspace_context: Optional[str] = None, workspace_context_source: Optional[str] = None, **kwargs):
+                 workspace_context: Optional[str] = None, workspace_context_source: Optional[str] = None,
+                 workspace_info: Optional[str] = None, **kwargs):
         self.user_id = user_id
         self.conversation_id = conversation_id
         self.openai_api_key = openai_api_key
@@ -76,6 +77,8 @@ class ChatAgent:
         # Workspace context (pre-fetched from highlights)
         self.workspace_context = workspace_context
         self.workspace_context_source = workspace_context_source
+        # Workspace info (name, description, document) for LLM awareness
+        self.workspace_info = workspace_info
         # Note: gpt-5-nano only supports temperature=1, so we omit the parameter
         self.synthesis_model = ChatOpenAI(
             model_name="gpt-5-nano",
@@ -165,13 +168,20 @@ class ChatAgent:
         # Simple message limit instead of token-based trimming (gpt-5-nano doesn't support token counting)
         trimmed_history = history[-self.MAX_HISTORY_MESSAGES:] if len(history) > self.MAX_HISTORY_MESSAGES else history
 
+        # Build workspace context section if available
+        workspace_section = ""
+        if self.workspace_info:
+            workspace_section = f"\nKONTEKST WORKSPACE:\n{self.workspace_info}\n"
+
         system_prompt = (
             "Jesteś pomocnym asystentem TorchED.\n"
             f"{memory_context}\n"
+            f"{workspace_section}"
             "ZASADY:\n"
             "1. Jeśli sekcja 'Info' zawiera dane, traktuj ją jako PRIORYTET.\n"
             "2. Jeśli generowałeś materiały (fiszki/egzamin), potwierdź to użytkownikowi.\n"
-            "3. Odpowiadaj w formacie Markdown."
+            "3. Odpowiadaj w formacie Markdown.\n"
+            "4. Jeśli pracujesz w kontekście workspace, uwzględnij tematykę dokumentów i workspace."
         )
 
         info_block = f"INFO (Źródło: {context_source}):\n{context if context else 'Brak danych w bazach.'}"
