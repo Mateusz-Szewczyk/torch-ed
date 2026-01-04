@@ -7,11 +7,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import or_, text, cast, String
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..dependencies import get_db
-from ..models import FileCategory, User
+from ..models import User
 from ..auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,8 @@ class CategoryCreate(CategoryBase):
 
 class CategoryRead(CategoryBase):
     id: UUID
-    user_id: Optional[int] = None
+    # Changed from int to UUID to match database schema implied by the SQL
+    user_id: Optional[UUID] = None
     is_system: bool = False
 
     class Config:
@@ -57,37 +58,26 @@ async def get_categories(
     Returns both System Default Categories (user_id=null) AND User's Custom Categories.
     """
     try:
-        # Use raw SQL to handle potential type mismatch between model and database
-        # Database may have user_id as UUID while model defines Integer
         user_id_str = str(current_user.id_)
 
+        # FIX: Use CAST(... AS UUID) instead of ::uuid to avoid parser syntax errors
+        # We explicitly cast the string parameter to UUID for the comparison
         result = db.execute(
             text("""
                 SELECT id, user_id, name, created_at 
                 FROM file_categories 
-                WHERE user_id IS NULL OR user_id::text = :user_id
+                WHERE user_id IS NULL OR user_id = CAST(:user_id AS UUID)
                 ORDER BY created_at
             """),
             {"user_id": user_id_str}
         ).fetchall()
 
-        # Transform to include is_system flag
         categories = []
         for row in result:
-            # user_id could be integer or UUID depending on database schema
-            # For response, we just need to know if it's null (system) or not
-            uid = None
-            if row.user_id is not None:
-                try:
-                    uid = int(str(row.user_id))
-                except (ValueError, TypeError):
-                    # Keep as None if can't convert
-                    uid = None
-
             categories.append(CategoryRead(
                 id=row.id,
                 name=row.name,
-                user_id=uid,
+                user_id=row.user_id, # SQLAlchemy handles the UUID conversion
                 is_system=(row.user_id is None)
             ))
 
@@ -111,11 +101,11 @@ async def create_category(
     try:
         user_id_str = str(current_user.id_)
 
-        # Check if category with this name already exists for this user using raw SQL
+        # FIX: Use CAST(:user_id AS UUID)
         existing = db.execute(
             text("""
                 SELECT id FROM file_categories 
-                WHERE user_id::text = :user_id AND name = :name
+                WHERE user_id = CAST(:user_id AS UUID) AND name = :name
             """),
             {"user_id": user_id_str, "name": category.name}
         ).fetchone()
@@ -126,12 +116,13 @@ async def create_category(
                 detail=f"Category '{category.name}' already exists"
             )
 
-        # Insert using raw SQL to handle type conversion
-        # Database column is UUID type, so we need to cast the user_id properly
+        # FIX: The Main Fix.
+        # Replaced ':user_id::uuid' with 'CAST(:user_id AS UUID)'
+        # This prevents the syntax error where the parser confuses ':' with a parameter
         result = db.execute(
             text("""
                 INSERT INTO file_categories (id, user_id, name, created_at)
-                VALUES (gen_random_uuid(), :user_id::uuid, :name, NOW())
+                VALUES (gen_random_uuid(), CAST(:user_id AS UUID), :name, NOW())
                 RETURNING id, user_id, name, created_at
             """),
             {"user_id": user_id_str, "name": category.name}
@@ -141,18 +132,10 @@ async def create_category(
 
         logger.info(f"Created category '{category.name}' for user {current_user.id_}")
 
-        # Convert user_id safely
-        uid = None
-        if result.user_id is not None:
-            try:
-                uid = int(str(result.user_id))
-            except (ValueError, TypeError):
-                uid = None
-
         return CategoryRead(
             id=result.id,
             name=result.name,
-            user_id=uid,
+            user_id=result.user_id,
             is_system=False
         )
 
@@ -176,11 +159,11 @@ async def delete_category(
     try:
         user_id_str = str(current_user.id_)
 
-        # Find category using raw SQL
+        # FIX: Explicit casting for robust type safety
         category = db.execute(
             text("""
                 SELECT id, user_id, name FROM file_categories 
-                WHERE id = :category_id AND user_id::text = :user_id
+                WHERE id = CAST(:category_id AS UUID) AND user_id = CAST(:user_id AS UUID)
             """),
             {"category_id": str(category_id), "user_id": user_id_str}
         ).fetchone()
@@ -191,16 +174,14 @@ async def delete_category(
                 detail="Category not found or not owned by user"
             )
 
-        # System categories cannot be deleted (user_id is null)
         if category.user_id is None:
             raise HTTPException(
                 status_code=403,
                 detail="Cannot delete system categories"
             )
 
-        # Delete using raw SQL
         db.execute(
-            text("DELETE FROM file_categories WHERE id = :category_id"),
+            text("DELETE FROM file_categories WHERE id = CAST(:category_id AS UUID)"),
             {"category_id": str(category_id)}
         )
         db.commit()
@@ -214,4 +195,3 @@ async def delete_category(
         db.rollback()
         logger.error(f"Error deleting category: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error deleting category: {str(e)}")
-
