@@ -21,6 +21,7 @@ from ..file_processor.documents_processor import DocumentProcessor
 from ..file_processor.math_extractor import MathExtractor, extract_math_from_text, check_math_content
 from ..chunking import create_chunks
 from ..services.subscription import SubscriptionService
+from ..services.storage_service import get_storage_service
 
 import os
 from pathlib import Path
@@ -477,6 +478,10 @@ async def upload_file(
             logger.warning(
                 f"Found orphaned document {existing_doc.id} (filename: {safe_filename}) with 0 sections. Deleting it to allow re-upload.")
             try:
+                # Delete images from storage
+                storage_service = get_storage_service()
+                await storage_service.delete_document_images(str(existing_doc.id))
+
                 # First delete any highlights (if any) to avoid FK errors
                 from ..models import UserHighlight
                 db.query(UserHighlight).filter(
@@ -742,9 +747,9 @@ async def upload_file(
                 )
 
                 if extracted_images:
-                    # Create images directory if it doesn't exist
-                    images_dir = os.path.join("static", "document_images", str(new_document.id))
-                    os.makedirs(images_dir, exist_ok=True)
+                    # Get storage service
+                    storage_service = get_storage_service()
+                    document_id_str = str(new_document.id)
 
                     images_to_add = []
 
@@ -752,18 +757,26 @@ async def upload_file(
                         try:
                             # Generate unique filename
                             image_filename = f"p{img_info.page_number}_i{img_info.image_index}_{uuid_lib.uuid4().hex[:8]}.{img_info.image_type}"
-                            image_path = os.path.join(images_dir, image_filename)
 
-                            # Save image file
-                            async with aiofiles.open(image_path, 'wb') as img_file:
-                                await img_file.write(img_info.image_data)
+                            # Determine content type
+                            content_type = f"image/{img_info.image_type}"
+                            if img_info.image_type == 'jpg':
+                                content_type = 'image/jpeg'
+
+                            # Save image using storage service (supports both local and R2)
+                            storage_path = await storage_service.save_image(
+                                document_id=document_id_str,
+                                image_data=img_info.image_data,
+                                filename=image_filename,
+                                content_type=content_type
+                            )
 
                             # Create database record
                             doc_image = DocumentImage(
                                 document_id=new_document.id,
                                 page_number=img_info.page_number,
                                 image_index=img_info.image_index,
-                                image_path=image_path,  # Relative path
+                                image_path=storage_path,  # Storage path/key
                                 image_type=img_info.image_type,
                                 file_size=len(img_info.image_data),
                                 width=img_info.width,
@@ -873,6 +886,11 @@ async def delete_knowledge(
             WorkspaceDocument.original_filename == file_name
         ).first()
         if document:
+            # Delete images from storage before deleting database record
+            storage_service = get_storage_service()
+            await storage_service.delete_document_images(str(document.id))
+            logger.info(f"Deleted images from storage for document: {document.id}")
+
             db.delete(document)
             db.commit()
             logger.info(f"Deleted document record from database: {document}")
@@ -975,7 +993,11 @@ async def get_image_file(
     """
     Serve an image file by its ID.
     Supports both cookie-based auth and token query param for img src loading.
+    For R2 storage: redirects to presigned URL.
+    For local storage: serves file directly.
     """
+    from fastapi.responses import RedirectResponse, Response
+
     try:
         img_uuid = UUID(image_id)
     except ValueError:
@@ -1012,19 +1034,30 @@ async def get_image_file(
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    # Check if file exists
-    if not os.path.exists(image.image_path):
-        logger.error(f"Image file not found at path: {image.image_path}")
-        raise HTTPException(status_code=404, detail="Image file not found")
+    # Get storage service
+    storage_service = get_storage_service()
 
-    # Determine MIME type
-    mime_type, _ = mimetypes.guess_type(image.image_path)
-    if not mime_type:
-        mime_type = f"image/{image.image_type}"
+    if storage_service.is_r2_enabled():
+        # For R2: redirect to presigned URL
+        presigned_url = storage_service.generate_presigned_url(
+            image.image_path,
+            expiration=3600  # 1 hour
+        )
+        return RedirectResponse(url=presigned_url, status_code=307)
+    else:
+        # For local storage: serve file directly
+        if not os.path.exists(image.image_path):
+            logger.error(f"Image file not found at path: {image.image_path}")
+            raise HTTPException(status_code=404, detail="Image file not found")
 
-    return FileResponse(
-        path=image.image_path,
-        media_type=mime_type,
+        # Determine MIME type
+        mime_type, _ = mimetypes.guess_type(image.image_path)
+        if not mime_type:
+            mime_type = f"image/{image.image_type}"
+
+        return FileResponse(
+            path=image.image_path,
+            media_type=mime_type,
         filename=os.path.basename(image.image_path)
     )
 
@@ -1076,4 +1109,20 @@ async def get_images_by_page(
         ))
 
     return result
+
+
+# =============================================================================
+# STORAGE DIAGNOSTICS ENDPOINT (for admin/debug)
+# =============================================================================
+
+@router.get("/storage/info")
+async def get_storage_info(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get information about the current storage configuration.
+    Useful for debugging and monitoring.
+    """
+    storage_service = get_storage_service()
+    return storage_service.get_storage_info()
 
