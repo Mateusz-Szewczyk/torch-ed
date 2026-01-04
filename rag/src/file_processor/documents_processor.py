@@ -39,7 +39,6 @@ import os
 from typing import Optional
 
 import pypandoc
-from striprtf.striprtf import rtf_to_text
 from odf.opendocument import load
 from odf.text import P
 from odf import teletype
@@ -105,8 +104,6 @@ class DocumentProcessor:
                 text_content = self._extract_docx_pandoc(doc_file)
             elif file_extension == '.odt':
                 text_content = self._extract_odt(doc_file)
-            elif file_extension == '.rtf':
-                text_content = self._extract_rtf(doc_file)
             else:
                 print(f"Unsupported file format: {file_extension}")
                 return None
@@ -161,26 +158,6 @@ class DocumentProcessor:
             return '\n'.join(full_text)
         except Exception as e:
             print(f"Error extracting .odt file {odt_path}: {e}")
-            return None
-
-    def _extract_rtf(self, rtf_path: str) -> Optional[str]:
-        """
-        Extracts text from an `.rtf` file.
-
-        Args:
-            rtf_path (str): Path to the `.rtf` file.
-
-        Returns:
-            str or None: Extracted text as a single string, or None if extraction fails.
-        """
-        try:
-            with open(rtf_path, 'r', encoding='utf-8') as file:
-                rtf_content = file.read()
-            text_content = rtf_to_text(rtf_content)
-            print(f"Successfully extracted text from {rtf_path} using striprtf.")
-            return text_content
-        except Exception as e:
-            print(f"Error extracting .rtf file {rtf_path}: {e}")
             return None
 
 
