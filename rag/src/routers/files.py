@@ -663,6 +663,9 @@ async def upload_file(
             sections_to_add = []
             search_start = 0  # Track where to start searching for next chunk
 
+            # Track which page numbers we've seen to determine is_page_start
+            seen_pages = set()
+
             for idx, chunk in enumerate(chunks):
                 # Note: chunks from create_chunks should already be from cleaned text_content
                 # so we don't need to clean them again (would cause misalignment)
@@ -684,6 +687,10 @@ async def upload_file(
 
                 # Determine page number for this chunk
                 page_number = get_page_for_chunk(chunk_start, chunk_end)
+
+                # Determine if this is the first section for this page
+                is_page_start = page_number not in seen_pages
+                seen_pages.add(page_number)
 
                 # Check if this chunk contains a table (pipe-separated format)
                 is_table_chunk = chunk.strip().startswith('|') and '\n|' in chunk
@@ -707,7 +714,8 @@ async def upload_file(
                         "chunk_index": idx,
                         "is_table": is_table_chunk,
                         "has_math": has_math,
-                        "math_blocks": math_blocks if has_math else []
+                        "math_blocks": math_blocks if has_math else [],
+                        "is_page_start": is_page_start  # Mark first section of each page
                     },
                     char_start=chunk_start,
                     char_end=chunk_end

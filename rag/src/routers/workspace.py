@@ -688,18 +688,21 @@ async def get_document_pages(
 async def get_sections_by_page(
     document_id: UUID,
     page_number: int,
+    context_sections: int = 3,  # Number of sections before/after to include
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Get all sections for a specific page.
+    Get all sections for a specific page with context sections.
 
     Args:
         document_id: UUID of the document
         page_number: Page number (1-based)
+        context_sections: Number of sections to include before/after the page (default 3)
 
     Returns:
-        Sections belonging to that page with highlights
+        Sections belonging to that page with highlights, plus context sections
+        and the index of the first section that starts this page.
     """
     # Verify document ownership
     document = db.query(WorkspaceDocument).filter(
@@ -713,16 +716,50 @@ async def get_sections_by_page(
         raise HTTPException(status_code=404, detail="Document not found")
 
     # Get sections for this page using JSONB query
-    # PostgreSQL JSONB query to match page_number in section_metadata
-    sections = db.query(DocumentSection).filter(
+    page_sections = db.query(DocumentSection).filter(
         and_(
             DocumentSection.document_id == document_id,
             DocumentSection.section_metadata["page_number"].as_integer() == page_number
         )
     ).order_by(DocumentSection.section_index).all()
 
-    # Get highlights for these sections
-    section_ids = [s.id for s in sections]
+    if not page_sections:
+        return {
+            "page_number": page_number,
+            "sections": [],
+            "highlights": [],
+            "section_count": 0,
+            "page_start_section_index": None,
+            "context_loaded": False
+        }
+
+    # Find the section index of the first section for this page (is_page_start=True)
+    page_start_section_index = None
+    for section in page_sections:
+        meta = section.section_metadata or {}
+        if meta.get("is_page_start", False):
+            page_start_section_index = section.section_index
+            break
+
+    # If no is_page_start found, use the first section of the page
+    if page_start_section_index is None:
+        page_start_section_index = page_sections[0].section_index
+
+    # Get context sections before and after
+    min_section_index = max(0, page_sections[0].section_index - context_sections)
+    max_section_index = page_sections[-1].section_index + context_sections
+
+    # Fetch all sections in the range
+    all_sections = db.query(DocumentSection).filter(
+        and_(
+            DocumentSection.document_id == document_id,
+            DocumentSection.section_index >= min_section_index,
+            DocumentSection.section_index <= max_section_index
+        )
+    ).order_by(DocumentSection.section_index).all()
+
+    # Get highlights for all sections
+    section_ids = [s.id for s in all_sections]
     highlights = []
 
     if section_ids:
@@ -743,7 +780,7 @@ async def get_sections_by_page(
                 char_start=s.char_start,
                 char_end=s.char_end
             )
-            for s in sections
+            for s in all_sections
         ],
         "highlights": [
             HighlightResponse(
@@ -758,7 +795,9 @@ async def get_sections_by_page(
             )
             for h in highlights
         ],
-        "section_count": len(sections)
+        "section_count": len(all_sections),
+        "page_start_section_index": page_start_section_index,
+        "context_loaded": context_sections > 0
     }
 
 
