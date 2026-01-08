@@ -20,7 +20,8 @@ from ..jwt import generate_token, decode_token, generate_confirmation_token, con
 from ..models import User
 from .. import session
 from ..config import Config
-from ..utils import send_email, FRONTEND, add_security_headers, log_auth_attempt
+from ..utils import FRONTEND, add_security_headers, log_auth_attempt
+from ..services.email_service import get_email_service
 
 # Enhanced logging configuration
 logging.basicConfig(
@@ -386,45 +387,13 @@ def register() -> Response | tuple:
 
         confirmation_link = f"{FRONTEND}/confirm-email?token={token}"
 
-        # Enhanced email template
-        message = f"""
-        <html>
-          <head>
-            <style>
-              body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; background: #f8fafc; padding: 20px; }}
-              .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
-              .header {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; padding: 30px 20px; text-align: center; }}
-              .content {{ padding: 30px 20px; }}
-              .button {{ display: inline-block; padding: 14px 28px; background: #4f46e5; color: white !important; text-decoration: none; border-radius: 8px; font-weight: 600; }}
-              .footer {{ background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; }}
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <h1>🎉 Witaj w TorchED!</h1>
-                <p>Potwierdź swoje konto</p>
-              </div>
-              <div class="content">
-                <p>Cześć {user_name}!</p>
-                <p>Dziękujemy za rejestrację w TorchED. Aby aktywować swoje konto, kliknij przycisk poniżej:</p>
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="{confirmation_link}" class="button">✨ Potwierdź konto</a>
-                </div>
-                <p style="font-size: 14px; color: #64748b;">
-                  Jeśli przycisk nie działa, skopiuj ten link:<br>
-                  <a href="{confirmation_link}">{confirmation_link}</a>
-                </p>
-              </div>
-              <div class="footer">
-                <p>© 2025 TorchED. Wiadomość wysłana automatycznie.</p>
-              </div>
-            </div>
-          </body>
-        </html>
-        """
-
-        send_email(email, "Potwierdź rejestrację w TorchED", message, html=True)
+        # Send email using Resend API
+        try:
+            email_service = get_email_service()
+            email_service.send_confirmation_email(email, user_name, confirmation_link)
+        except Exception as e:
+            logger.error(f"Failed to send confirmation email: {e}")
+            # Continue registration even if email fails
 
         log_auth_attempt('register', email, client_ip, True, 'Registration successful')
 
@@ -582,55 +551,12 @@ def forgot_password() -> Response | tuple:
 
             reset_link = f"{FRONTEND}/reset-password?reset_token={reset_token}"
 
-            # Email template
-            message = f"""
-            <html>
-              <head>
-                <style>
-                  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; background: #f8fafc; padding: 20px; }}
-                  .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }}
-                  .header {{ background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; padding: 30px 20px; text-align: center; }}
-                  .content {{ padding: 30px 20px; }}
-                  .button {{ display: inline-block; padding: 14px 28px; background: #4f46e5; color: white !important; text-decoration: none; border-radius: 8px; font-weight: 600; }}
-                  .warning {{ background: #fef3c7; border: 1px solid #f59e0b; padding: 12px; border-radius: 6px; margin: 20px 0; color: #92400e; }}
-                  .footer {{ background: #f8fafc; padding: 20px; text-align: center; color: #64748b; font-size: 14px; }}
-                </style>
-              </head>
-              <body>
-                <div class="container">
-                  <div class="header">
-                    <h1>🔒 Resetowanie hasła</h1>
-                    <p>TorchED - Bezpieczne resetowanie</p>
-                  </div>
-                  <div class="content">
-                    <p>Cześć!</p>
-                    <p>Otrzymaliśmy prośbę o zresetowanie hasła do Twojego konta w TorchED.</p>
-                    <div style="text-align: center; margin: 30px 0;">
-                      <a href="{reset_link}" class="button">🔑 Zresetuj hasło</a>
-                    </div>
-                    <div class="warning">
-                      <strong>⚠️ Ważne:</strong>
-                      <ul style="margin: 8px 0 0 20px;">
-                        <li>Link jest ważny przez <strong>30 minut</strong></li>
-                        <li>Jeśli nie prosiłeś o reset, zignoruj tę wiadomość</li>
-                        <li>Nie udostępniaj tego linku nikomu</li>
-                      </ul>
-                    </div>
-                    <p style="font-size: 14px; color: #64748b; margin-top: 20px;">
-                      Jeśli przycisk nie działa, skopiuj ten link:<br>
-                      <a href="{reset_link}" style="color: #4f46e5; word-break: break-all;">{reset_link}</a>
-                    </p>
-                  </div>
-                  <div class="footer">
-                    <p>© 2025 TorchED. Wiadomość wysłana automatycznie.</p>
-                  </div>
-                </div>
-              </body>
-            </html>
-            """
-
-            # Send email
-            send_email(email, "🔒 Resetowanie hasła - TorchED", message, html=True)
+            # Send email using Resend API
+            try:
+                email_service = get_email_service()
+                email_service.send_password_reset_email(email, reset_link)
+            except Exception as e:
+                logger.error(f"Failed to send password reset email: {e}")
             logger.info(f"Password reset email sent to: {email}")
             log_auth_attempt('password_reset_request', email, client_ip, True, 'Reset email sent')
 

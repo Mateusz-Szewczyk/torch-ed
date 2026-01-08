@@ -3,11 +3,8 @@ import logging
 import os
 import hmac
 import hashlib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 from flask import Request, jsonify, request
-import smtplib
 
 from flask.cli import load_dotenv
 from werkzeug.security import check_password_hash
@@ -26,8 +23,6 @@ load_dotenv()
 
 FRONTEND: str = os.getenv('FRONTEND', 'https://torched.pl')
 COOKIE_AUTH: str = 'TorchED_AUTH'
-EMAIL: str | None = os.getenv('EMAIL')
-EMAIL_PASSWORD: str | None = os.getenv('EMAIL_PASSWORD')
 
 
 class Misconfiguration(Exception):
@@ -111,47 +106,6 @@ def signature_check(func: Callable) -> Callable | tuple:
     
     return wraper
 
-
-def send_email(to: str, subject: str, message: str, html: bool = False) -> None:
-    """
-    Wysyła e-mail za pomocą Gmaila.
-
-    :param to: Adres e-mail odbiorcy
-    :param subject: Temat wiadomości
-    :param message: Treść wiadomości
-    :param html: Czy wiadomość jest w formacie HTML (domyślnie False)
-    """
-    try:
-        # Sprawdzenie konfiguracji e-maila
-        if not EMAIL or not EMAIL_PASSWORD:
-            raise ValueError("Email or password not provided.")
-
-        # Utworzenie wiadomości MIME
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL
-        msg['To'] = to
-        msg['Subject'] = subject
-
-        # Dołączenie treści wiadomości w odpowiednim formacie
-        msg.attach(MIMEText(message, 'html' if html else 'plain'))
-
-        # Połączenie z serwerem SMTP
-        with smtplib.SMTP('smtp.gmail.com') as connection:
-            connection.set_debuglevel(1)
-            connection.starttls()
-            connection.login(EMAIL, EMAIL_PASSWORD)
-            connection.send_message(msg)
-
-        print(f"Email sent successfully to {to}")
-
-    except smtplib.SMTPAuthenticationError:
-        print("Error: Authentication failed. Check your email and password.")
-    except smtplib.SMTPConnectError:
-        print("Error: Unable to connect to the SMTP server.")
-    except ValueError as ve:
-        print(f"Configuration error: {ve}")
-    except Exception as e:
-        print(f"An unexpected error occurred while sending email to {to}: {e}")
 
 
 def log_auth_attempt(action, email, ip, success, reason=None):

@@ -15,6 +15,16 @@ class Config:
     _domain_env = os.getenv('DOMAIN')
     DOMAIN: str | None = None if _domain_env == 'localhost' else _domain_env
     IS_SECURE: bool = os.getenv('IS_SECURE', 'true').lower() == 'true'
+    RESEND_API_KEY: str | None = os.getenv('RESEND_API_KEY')
+
+    @classmethod
+    def validate(cls) -> None:
+        """Validate critical environment variables are set."""
+        if not cls.RESEND_API_KEY:
+            raise ValueError(
+                "RESEND_API_KEY is required but not set. "
+                "Please add it to your .env or Railway environment variables."
+            )
 
 
 
