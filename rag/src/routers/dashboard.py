@@ -832,7 +832,6 @@ async def get_dashboard_data(
 
             # PORÓWNANIA
             "comparisons": {
-                "week_over_week": week_comparison,
                 "month_over_month": month_comparison
             },
 
@@ -1195,15 +1194,15 @@ async def get_learning_calendar(
         for record in study_records:
             if record.reviewed_at and record.user_flashcard_id:
                 day_str = record.reviewed_at.date().isoformat()
-                deck_name = record.deck_name or f"Deck {record.deck_id}"
+                deck_key = (record.deck_id, record.deck_name or f"Deck {record.deck_id}")
 
                 if day_str not in day_deck_flashcards:
                     day_deck_flashcards[day_str] = {}
 
-                if deck_name not in day_deck_flashcards[day_str]:
-                    day_deck_flashcards[day_str][deck_name] = set()
+                if deck_key not in day_deck_flashcards[day_str]:
+                    day_deck_flashcards[day_str][deck_key] = set()
 
-                day_deck_flashcards[day_str][deck_name].add(record.user_flashcard_id)
+                day_deck_flashcards[day_str][deck_key].add(record.user_flashcard_id)
 
         # Konwertuj na history_data z liczbami
         for day_str, decks_data in day_deck_flashcards.items():
@@ -1211,8 +1210,8 @@ async def get_learning_calendar(
             history_data[day_str] = {
                 'count': total_unique,
                 'decks': [
-                    {'name': deck_name, 'count': len(flashcard_ids)}
-                    for deck_name, flashcard_ids in decks_data.items()
+                    {'id': deck_id, 'name': deck_name, 'count': len(flashcard_ids)}
+                    for (deck_id, deck_name), flashcard_ids in decks_data.items()
                 ]
             }
 
@@ -1258,16 +1257,16 @@ async def get_learning_calendar(
 
                 scheduled_data[day_str]['count'] += 1
 
-                deck_name = card.deck_name or f"Deck {card.deck_id}"
-                if deck_name not in scheduled_data[day_str]['decks']:
-                    scheduled_data[day_str]['decks'][deck_name] = 0
-                scheduled_data[day_str]['decks'][deck_name] += 1
+                deck_key = (card.deck_id, card.deck_name or f"Deck {card.deck_id}")
+                if deck_key not in scheduled_data[day_str]['decks']:
+                    scheduled_data[day_str]['decks'][deck_key] = 0
+                scheduled_data[day_str]['decks'][deck_key] += 1
 
         # Konwertuj decks dict na listę dla JSON
         for day_str in scheduled_data:
             scheduled_data[day_str]['decks'] = [
-                {'name': name, 'count': count}
-                for name, count in scheduled_data[day_str]['decks'].items()
+                {'id': deck_id, 'name': deck_name, 'count': count}
+                for (deck_id, deck_name), count in scheduled_data[day_str]['decks'].items()
             ]
 
         # =============================================

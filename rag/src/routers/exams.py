@@ -43,6 +43,21 @@ async def get_exams(
     logger.info(f"Fetching all exams for user_id={user_id}, include_shared={include_shared}")
 
     try:
+        # Pre-fetch exam results for the user to optimize querying
+        user_results = (
+            db.query(ExamResult)
+            .filter(ExamResult.user_id == user_id)
+            .order_by(ExamResult.completed_at.desc())
+            .all()
+        )
+        
+        # Group results by exam_id
+        results_by_exam = {}
+        for res in user_results:
+            if res.exam_id not in results_by_exam:
+                results_by_exam[res.exam_id] = []
+            results_by_exam[res.exam_id].append(res)
+
         # Funkcja do serializacji pytań
         def serialize_questions(questions):
             """Serializuje pytania SQLAlchemy do dict"""
@@ -75,9 +90,25 @@ async def get_exams(
 
         result = []
 
+        def get_exam_stats(exam_id):
+            exam_results = results_by_exam.get(exam_id, [])
+            if not exam_results:
+                return None, None
+            
+            # Last score is the first one since we ordered by completed_at desc
+            last_score = exam_results[0].score
+            
+            # Average score
+            total_score = sum(r.score for r in exam_results if r.score is not None)
+            avg_score = total_score / len(exam_results)
+            
+            return last_score, avg_score
+
         # Dodaj własne egzaminy - ZAWSZE z pytaniami
         for exam in own_exams:
             question_count = len(exam.questions) if exam.questions else 0
+            last_score, avg_score = get_exam_stats(exam.id)
+            
             result.append({
                 'id': exam.id,
                 'name': exam.name,
@@ -88,7 +119,9 @@ async def get_exams(
                 'is_own': True,
                 'access_type': 'owner',
                 'conversation_id': exam.conversation_id,
-                'questions': serialize_questions(exam.questions) if exam.questions else []  # ZAWSZE
+                'questions': serialize_questions(exam.questions) if exam.questions else [],  # ZAWSZE
+                'last_score': last_score,
+                'average_score': avg_score
             })
 
         # Jeśli requested, dodaj AKTYWNE udostępnione egzaminy - TAKŻE z pytaniami
@@ -106,6 +139,8 @@ async def get_exams(
 
                 if exam:
                     question_count = len(exam.questions) if exam.questions else 0
+                    last_score, avg_score = get_exam_stats(exam.id)
+                    
                     result.append({
                         'id': exam.id,
                         'name': exam.name,
@@ -119,7 +154,9 @@ async def get_exams(
                         'added_at': access.added_at.isoformat(),
                         'code_used': access.accessed_via_code,
                         'conversation_id': exam.conversation_id,
-                        'questions': serialize_questions(exam.questions) if exam.questions else []  # ZAWSZE
+                        'questions': serialize_questions(exam.questions) if exam.questions else [],  # ZAWSZE
+                        'last_score': last_score,
+                        'average_score': avg_score
                     })
 
         logger.info(f"Returning {len(result)} exams, all with questions loaded")

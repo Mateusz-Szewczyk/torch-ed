@@ -99,8 +99,6 @@ class SectionsWithHighlights(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    #TODO: Add information about workspace id, because we want to retrieve documents from specific workspace
-    #TODO: Update the endpoints to handle workspace id and update flutter frontend accordingly
     query: str = Field(..., min_length=1, max_length=10000)
     document_id: Optional[UUID] = None
     filter_colors: Optional[List[str]] = Field(default=None, description="Colors to filter highlights by")

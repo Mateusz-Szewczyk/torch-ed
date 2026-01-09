@@ -3,9 +3,10 @@ from typing import Dict, Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from ..models import User, ORMFile, Deck, Exam, ExamQuestion, Flashcard, Message
+from ..models import User, WorkspaceDocument, Deck, Exam, ExamQuestion, Flashcard, Message
 import datetime
 from datetime import timedelta
+
 
 class UserRole(str, Enum):
     FREE = "user"
@@ -54,8 +55,8 @@ class SubscriptionService:
     def get_usage_stats(self) -> Dict[str, Any]:
         """Returns current usage stats for the user."""
 
-        # Files
-        file_count = self.db.query(func.count(ORMFile.id)).filter(ORMFile.user_id == self.user.id_).scalar()
+        # Files (count WorkspaceDocuments, not old ORMFile table)
+        file_count = self.db.query(func.count(WorkspaceDocument.id)).filter(WorkspaceDocument.user_id == self.user.id_).scalar()
 
         # Decks
         deck_count = self.db.query(func.count(Deck.id)).filter(Deck.user_id == self.user.id_).scalar()
@@ -101,7 +102,7 @@ class SubscriptionService:
         if max_files == UNLIMITED:
             return
 
-        current_files = self.db.query(func.count(ORMFile.id)).filter(ORMFile.user_id == self.user.id_).scalar()
+        current_files = self.db.query(func.count(WorkspaceDocument.id)).filter(WorkspaceDocument.user_id == self.user.id_).scalar()
         if current_files >= max_files:
             raise HTTPException(status_code=403, detail=f"File limit reached. Limit is {max_files} files.")
 
