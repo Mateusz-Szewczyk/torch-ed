@@ -1156,12 +1156,6 @@ async def get_learning_calendar(
     try:
         # =============================================
         # HISTORIA - ile UNIKALNYCH fiszek przerobiono każdego dnia
-        # Używamy logiki z zapytania SQL:
-        # SELECT uf.user_id, sr.reviewed_at::date AS review_date,
-        #        COUNT(DISTINCT sr.user_flashcard_id) AS individual_flashcards_studied
-        # FROM study_records sr
-        # JOIN user_flashcards uf ON sr.user_flashcard_id = uf.id
-        # GROUP BY uf.user_id, review_date
         # =============================================
 
         # Pobierz wszystkie study_records dla użytkownika przez JOIN z user_flashcards
@@ -1179,22 +1173,22 @@ async def get_learning_calendar(
             .filter(
                 UserFlashcardModel.user_id == user_id,
                 StudyRecordModel.reviewed_at >= start_date,
-                StudyRecordModel.reviewed_at <= end_of_today  # Use end of today to include all today's records
+                StudyRecordModel.reviewed_at <= end_of_today
             )
             .all()
         )
 
-        logger.info(f"[Calendar] Query returned {len(study_records)} study_records for user {user_id}")
-
         # Agreguj po dniach - licząc UNIKALNE fiszki (user_flashcard_id) per dzień per deck
         history_data: Dict[str, Dict[str, Any]] = {}
-        # Struktura pomocnicza: day_str -> deck_name -> set of user_flashcard_ids
-        day_deck_flashcards: Dict[str, Dict[str, set]] = {}
+        # Struktura pomocnicza: day_str -> (deck_id, deck_name) -> set of user_flashcard_ids
+        day_deck_flashcards: Dict[str, Dict[tuple, set]] = {}
 
         for record in study_records:
             if record.reviewed_at and record.user_flashcard_id:
                 day_str = record.reviewed_at.date().isoformat()
-                deck_key = (record.deck_id, record.deck_name or f"Deck {record.deck_id}")
+                deck_id = record.deck_id
+                deck_name = record.deck_name or f"Deck {deck_id}"
+                deck_key = (deck_id, deck_name)
 
                 if day_str not in day_deck_flashcards:
                     day_deck_flashcards[day_str] = {}
@@ -1210,20 +1204,15 @@ async def get_learning_calendar(
             history_data[day_str] = {
                 'count': total_unique,
                 'decks': [
-                    {'id': deck_id, 'name': deck_name, 'count': len(flashcard_ids)}
-                    for (deck_id, deck_name), flashcard_ids in decks_data.items()
+                    {'id': d_id, 'name': d_name, 'count': len(f_ids)}
+                    for (d_id, d_name), f_ids in decks_data.items()
                 ]
             }
-
-        logger.info(f"[Calendar] Found {len(study_records)} study records, {len(history_data)} unique study days")
-        if today.isoformat() in history_data:
-            logger.info(f"[Calendar] Today ({today.isoformat()}) has {history_data[today.isoformat()]['count']} unique flashcards")
 
         # =============================================
         # ZAPLANOWANE SESJE - na podstawie next_review
         # =============================================
 
-        # Use start of today to include cards due today
         today_start = datetime.combine(today, datetime.min.time())
 
         scheduled_cards = (
@@ -1236,65 +1225,42 @@ async def get_learning_calendar(
             .join(Deck, Flashcard.deck_id == Deck.id)
             .filter(
                 UserFlashcardModel.user_id == user_id,
-                UserFlashcardModel.next_review >= today_start,  # Include today's cards
+                UserFlashcardModel.next_review >= today_start,
                 UserFlashcardModel.next_review <= end_date
             )
             .all()
         )
 
-        # Agreguj po dniach
         scheduled_data: Dict[str, Dict[str, Any]] = {}
 
         for card in scheduled_cards:
             if card.next_review:
                 day_str = card.next_review.date().isoformat()
-
                 if day_str not in scheduled_data:
-                    scheduled_data[day_str] = {
-                        'count': 0,
-                        'decks': {}
-                    }
-
+                    scheduled_data[day_str] = {'count': 0, 'decks': {}}
+                
                 scheduled_data[day_str]['count'] += 1
-
                 deck_key = (card.deck_id, card.deck_name or f"Deck {card.deck_id}")
-                if deck_key not in scheduled_data[day_str]['decks']:
-                    scheduled_data[day_str]['decks'][deck_key] = 0
-                scheduled_data[day_str]['decks'][deck_key] += 1
+                scheduled_data[day_str]['decks'][deck_key] = scheduled_data[day_str]['decks'].get(deck_key, 0) + 1
 
-        # Konwertuj decks dict na listę dla JSON
+        # Konwertuj
         for day_str in scheduled_data:
             scheduled_data[day_str]['decks'] = [
-                {'id': deck_id, 'name': deck_name, 'count': count}
-                for (deck_id, deck_name), count in scheduled_data[day_str]['decks'].items()
+                {'id': d_id, 'name': d_name, 'count': c}
+                for (d_id, d_name), c in scheduled_data[day_str]['decks'].items()
             ]
 
         # =============================================
-        # STATYSTYKI ROCZNE I DZIENNE
-        # Liczymy UNIKALNE fiszki per dzień w roku i sumujemy.
-        # Używamy tego samego wzorca JOIN co w historii kalendarza.
+        # STATYSTYKI
         # =============================================
-
         year_start = datetime(today.year, 1, 1)
-
-        # Pobierz wszystkie study records z tego roku przez JOIN z user_flashcards
         year_study_records = (
-            db.query(
-                StudyRecordModel.reviewed_at,
-                StudyRecordModel.user_flashcard_id,
-            )
+            db.query(StudyRecordModel.reviewed_at, StudyRecordModel.user_flashcard_id)
             .join(UserFlashcardModel, StudyRecordModel.user_flashcard_id == UserFlashcardModel.id)
-            .filter(
-                UserFlashcardModel.user_id == user_id,
-                StudyRecordModel.reviewed_at >= year_start,
-                StudyRecordModel.reviewed_at <= end_of_today  # Use end of today to include all today's records
-            )
+            .filter(UserFlashcardModel.user_id == user_id, StudyRecordModel.reviewed_at >= year_start, StudyRecordModel.reviewed_at <= end_of_today)
             .all()
         )
 
-        logger.info(f"[Calendar] Year query returned {len(year_study_records)} study_records for user {user_id} from {year_start} to {end_of_today}")
-
-        # Zlicz unikalne fiszki per dzień i zsumuj
         year_day_flashcards: Dict[str, set] = {}
         for record in year_study_records:
             if record.reviewed_at and record.user_flashcard_id:
@@ -1303,122 +1269,65 @@ async def get_learning_calendar(
                     year_day_flashcards[day_str] = set()
                 year_day_flashcards[day_str].add(record.user_flashcard_id)
 
-        # Suma unikalnych fiszek per dzień
-        total_flashcards_year = sum(len(flashcard_ids) for flashcard_ids in year_day_flashcards.values())
+        total_flashcards_year = sum(len(f_ids) for f_ids in year_day_flashcards.values())
 
-        logger.info(f"[Calendar] Year stats: {len(year_study_records)} records, {len(year_day_flashcards)} days, {total_flashcards_year} unique flashcards this year")
-
-        # Sprawdź czy użytkownik uczył się dzisiaj (fiszki lub egzaminy)
-        today_start = datetime.combine(today, datetime.min.time())
-        today_end = datetime.combine(today, datetime.max.time())
-
-        has_studied_today = False
-
-        # Sprawdź fiszki
-        if today.isoformat() in history_data:
-            has_studied_today = True
-        else:
-            # Sprawdź egzaminy (jeśli nie ma w history_data, bo history_data jest z study_records)
-            # Warto sprawdzić czy exam results są uwzględniane w kalendarzu?
-            # Obecna implementacja kalendarza patrzy tylko na StudyRecordModel (fiszki).
-            # Dodajmy sprawdzenie egzaminów dla flagi has_studied_today
-            exams_today = db.query(ExamResultModel).filter(
-                ExamResultModel.user_id == user_id,
-                ExamResultModel.started_at >= today_start,
-                ExamResultModel.started_at <= today_end
-            ).first()
-            if exams_today:
-                has_studied_today = True
-
-        # =============================================
-        # STATYSTYKI
-        # =============================================
-
-        max_count = max([d['count'] for d in history_data.values()]) if history_data else 0
-        total_days_studied = len(history_data)
-
-        study_sessions = db.query(StudySessionModel).filter(
-            StudySessionModel.user_id == user_id
-        ).all()
-        exam_results = db.query(ExamResultModel).filter(
-            ExamResultModel.user_id == user_id
-        ).all()
+        # Streak data
+        study_sessions = db.query(StudySessionModel).filter(StudySessionModel.user_id == user_id).all()
+        exam_results = db.query(ExamResultModel).filter(ExamResultModel.user_id == user_id).all()
         streak_data = calculate_study_streak(study_sessions, [(e,) for e in exam_results])
 
-        # Calculate due/overdue cards with SAME logic as overdue_stats endpoint
-        start_of_today = datetime.combine(today, datetime.min.time())
-
-        # Cards that are OVERDUE (scheduled before today)
+        # Overdue cards
         overdue_cards_count = db.query(UserFlashcardModel).filter(
             UserFlashcardModel.user_id == user_id,
-            UserFlashcardModel.next_review < start_of_today
+            UserFlashcardModel.next_review < today_start
         ).count()
 
-        # Cards due SPECIFICALLY today (scheduled for today)
         cards_due_today_only = db.query(UserFlashcardModel).filter(
             UserFlashcardModel.user_id == user_id,
-            UserFlashcardModel.next_review >= start_of_today,
+            UserFlashcardModel.next_review >= today_start,
             UserFlashcardModel.next_review <= end_of_today
         ).count()
 
-        # Total cards that need review (overdue + due today) - this is the actionable count
-        cards_to_review_today = overdue_cards_count + cards_due_today_only
-
-        # Get decks scheduled for today
-        today_str = today.isoformat()
-        decks_due_today = []
-        if today_str in scheduled_data:
-            decks_due_today = scheduled_data[today_str].get('decks', [])
-
-        logger.info(f"[Calendar] Final stats: total_flashcards_year={total_flashcards_year}, overdue={overdue_cards_count}, due_today={cards_due_today_only}, total_to_review={cards_to_review_today}, has_studied_today={has_studied_today}")
-
         overdue_cards_per_deck = db.query(
+            Deck.id.label('deck_id'),
             Deck.name.label('deck_name'),
             func.count(UserFlashcardModel.id).label('count')
-        ).join(
-            Flashcard, UserFlashcardModel.flashcard_id == Flashcard.id
-        ).join(
-            Deck, Flashcard.deck_id == Deck.id
-        ).filter(
+        ).join(Flashcard, UserFlashcardModel.flashcard_id == Flashcard.id).join(Deck, Flashcard.deck_id == Deck.id).filter(
             UserFlashcardModel.user_id == user_id,
-            UserFlashcardModel.next_review < datetime.combine(today, datetime.min.time())  # Strictly less than start of today = overdue
-        ).group_by(
-            Deck.name
-        ).all()
+            UserFlashcardModel.next_review < today_start
+        ).group_by(Deck.id, Deck.name).all()
 
-        total_overdue_count = 0
         decks_list = []
+        total_overdue = 0
+        for d_id, d_name, count in overdue_cards_per_deck:
+            total_overdue += count
+            decks_list.append({"id": d_id, "name": d_name, "count": count})
 
-        for deck_name, count in overdue_cards_per_deck:
-            total_overdue_count += count
-            decks_list.append({
-                "name": deck_name,
-                "count": count
-            })
-
-        # 4. Construct the final dictionary
         overdue_data = {
-            today_str: {
-                "count": total_overdue_count,
+            today.isoformat(): {
+                "count": total_overdue,
                 "decks": decks_list
             }
         }
+
+        # Decks due today (part of stats)
+        decks_due_today = scheduled_data.get(today.isoformat(), {}).get('decks', [])
 
         return {
             "history": history_data,
             "scheduled": scheduled_data,
             "overdue": overdue_data,
             "stats": {
-                "max_count": max_count,
-                "total_days_studied": total_days_studied,
+                "max_count": max([d['count'] for d in history_data.values()]) if history_data else 0,
+                "total_days_studied": len(history_data),
                 "current_streak": streak_data['current'],
                 "longest_streak": streak_data['longest'],
                 "is_active_today": streak_data['is_active_today'],
-                "cards_due_today": cards_due_today_only,  # Only cards scheduled for today
-                "overdue_cards": overdue_cards_count,  # Cards that are past due
-                "cards_to_review_today": cards_to_review_today,  # Total actionable (overdue + due today)
+                "cards_due_today": cards_due_today_only,
+                "overdue_cards": overdue_cards_count,
+                "cards_to_review_today": overdue_cards_count + cards_due_today_only,
                 "total_flashcards_year": total_flashcards_year,
-                "has_studied_today": has_studied_today,
+                "has_studied_today": today.isoformat() in history_data,
                 "decks_due_today": decks_due_today
             },
             "range": {
