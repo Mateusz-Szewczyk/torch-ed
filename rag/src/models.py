@@ -466,6 +466,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String, nullable=False, default="user")
     role_expiry: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     user_flashcards = relationship(
         "UserFlashcard", back_populates="user", cascade="all, delete-orphan"

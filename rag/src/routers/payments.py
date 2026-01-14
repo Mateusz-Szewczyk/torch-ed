@@ -145,6 +145,184 @@ async def create_checkout_session(
         raise HTTPException(status_code=500, detail="Failed to create checkout session")
 
 
+# =============================================================================
+# PAYMENT INTENT - For Native Payment Sheet (In-App Checkout)
+# =============================================================================
+
+class CreatePaymentIntentRequest(BaseModel):
+    plan_id: str  # 'pro' or 'expert'
+
+
+class PaymentIntentResponse(BaseModel):
+    client_secret: str
+    ephemeral_key: str
+    customer_id: str
+    payment_intent_id: str
+
+
+def _get_or_create_stripe_customer(user: User, db: Session) -> str:
+    """
+    Gets existing Stripe customer or creates a new one.
+    Stores stripe_customer_id on user for future use.
+    """
+    # Check if user already has a Stripe customer ID
+    if hasattr(user, 'stripe_customer_id') and user.stripe_customer_id:
+        try:
+            # Verify customer still exists in Stripe
+            stripe.Customer.retrieve(user.stripe_customer_id)
+            return user.stripe_customer_id
+        except stripe.error.InvalidRequestError:
+            # Customer was deleted, create new one
+            pass
+
+    # Create new Stripe customer
+    customer = stripe.Customer.create(
+        email=user.email,
+        name=user.user_name,
+        metadata={
+            "torched_user_id": str(user.id_),
+        }
+    )
+
+    # Store customer ID on user (if field exists)
+    if hasattr(user, 'stripe_customer_id'):
+        user.stripe_customer_id = customer.id
+        db.commit()
+
+    return customer.id
+
+
+# Price amounts in cents (for PaymentIntent - one-time representation of subscription)
+# These are backup values - prefer using Stripe Prices
+PLAN_AMOUNTS = {
+    "pro": 1900,   # 19 PLN in grosze
+    "expert": 2900,  # 29 PLN in grosze
+}
+
+
+@router.post("/create-payment-intent", response_model=PaymentIntentResponse)
+async def create_payment_intent(
+    request: CreatePaymentIntentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Creates a PaymentIntent and EphemeralKey for native Payment Sheet.
+
+    This endpoint is used by the Flutter app to display the native Stripe
+    Payment Sheet instead of redirecting to external browser.
+
+    Returns:
+        - client_secret: For Payment Sheet initialization
+        - ephemeral_key: For customer session
+        - customer_id: Stripe customer ID
+        - payment_intent_id: For tracking
+    """
+    try:
+        # Validate Stripe configuration
+        if not stripe.api_key:
+            logger.error("STRIPE_SECRET_KEY not configured")
+            raise HTTPException(
+                status_code=500,
+                detail="Payment system not configured. Please contact support."
+            )
+
+        plan_id = request.plan_id.lower()
+
+        if plan_id not in STRIPE_PRICES:
+            raise HTTPException(status_code=400, detail=f"Invalid plan: {plan_id}")
+
+        target_role = ROLE_MAP[plan_id]
+
+        # Check if user already has this or higher role
+        if current_user.role == target_role:
+            raise HTTPException(
+                status_code=400,
+                detail=f"You already have the {target_role} plan"
+            )
+
+        if current_user.role == "expert" and target_role == "pro":
+            raise HTTPException(
+                status_code=400,
+                detail="You cannot downgrade from Expert to Pro"
+            )
+
+        logger.info(f"Creating payment intent for user {current_user.id_}, plan: {plan_id}")
+
+        # Get or create Stripe customer
+        customer_id = _get_or_create_stripe_customer(current_user, db)
+        logger.info(f"Using Stripe customer: {customer_id}")
+
+        # Create ephemeral key for customer
+        ephemeral_key = stripe.EphemeralKey.create(
+            customer=customer_id,
+            stripe_version="2023-10-16",
+        )
+        logger.info(f"Ephemeral key created")
+
+        # Get amount for the plan
+        amount = PLAN_AMOUNTS.get(plan_id, 1900)
+
+        # Create PaymentIntent
+        payment_intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency="pln",
+            customer=customer_id,
+            # Enable automatic payment methods (BLIK, P24, cards, etc.)
+            automatic_payment_methods={
+                "enabled": True,
+            },
+            metadata={
+                "user_id": str(current_user.id_),
+                "target_role": target_role,
+                "user_email": current_user.email,
+                "plan_id": plan_id,
+            },
+            # Description shown on bank statement
+            statement_descriptor_suffix="TORCHED",
+            description=f"TorchED {plan_id.capitalize()} Subscription",
+        )
+
+        logger.info(f"Payment intent created: {payment_intent.id}")
+
+        # Validate that we got a valid client_secret
+        if not payment_intent.client_secret:
+            logger.error(f"PaymentIntent {payment_intent.id} has no client_secret")
+            raise HTTPException(
+                status_code=500,
+                detail="Payment intent created but missing client_secret"
+            )
+
+        if not ephemeral_key.secret:
+            logger.error("EphemeralKey has no secret")
+            raise HTTPException(
+                status_code=500,
+                detail="Ephemeral key created but missing secret"
+            )
+
+        return PaymentIntentResponse(
+            client_secret=payment_intent.client_secret,
+            ephemeral_key=ephemeral_key.secret,
+            customer_id=customer_id,
+            payment_intent_id=payment_intent.id,
+        )
+
+    except stripe.error.AuthenticationError as e:
+        logger.error(f"Stripe authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Payment system authentication failed. Please contact support."
+        )
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Payment error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating payment intent: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create payment intent")
+
+
 @router.post("/webhook")
 async def stripe_webhook(
     request: Request,
@@ -186,6 +364,16 @@ async def stripe_webhook(
         if event["type"] == "checkout.session.completed":
             session = event["data"]["object"]
             await _handle_checkout_completed(session, db)
+
+        elif event["type"] == "payment_intent.succeeded":
+            # Handle Payment Sheet successful payment
+            payment_intent = event["data"]["object"]
+            await _handle_payment_intent_succeeded(payment_intent, db)
+
+        elif event["type"] == "payment_intent.payment_failed":
+            payment_intent = event["data"]["object"]
+            logger.warning(f"Payment intent failed: {payment_intent['id']}")
+            # Could notify user here
 
         elif event["type"] == "customer.subscription.updated":
             subscription = event["data"]["object"]
@@ -249,6 +437,49 @@ async def _handle_checkout_completed(session: dict, db: Session):
 
     except Exception as e:
         logger.error(f"Error handling checkout: {str(e)}")
+        db.rollback()
+        raise
+
+
+async def _handle_payment_intent_succeeded(payment_intent: dict, db: Session):
+    """
+    Handles successful PaymentIntent from Payment Sheet.
+    Updates user role based on metadata.
+
+    IDEMPOTENT: Checks if user already has the target role.
+    """
+    try:
+        metadata = payment_intent.get("metadata", {})
+        user_id = metadata.get("user_id")
+        target_role = metadata.get("target_role")
+
+        if not user_id or not target_role:
+            logger.error(f"Missing metadata in payment_intent: {payment_intent.get('id')}")
+            return
+
+        logger.info(f"Processing payment intent for user {user_id}, target role: {target_role}")
+
+        # Find user
+        user = db.query(User).filter(User.id_ == int(user_id)).first()
+
+        if not user:
+            logger.error(f"User not found: {user_id}")
+            return
+
+        # Idempotency check
+        if user.role == target_role:
+            logger.info(f"User {user_id} already has role {target_role}, skipping")
+            return
+
+        # Update role
+        old_role = user.role
+        user.role = target_role
+        db.commit()
+
+        logger.info(f"User {user_id} role updated via Payment Sheet: {old_role} -> {target_role}")
+
+    except Exception as e:
+        logger.error(f"Error handling payment intent: {str(e)}")
         db.rollback()
         raise
 
