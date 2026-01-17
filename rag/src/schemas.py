@@ -117,6 +117,8 @@ class UploadedFileRead(BaseModel):
     description: Optional[str] = None
     category: str
     created_at: datetime
+    is_notion_document: bool = False
+    notion_last_synced: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -152,7 +154,8 @@ class QueryResponse(BaseModel):
     answer: str
 
 class DeleteKnowledgeRequest(BaseModel):
-    file_name: str
+    document_id: Optional[str] = None  # Primary - use document UUID
+    file_name: Optional[str] = None    # Legacy fallback
 
 class DeleteKnowledgeResponse(BaseModel):
     message: str

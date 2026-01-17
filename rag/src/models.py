@@ -467,6 +467,13 @@ class User(Base):
     role_expiry: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     stripe_customer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    
+    # Notion integration fields
+    notion_access_token: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    notion_workspace_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    notion_workspace_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    notion_connected_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    notion_import_count: Mapped[int] = mapped_column(Integer, default=0)  # Track imports for subscription limits
 
     user_flashcards = relationship(
         "UserFlashcard", back_populates="user", cascade="all, delete-orphan"
@@ -518,6 +525,12 @@ class WorkspaceDocument(Base):
     total_sections = Column(Integer, default=0)  # Number of sections
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Notion sync fields
+    notion_page_id = Column(String(36), nullable=True, index=True)  # Notion page UUID
+    notion_last_synced = Column(DateTime(timezone=True), nullable=True)
+    notion_last_modified = Column(DateTime(timezone=True), nullable=True)  # From Notion API
+    is_notion_document = Column(Boolean, default=False)
 
     # Relationships
     category = relationship("FileCategory", back_populates="documents")

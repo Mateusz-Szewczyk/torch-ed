@@ -866,6 +866,8 @@ async def list_uploaded_files(
                 description="",
                 category=cat.name if cat else "Uncategorized",
                 created_at=doc.created_at.isoformat(),
+                is_notion_document=doc.is_notion_document or False,
+                notion_last_synced=doc.notion_last_synced,
             )
             for doc, cat in documents
         ]
@@ -882,28 +884,50 @@ async def delete_knowledge(
         current_user: User = Depends(get_current_user),
 ):
     user_id = str(current_user.id_)
-    file_name = request.file_name
-
-    deleted_from_vector_store = delete_file_from_vector_store(user_id, file_name)
-    if not deleted_from_vector_store:
-        logger.warning(f"Could not delete vectors for file: {file_name} from vector store.")
-
-    try:
+    
+    # Find document - prefer document_id, fallback to file_name
+    document = None
+    if request.document_id:
+        try:
+            from uuid import UUID
+            doc_uuid = UUID(request.document_id)
+            document = db.query(WorkspaceDocument).filter(
+                WorkspaceDocument.id == doc_uuid,
+                WorkspaceDocument.user_id == current_user.id_
+            ).first()
+        except ValueError:
+            logger.warning(f"Invalid document_id format: {request.document_id}")
+    
+    # Fallback to file_name search (legacy)
+    if not document and request.file_name:
         document = db.query(WorkspaceDocument).filter(
             WorkspaceDocument.user_id == current_user.id_,
-            WorkspaceDocument.original_filename == file_name
+            (WorkspaceDocument.original_filename == request.file_name) | 
+            (WorkspaceDocument.title == request.file_name)
         ).first()
-        if document:
-            # Delete images from storage before deleting database record
-            storage_service = get_storage_service()
-            await storage_service.delete_document_images(str(document.id))
-            logger.info(f"Deleted images from storage for document: {document.id}")
+    
+    if not document:
+        logger.warning(f"No document found for user_id: {user_id}, request: {request}")
+        return DeleteKnowledgeResponse(
+            message="Document not found.",
+            deleted_from_vector_store=False
+        )
+    
+    # Delete from vector store using original_filename (what was indexed)
+    vector_file_name = document.original_filename or document.title
+    deleted_from_vector_store = delete_file_from_vector_store(user_id, vector_file_name)
+    if not deleted_from_vector_store:
+        logger.warning(f"Could not delete vectors for file: {vector_file_name} from vector store.")
 
-            db.delete(document)
-            db.commit()
-            logger.info(f"Deleted document record from database: {document}")
-        else:
-            logger.warning(f"No document record found in database for user_id: {user_id}, file_name: {file_name}")
+    try:
+        # Delete images from storage before deleting database record
+        storage_service = get_storage_service()
+        await storage_service.delete_document_images(str(document.id))
+        logger.info(f"Deleted images from storage for document: {document.id}")
+
+        db.delete(document)
+        db.commit()
+        logger.info(f"Deleted document record from database: {document.id}")
     except Exception as e:
         db.rollback()
         logger.error(f"Error deleting file record from database: {e}")

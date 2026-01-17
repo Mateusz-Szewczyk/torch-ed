@@ -13,7 +13,7 @@ import base64
 from src.routers import (
     files, decks, flashcards, query, chats, exams,
     study_sessions, user_flashcards, dashboard, memories, subscription, payments, workspace,
-    categories, workspaces_management
+    categories, workspaces_management, notion
 )
 from src.config import Config
 
@@ -161,6 +161,7 @@ app.include_router(payments.router, prefix="/api/payments", tags=["Payments"])
 app.include_router(workspace.router, prefix="/api/workspace", tags=["Workspace"])
 app.include_router(categories.router, prefix="/api", tags=["Categories"])
 app.include_router(workspaces_management.router, prefix="/api", tags=["Workspaces Management"])
+app.include_router(notion.router, prefix="/api/notion", tags=["Notion Integration"])
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -87,3 +87,18 @@ def get_chroma_client_settings():
 
 class Config:
     PUP_PATH: str = "pup_key.pem"
+
+
+class Settings:
+    """Application settings loaded from environment variables."""
+    
+    # Notion OAuth settings
+    NOTION_CLIENT_ID: str = os.getenv("NOTION_CLIENT_ID", "")
+    NOTION_CLIENT_SECRET: str = os.getenv("NOTION_CLIENT_SECRET", "")
+    NOTION_REDIRECT_URI: str = os.getenv("NOTION_REDIRECT_URI", "http://localhost:8043/api/notion/auth/callback")
+    
+    # Frontend URL for OAuth redirects
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+
+settings = Settings()
